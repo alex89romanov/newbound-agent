@@ -48,5 +48,59 @@
     "tags": "build,rust,workflow,platform-api",
     "confidence": "high",
     "time": 1785971355573
+  },
+  {
+    "claim": "The two-repo world (2026-08-09): the platform is mraiser/newbound; the agent library set (agent, kb, skeletal scratch, docs, harness tools) is mraiser/newbound-agent, overlaid onto a checkout by its tools/overlay.sh symlinks. newbound-bench and the alex89romanov mirror are archived/superseded. The canonical process doc is newbound-agent/docs/interim-process.md.",
+    "tags": "workflow,repos,overlay",
+    "source": {
+      "doc": "newbound-agent/docs/interim-process.md"
+    },
+    "confidence": "high",
+    "time": 1786289737647
+  },
+  {
+    "claim": "Push rule as amended by the owner (2026-08-09): on his sessions and repos, work lands as branches and nothing merges to master without his express permission; a brand-new repo's initial push is the one exception. The old absolute never-push-to-mraiser rule remains in force for Alex's sessions.",
+    "tags": "workflow,git,doctrine",
+    "source": {
+      "doc": "the owner, in session, 2026-08-09"
+    },
+    "confidence": "high",
+    "time": 1786289737651
+  },
+  {
+    "claim": "First build on a fresh overlaid checkout is a three-step: gen-cmd-crate.py if cmd/ is absent, host build, `newbound rebuild` (regenerates the initializer with the FFI blocks and watcher, and writes the workspace exclude itself), host build again, then the dylib builds. The regenerated initializer stays uncommitted in the platform repo — the agent is optional there by design.",
+    "tags": "workflow,build,overlay",
+    "source": {
+      "doc": "newbound-agent/README.md"
+    },
+    "confidence": "high",
+    "time": 1786289737652
+  },
+  {
+    "claim": "Restart boundaries: facet writes never need one; Rust commands in agent/kb/scratch hot-reload via the watcher (no restart, MCP mode included); Rust commands in newbound_core-rooted libraries (app, dev, peer, security, flow — dev.code itself included) need a host rebuild and restart; a brand-new FFI crate needs `newbound rebuild` plus a restart.",
+    "tags": "workflow,hot-reload,build",
+    "source": {
+      "doc": "newbound-agent/docs/interim-process.md §2 (verified 2026-08-09)"
+    },
+    "confidence": "high",
+    "time": 1786289737654
+  },
+  {
+    "claim": ".mcp.json in the platform checkout attaches `newbound mcp` to coding harnesses natively; the agent works from a starter subset of commands and discovers the rest via search_commands. Every declared param must still be passed on older generated wrappers — a missing param aborts the whole process there; the 0.3.30+ builder's guard fixes it, so regenerate rather than trust.",
+    "tags": "workflow,mcp,tools",
+    "source": {
+      "doc": "newbound-agent/docs/interim-process.md §2"
+    },
+    "confidence": "high",
+    "time": 1786289737655
+  },
+  {
+    "claim": "The bench-era chronicle (the old newbound-bench CLAUDE.md) is preserved verbatim at docs/CHRONICLE.md in the archived newbound-bench repo; its git history is the deep record. What remains operative from it lives in these kb domains and the interim-process doc, not in any primer.",
+    "tags": "workflow,history,archive",
+    "source": {
+      "doc": "newbound-bench (archived)"
+    },
+    "confidence": "high",
+    "time": 1786289737656
   }
 ]
