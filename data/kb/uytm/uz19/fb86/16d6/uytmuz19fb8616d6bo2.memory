@@ -1,0 +1,36 @@
+[
+  {
+    "claim": "Module js runs from blob URLs, so module-level new URL(x, import.meta.url) throws — the page environment (__benchPlatform) must be declared BEFORE module installs and filled in place afterward",
+    "tags": "app.loader,modules,blob",
+    "source": {
+      "lib": "app",
+      "ctl": "loader",
+      "facet": "js",
+      "hash": "6cff94359687185e"
+    },
+    "confidence": "high",
+    "time": 1785504820517
+  },
+  {
+    "claim": "position:fixed escapes a shadow root (it positions against the viewport) — a previewed full-page control can overlay the real page and swallow clicks; contain:layout paint on the shadow host is the designed fix",
+    "tags": "dev.preview,css,open-issue",
+    "source": {
+      "lib": "dev",
+      "ctl": "preview",
+      "facet": "js",
+      "hash": "72e7e6dc4c1b9f05"
+    },
+    "confidence": "high",
+    "time": 1785504820517,
+    "detail": "Found via dev.frame's preview hijacking the workbench facet chips (the fr-stage overlay). The fix is designed but NOT yet applied — dev.preview still lacks the containment."
+  },
+  {
+    "claim": "tokens.css is kit contract v1 — token NAMES are frozen (graphite/paper/accent/facet-hue/semantic/type-role sets, .lbl, [hidden]!important, reduced-motion); values may tune",
+    "tags": "app.tokens,kit",
+    "source": {
+      "doc": "docs/kit.md"
+    },
+    "confidence": "high",
+    "time": 1785504820517
+  }
+]

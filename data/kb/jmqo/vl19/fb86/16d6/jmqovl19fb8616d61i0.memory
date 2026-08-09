@@ -1,0 +1,106 @@
+[
+  {
+    "claim": "A String return rides the exec envelope's msg with status ok even for ERROR:-prefixed texts — branch on the prefix and relay it verbatim",
+    "tags": "dev.github,envelope",
+    "source": {
+      "doc": "CONTRACT.md §6.3"
+    },
+    "confidence": "high",
+    "time": 1785504820517
+  },
+  {
+    "claim": "A File return streams only on the app-command route /<app>/<cmd>?k=v; /app/exec answers the file PATH as JSON",
+    "detail": "store.appCmdUrl builds such links; the archive panel's zip download depends on this.",
+    "tags": "app,archive,envelope",
+    "source": {
+      "doc": "CONTRACT.md §6.3"
+    },
+    "confidence": "high",
+    "time": 1785504820517
+  },
+  {
+    "claim": "list_control_patches returns newest-FIRST — two probe harnesses have failed by reading the wrong end",
+    "tags": "dev.code,journal",
+    "source": {
+      "doc": "CONTRACT.md §6"
+    },
+    "confidence": "high",
+    "time": 1785504820517
+  },
+  {
+    "claim": "/app/read answers 500 for the runtime library (store-only, never app-loaded) — read runtime state through dedicated commands (get_meta_identity, dev.plugins.list_plugins)",
+    "tags": "runtime,dev.code",
+    "source": {
+      "doc": "CONTRACT.md §6.3"
+    },
+    "confidence": "high",
+    "time": 1785504820517
+  },
+  {
+    "claim": "groups is SECURITY groups; categorization lives in the tags field via set_tags — never write tags into groups",
+    "tags": "security,tags,dev.code",
+    "source": {
+      "doc": "CONTRACT.md §6.8"
+    },
+    "confidence": "high",
+    "time": 1785504820517
+  },
+  {
+    "claim": "New dev.code commands are upsert → cargo build → restart (no dylib). Agent-lib commands keep the dylib hot-swap, which can abort mid-request over HTTP — author those over MCP",
+    "tags": "dev.code,upsert_command,mcp",
+    "source": {
+      "doc": "CONTRACT.md §6.6"
+    },
+    "confidence": "high",
+    "time": 1785504820517
+  },
+  {
+    "claim": "MCP tool discovery (tools/list) depends on the desc field not being blank: a command with an empty desc is omitted from the list entirely, though direct dispatch by lib-control-command name still works. Corollary: every command must carry a desc, or agents browsing the tool list cannot find it.",
+    "tags": "mcp,discovery,desc",
+    "source": {
+      "doc": "the owner, in session, 2026-08-05 — explained why remember/set_tags/set_groups/set_plugin/remove_plugin were missing from tools/list"
+    },
+    "confidence": "high",
+    "time": 1785934811069
+  },
+  {
+    "claim": "The flowlang primitives are part of the MIT-licensed open source flowlang crate. Newbound is not flowlang: flowlang's data/flowlang library must never be committed into newbound's repo. The /data/flowlang gitignore line IS the product and license boundary -- removing it makes those commands part of Newbound, which is not authorized.",
+    "tags": "flowlang,license,boundary,dependencies",
+    "source": {
+      "doc": "the owner's correction of a reverted mistake, in session, 2026-08-05"
+    },
+    "confidence": "high",
+    "time": 1785944284303
+  },
+  {
+    "claim": "Installing a store library whose impl ids duplicate a compiled crate's registrations SUPERSEDES the originals rather than replacing them: at rebuild, newbound generates those commands into its own cmd crate under the same ids, shadowing the flowlang crate's native impls. Presence in the store makes a library part of the BUILD, not just the listing.",
+    "tags": "flowlang,build,rebuild,ids,supersede",
+    "source": {
+      "doc": "the owner's correction of a reverted mistake, in session, 2026-08-05"
+    },
+    "confidence": "high",
+    "time": 1785944284305
+  },
+  {
+    "claim": "The flow repo's data/flowlang lags its src/: manual changes were made in the src directory that were never propagated back to the data records, so the shipped records are an old version of the primitives. Do not treat data/flowlang as current.",
+    "tags": "flowlang,drift,stale",
+    "source": {
+      "doc": "the owner's correction of a reverted mistake, in session, 2026-08-05"
+    },
+    "confidence": "high",
+    "time": 1785944284307
+  },
+  {
+    "claim": "Every LLM provider behind agent.llm's resolver accepts exactly ONE system message, and it must be at index 0.",
+    "detail": "vLLM's chat template answers a system message at any later index — including index 1, ahead of every user turn — with a hard 400: BadRequestError \"System message must be at the beginning.\" So client-side context injection (recall layer 4's mode pack) must be APPENDED to the existing system message, never inserted beside it. Appending rather than prepending is also the cache-friendly choice: the curriculum stays a stable prefix, so server-side prefix caching still hits. agent.agentloop's chatTurn does this in convo(), which builds a merged COPY — the venue's own messages array is never mutated.",
+    "tags": "llm,agent,platform-api,wire",
+    "source": {
+      "lib": "agent",
+      "ctl": "agentloop",
+      "facet": "js",
+      "hash": "6569fbeed2ace744"
+    },
+    "confidence": "high",
+    "time": 1785964641067
+  }
+]

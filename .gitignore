@@ -1,0 +1,16 @@
+# Build output
+target/
+agent/Cargo.lock
+kb/Cargo.lock
+scratch/Cargo.lock
+
+# Scratch is skeletal-only in git (owner's rule, the cmd pattern):
+# the skeleton was committed once, then these dirs are ignored wholesale
+# so normal use — transient code, skills, experiments — never lands in a
+# commit. tools/overlay.sh additionally marks the tracked skeleton files
+# skip-worktree so even their runtime mutations go untracked.
+/data/scratch/
+/scratch/
+
+# Local runtime values never ride the repo
+/runtime/

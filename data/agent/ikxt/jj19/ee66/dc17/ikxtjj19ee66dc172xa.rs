@@ -1,0 +1,1 @@
+let mut obj = DataObject::new(); obj.put_string("test", "hello"); obj

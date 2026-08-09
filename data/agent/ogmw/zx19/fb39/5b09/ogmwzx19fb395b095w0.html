@@ -1,0 +1,11 @@
+<!-- agentmodules — the agent add-on's PLUGIN payload: a cluster control
+     whose divs install the notebook modules headless (each is flagged
+     `module: true`; api.js registers them on the page). Registered with
+     the Development app through runtime/dev/plugins.json (the platform's
+     per-instance plugin mechanism, dev.plugins) — target dev.dev, so the
+     boot's plugin pass installs this BEFORE the frame mounts and the
+     session's presence checks see the modules. Nothing in the dev app
+     names the agent; this control + one registry entry ARE the plugin. -->
+<div class="data-control" data-control="agent:agentloop" hidden></div>
+<div class="data-control" data-control="agent:agentprompt" hidden></div>
+<div class="data-control" data-control="agent:memory" hidden></div>

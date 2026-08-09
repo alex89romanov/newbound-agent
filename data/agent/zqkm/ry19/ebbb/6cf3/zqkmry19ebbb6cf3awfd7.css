@@ -1,0 +1,464 @@
+/* --- THEME COLORS --- */
+:root {
+    --bg-deep: #1e1f29;      /* Dark editor panel background */
+    --bg-header: #282a36;    /* Darkest background for headers/terminals */
+    --text-main: #f0f0f0;    /* General light text color */
+    --text-muted: #6272a4;   /* Muted color for comments, borders */
+    --accent-cyan: #00d1ff;  /* Bright cyan for buttons and highlights */
+    --accent-cyan-hover: #90eeff; /* Lighter cyan for hover effects */
+    --text-on-accent: #1e1f29; /* Dark text for use on bright backgrounds */
+}
+
+/* Launcher button that opens the chat */
+.chat-launcher {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    width: 60px;
+    height: 60px;
+    background-color: var(--accent-cyan);
+    color: var(--text-on-accent);
+    border: none;
+    border-radius: 50%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+    cursor: pointer;
+    z-index: 1000;
+    transition: all 0.2s ease-in-out;
+}
+
+.chat-launcher:hover {
+    transform: scale(1.1);
+    background-color: var(--accent-cyan-hover);
+}
+
+.chat-launcher svg {
+    stroke: var(--text-on-accent);
+}
+
+/* The main floating chat window */
+.chat-window {
+    position: fixed;
+    bottom: 90px;
+    right: 20px;
+    width: 370px;
+    height: 500px;
+    border-radius: 8px;
+    border: 1px solid var(--text-muted);
+    box-shadow: 0 5px 25px rgba(0, 0, 0, 0.5);
+    background: var(--bg-deep);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden; /* Important for the slide-out panel */
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color: var(--text-main);
+
+    /* Hidden by default */
+    opacity: 0;
+    transform: translateY(20px);
+    pointer-events: none;
+    transition: opacity 0.3s ease, transform 0.3s ease;
+    z-index: 1001;
+}
+
+/* Style for when the chat window is visible */
+.chat-window.open {
+    opacity: 1;
+    transform: translateY(0);
+    pointer-events: auto;
+}
+
+/* Header for the chat window */
+.chat-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 15px;
+    background-color: var(--bg-header);
+    color: var(--text-main);
+    font-weight: bold;
+    border-bottom: 1px solid var(--text-muted);
+    flex-shrink: 0;
+}
+
+/* Buttons for minimizing/maximizing and tools */
+.minimize-btn, .maximize-btn, .tools-btn {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    font-size: 18px;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0 4px;
+    transition: color 0.2s ease;
+    margin: 0 2px;
+    vertical-align: middle;
+}
+
+.minimize-btn:hover, .maximize-btn:hover, .tools-btn:hover {
+    color: var(--text-main);
+}
+
+/* Area where messages are displayed */
+.chat-history {
+    flex-grow: 1;
+    padding: 15px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+/* Container for the text input and send button */
+.chat-input-area {
+    display: block;
+    padding: 10px;
+    border-top: 1px solid var(--text-muted);
+    background-color: var(--bg-header);
+}
+
+.chat-main-input {
+    position: relative;
+}
+
+.chat-input {
+    background-color: var(--bg-deep);
+    border: 1px solid var(--text-muted);
+    border-radius: 15px;
+    font-size: 14px;
+    color: var(--text-main);
+  width:100%;
+  padding-top:6px;
+  padding-left:6px;
+  padding-right:6px;
+  padding-bottom:18px;
+  margin-bottom:12px;
+}
+
+.chat-input::placeholder {
+    color: var(--text-muted);
+}
+
+.send-button {
+    margin-left: 10px;
+    padding: 8px 16px;
+    border: none;
+    background-color: var(--accent-cyan);
+    color: var(--text-on-accent);
+    border-radius: 15px;
+    cursor: pointer;
+    font-weight: bold;
+    transition: background-color 0.2s ease;
+  position:absolute;
+  bottom: 6px;
+  right:6px;
+}
+
+.send-button:hover {
+    background-color: var(--accent-cyan-hover);
+}
+
+/* --- NEW TOOL PICKER STYLES --- */
+
+.tool-picker-panel {
+    position: absolute;
+    top: 45px; /* Position below the header */
+    right: -100%; /* Start off-screen */
+    width: 100%;
+    height: calc(100% - 45px); /* Fill remaining height */
+    background-color: var(--bg-deep);
+    display: flex;
+    flex-direction: column;
+    transition: right 0.3s ease-in-out;
+    z-index: 10; /* Above chat history but below header */
+    border-left: 1px solid var(--text-muted);
+}
+
+.tool-picker-panel.open {
+    right: 0; /* Slide in */
+}
+
+.tool-picker-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 15px;
+    background-color: var(--bg-header);
+    color: var(--text-main);
+    font-weight: bold;
+    border-bottom: 1px solid var(--text-muted);
+    flex-shrink: 0;
+}
+
+.close-tools-btn {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    font-size: 24px;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0 5px;
+    transition: color 0.2s ease;
+}
+
+.close-tools-btn:hover {
+    color: var(--text-main);
+}
+
+.tool-list {
+    flex-grow: 1;
+    overflow-y: auto;
+    padding: 15px;
+}
+
+.tool-item {
+    display: flex;
+    align-items: center;
+    padding: 8px 0;
+}
+
+.tool-item label {
+    margin-left: 10px;
+    font-size: 14px;
+    color: var(--text-main);
+    user-select: none; /* Prevent text selection on click */
+    width: 100%;
+    cursor: pointer;
+}
+
+.tool-item input[type="checkbox"] {
+    appearance: none;
+    -webkit-appearance: none;
+    min-width: 18px;
+    width: 18px;
+    height: 18px;
+    border-radius: 4px;
+    border: 2px solid var(--text-muted);
+    background-color: var(--bg-deep);
+    cursor: pointer;
+    position: relative;
+    transition: all 0.2s ease;
+}
+
+.tool-item input[type="checkbox"]:hover {
+    border-color: var(--accent-cyan);
+}
+
+.tool-item input[type="checkbox"]:checked {
+    background-color: var(--accent-cyan);
+    border-color: var(--accent-cyan);
+}
+
+.tool-item input[type="checkbox"]:checked::after {
+    content: '✔';
+    position: absolute;
+    color: var(--bg-deep);
+    font-size: 14px;
+    font-weight: bold;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+}
+
+
+/* --- MESSAGE STYLES (UNCHANGED) --- */
+.message {
+    padding: 9px 14px;
+    border-radius: 18px;
+    max-width: 80%;
+    word-wrap: break-word;
+    line-height: 1.4;
+}
+.user-message {
+    background-color: var(--accent-cyan);
+    color: var(--text-on-accent);
+    align-self: flex-end;
+}
+.bot-message {
+    background-color: var(--bg-header);
+    color: var(--text-main);
+    align-self: flex-start;
+    padding: 5px;
+}
+.bot-code-block {
+    background-color: rgba(0, 0, 0, 0.2);
+    border-left: 3px solid var(--accent-cyan);
+    padding: 10px;
+    margin: 8px;
+    border-radius: 4px;
+}
+.bot-code-block p {
+    margin: 0 0 8px 0;
+    font-size: 0.9em;
+    color: var(--text-muted);
+}
+.bot-code-block p strong {
+    color: var(--text-main);
+    font-weight: 600;
+}
+.view-code-btn {
+    padding: 30px;
+    background-color: var(--bg-deep);
+    color: var(--text-main);
+    border: 1px solid var(--text-muted);
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+    display: block;
+    align-items: center;
+    gap: 8px;
+}
+.view-code-btn:hover {
+    background-color: var(--accent-cyan);
+    color: var(--text-on-accent);
+    border-color: var(--accent-cyan);
+}
+.view-code-btn svg {
+    width: 16px;
+    height: 16px;
+    stroke: currentColor;
+}
+.showthinkingbutton, .hidethinkingbutton {
+    background-color: transparent;
+    color:rgb(255,0,255);
+    font-style:italic;
+    border:none;
+    margin:20px;
+    cursor:pointer;
+}
+.response-line {
+    margin-top: 10px;
+    margin-bottom: 10px;
+}
+
+/* --- Styling for the new Chat Options Area --- */
+
+/* The container for the 'Include History' checkbox. */
+.chat-options-area {
+    background-color: var(--bg-header);
+    /* Padding to align with the header and input area. */
+    padding: 0px 0px 5px 0px;
+    margin-top: -10px;
+}
+
+/* Style the checkbox itself, reusing the visual language from the tool picker. */
+.chat-options-area .include-history-checkbox {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 16px;
+    height: 16px;
+    border-radius: 4px;
+    border: 2px solid var(--text-muted);
+    background-color: var(--bg-deep);
+    cursor: pointer;
+    position: relative;
+    transition: all 0.2s ease;
+    vertical-align: middle; /* Aligns checkbox with label text. */
+}
+
+.chat-options-area .include-history-checkbox:hover {
+    border-color: var(--accent-cyan);
+}
+
+.chat-options-area .include-history-checkbox:checked {
+    background-color: var(--accent-cyan);
+    border-color: var(--accent-cyan);
+}
+
+.chat-options-area .include-history-checkbox:checked::after {
+    content: '✔';
+    position: absolute;
+    color: var(--bg-deep);
+    font-size: 12px;
+    font-weight: bold;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+}
+
+/* Style the label next to the checkbox. */
+.chat-options-area label {
+    font-size: 13px;
+    color: var(--text-muted);
+    cursor: pointer;
+    user-select: none;
+    transition: color 0.2s ease;
+    margin-left: 8px; /* Space between checkbox and text. */
+}
+
+.chat-options-area label:hover {
+    color: var(--text-main);
+}
+
+/* --- Context Toggles --- */
+.context-toggles {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px;
+    padding-top: 8px; /* Space from the history checkbox */
+}
+
+.context-toggles-label {
+    font-size: 13px;
+    color: var(--text-main);
+    margin-right: 4px;
+}
+
+.include-context-checkbox {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 15px;
+    height: 15px;
+    border-radius: 3px;
+    border: 1px solid var(--text-muted);
+    background-color: var(--bg-deep);
+    cursor: pointer;
+    position: relative;
+    transition: all 0.2s ease;
+    vertical-align: middle;
+}
+
+.include-context-checkbox:hover {
+    border-color: var(--accent-cyan);
+}
+
+.include-context-checkbox:checked {
+    background-color: var(--accent-cyan);
+    border-color: var(--accent-cyan);
+}
+
+.include-context-checkbox:checked::after {
+    content: '✔';
+    position: absolute;
+    color: var(--bg-deep);
+    font-size: 11px;
+    font-weight: bold;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+}
+
+.context-toggles label {
+    font-size: 12px;
+    color: var(--text-muted);
+    cursor: pointer;
+    user-select: none;
+    transition: color 0.2s ease;
+    margin-left: 1px;
+    margin-right: 5px;
+}
+
+.context-toggles label:hover {
+    color: var(--text-main);
+}
+
+.boo{
+  float:right;
+  margin-top:-5px;
+  font-size:x-small;
+}
+

@@ -1,0 +1,12 @@
+[
+  {
+    "claim": "2026-07-31: memory v0 built (kb + the memory facet + the index fence). A same-day kb/episodic library split was FOLDED BACK within hours — one kb library; the episodic/curated distinction rides naming (month buckets) and tags, not structure",
+    "detail": "Two lessons. (1) Modules install before the frame configures the store connection, so store.mode() is null at module scope — anything needing the connection at install time must poll (agent.memory does, before its index prefetch). (2) The split's motivation dissolved the moment everything was git-tracked, and it was executed anyway — when a directive's premise shifts, surface it before building.",
+    "tags": "memory,agent.memory,process",
+    "source": {
+      "doc": "docs/memory.md"
+    },
+    "confidence": "high",
+    "time": 1785508834188
+  }
+]

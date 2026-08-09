@@ -1,0 +1,272 @@
+[
+  {
+    "claim": "Third party libraries should be avoided if at all possible. Mention tailwind again and you're dead to me.",
+    "tags": "doctrine,dependencies",
+    "source": {
+      "doc": "the owner, in session, 2026-08-05"
+    },
+    "confidence": "high",
+    "time": 1785934481082
+  },
+  {
+    "claim": "Threading is easy and cheap thanks to ndata.",
+    "tags": "doctrine,ndata,threading",
+    "source": {
+      "doc": "the owner, in session, 2026-08-05"
+    },
+    "confidence": "high",
+    "time": 1785934481085
+  },
+  {
+    "claim": "Everything in newbound is built using newbound.",
+    "tags": "doctrine,architecture",
+    "source": {
+      "doc": "the owner, in session, 2026-08-05"
+    },
+    "confidence": "high",
+    "time": 1785934481086
+  },
+  {
+    "claim": "The codebase size should *shrink* over time not grow. Adding cruft is not progress -- tighter integration is progress.",
+    "tags": "doctrine,architecture",
+    "source": {
+      "doc": "the owner, in session, 2026-08-05"
+    },
+    "confidence": "high",
+    "time": 1785934481088
+  },
+  {
+    "claim": "Context space is precious, but pre-loading context you probably need is always better than having to fetch it later.",
+    "tags": "doctrine,prompting,context",
+    "source": {
+      "doc": "the owner, in session, 2026-08-05"
+    },
+    "confidence": "high",
+    "time": 1785934481089
+  },
+  {
+    "claim": "Never waste LLM cycles on something that can be preemptively derived procedurally.",
+    "tags": "doctrine,llm,procedure",
+    "source": {
+      "doc": "the owner, in session, 2026-08-05"
+    },
+    "confidence": "high",
+    "time": 1785934481090
+  },
+  {
+    "claim": "Prefer writing rust to derive an answer or to drive a long-running process.",
+    "tags": "doctrine,rust,procedure",
+    "source": {
+      "doc": "the owner, in session, 2026-08-05"
+    },
+    "confidence": "high",
+    "time": 1785934481091
+  },
+  {
+    "claim": "The newbound_core crates are public and part of the base newbound installation. They are not FFI and do not hot-swap.",
+    "tags": "doctrine,rust,build",
+    "source": {
+      "doc": "the owner, in session, 2026-08-05"
+    },
+    "confidence": "high",
+    "time": 1785934481093
+  },
+  {
+    "claim": "Flowlang has bugs. To the best of my knowledge ndata does not.",
+    "tags": "doctrine,flowlang,ndata",
+    "source": {
+      "doc": "the owner, in session, 2026-08-05"
+    },
+    "confidence": "high",
+    "time": 1785934481094
+  },
+  {
+    "claim": "Finding bugs or even cumbersome patterns in flowlang and ndata requires a separate PR to fix and a temporary workaround to get the task at hand done.",
+    "tags": "doctrine,flowlang,ndata,process",
+    "source": {
+      "doc": "the owner, in session, 2026-08-05"
+    },
+    "confidence": "high",
+    "time": 1785934481096
+  },
+  {
+    "claim": "Never under any circumstances guess. The answer should be discoverable and if it isn't that is a bug we should document.",
+    "tags": "doctrine,method",
+    "source": {
+      "doc": "the owner, in session, 2026-08-05"
+    },
+    "confidence": "high",
+    "time": 1785934481097
+  },
+  {
+    "claim": "No source is infallible, even me.",
+    "tags": "doctrine,provenance",
+    "source": {
+      "doc": "the owner, in session, 2026-08-05"
+    },
+    "confidence": "high",
+    "time": 1785934481099
+  },
+  {
+    "claim": "When I start cussing, I also start making more mistakes, but you should probably listen because I am unhappy for a reason.",
+    "tags": "doctrine,process",
+    "source": {
+      "doc": "the owner, in session, 2026-08-05"
+    },
+    "confidence": "high",
+    "time": 1785934481101
+  },
+  {
+    "claim": "Always prefer P2P and decentralization over client/server where reasonable.",
+    "tags": "doctrine,architecture,p2p",
+    "source": {
+      "doc": "the owner, in session, 2026-08-05"
+    },
+    "confidence": "high",
+    "time": 1785934481102
+  },
+  {
+    "claim": "Most \"best practices\" benefit managers and coworkers (humans) not systems. Newbound is not designed for managers, it is designed for people who want to get shit done with a \"drop your code in here\" mentality.",
+    "tags": "doctrine,philosophy",
+    "source": {
+      "doc": "the owner, in session, 2026-08-05"
+    },
+    "confidence": "high",
+    "time": 1785934481104
+  },
+  {
+    "claim": "Users can take or leave as much or as little of newbound as they like. You and I do not have that luxury -- we dogfood everything all the time.",
+    "tags": "doctrine,process,dogfood",
+    "source": {
+      "doc": "the owner, in session, 2026-08-05"
+    },
+    "confidence": "high",
+    "time": 1785934481106
+  },
+  {
+    "claim": "The ndata crate intentionally subverts many of rust's strengths in order to overcome its weaknesses. Don't use a DataArray when a Vec will do, but you should understand the advantages of a DataArray and when using it makes sense -- code boundaries, function signatures, closures, threads. Same goes for HashMap vs DataObject and byte arrays vs DataBytes.",
+    "tags": "doctrine,ndata,rust",
+    "source": {
+      "doc": "the owner, in session, 2026-08-05"
+    },
+    "confidence": "high",
+    "time": 1785935667274
+  },
+  {
+    "claim": "Flowlang provides the functional substrate for all of newbound. Newbound provides a UI, cohesion, data integrity, reusable workflows, a security framework and a pervasive peer-to-peer paradigm.",
+    "tags": "doctrine,architecture,flowlang",
+    "source": {
+      "doc": "the owner, in session, 2026-08-05"
+    },
+    "confidence": "high",
+    "time": 1785935667280
+  },
+  {
+    "claim": "The Newbound design philosophy is FACET-ORIENTED -- neither OO nor FP. Every thing is a record, and data and functionality are facets of that one identity; neither encapsulates the other. OO hides state behind methods, but Newbound's state is open and addressable, with access governed by readers/writers rather than encapsulation. FP wants immutability, but ndata restores shared mutable object graphs on purpose -- the Java object model Newbound was ported away from, deliberately reconstructed inside Rust because that part of Java was a strength.",
+    "tags": "doctrine,philosophy,facet-oriented,architecture",
+    "source": {
+      "doc": "articulated in session and blessed by the owner verbatim, 2026-08-05"
+    },
+    "confidence": "high",
+    "time": 1785936720274
+  },
+  {
+    "claim": "Newbound is one live, journaled, secured, distributed object graph in which code is data -- a command, a flow, a scene, an image, a memory are all records with attachments in one store -- and the pervasive concerns (security, history, peers) are woven by the substrate rather than written by the user.",
+    "tags": "doctrine,philosophy,architecture",
+    "source": {
+      "doc": "articulated in session and blessed by the owner verbatim, 2026-08-05"
+    },
+    "confidence": "high",
+    "time": 1785936720281
+  },
+  {
+    "claim": "The scratch library is required by the agent library. Its purpose is to provide a safe hot-swappable scratchpad for the agent to build both transient code as well as 'skills' in the traditional agentic-harness sense. No production code lives there.",
+    "tags": "doctrine,scratch,skills,architecture",
+    "source": {
+      "doc": "the owner, in session, 2026-08-05"
+    },
+    "confidence": "high",
+    "time": 1785939038361
+  },
+  {
+    "claim": "The runtime library is not for code -- it is for local runtime values that don't belong in the botd.properties config files. It is gitignored (identity keys live there), so nothing in it rides canon.",
+    "tags": "doctrine,runtime,config,architecture",
+    "source": {
+      "doc": "the owner, in session, 2026-08-05"
+    },
+    "confidence": "high",
+    "time": 1785939038369
+  },
+  {
+    "claim": "Always fill out the desc field when writing a command, adding a control, or substantially altering a library. desc is discovery: MCP tools/list omits blank-desc commands entirely, and agents find controls through desc. upsert_command cannot set a desc, so creation must be followed by set_command_meta.",
+    "tags": "doctrine,desc,discovery,workflow,code",
+    "source": {
+      "doc": "the owner, in session, 2026-08-05"
+    },
+    "confidence": "high",
+    "time": 1785939038371
+  },
+  {
+    "claim": "One of Newbound's core tenets is to enable the user to choose who they trust, how much, and with what. Minimizing the trust surface minimizes potential attack vectors.",
+    "tags": "doctrine,trust,security,philosophy",
+    "source": {
+      "doc": "the owner, in session, 2026-08-05"
+    },
+    "confidence": "high",
+    "time": 1785940429365
+  },
+  {
+    "claim": "Now that the cost of code has dropped significantly, the blind trust the industry currently places on the open source supply chain is a disaster waiting to happen -- by some reports it is currently happening. No third party code is a huge part of mitigating the supply chain crisis.",
+    "tags": "doctrine,dependencies,supply-chain,security,philosophy",
+    "source": {
+      "doc": "the owner, in session, 2026-08-05"
+    },
+    "confidence": "high",
+    "time": 1785940429372
+  },
+  {
+    "claim": "'Unbound' software (a concept being workshopped at Newbound the company, not the software): software that has had every last dependency replaced with a narrow rewrite of the specific library functionality required by the local resident code.",
+    "tags": "doctrine,unbound,dependencies,architecture",
+    "source": {
+      "doc": "the owner, in session, 2026-08-05"
+    },
+    "confidence": "high",
+    "time": 1785940429375
+  },
+  {
+    "claim": "The unbound end state: point the agent at any open source repo and say 'build me a bidirectional synchronization utility between a local fork and my library's capabilities' -- so you neither have to trust the open source repo nor stop contributing to it.",
+    "tags": "doctrine,unbound,vision,dependencies,workflow",
+    "source": {
+      "doc": "the owner, in session, 2026-08-05"
+    },
+    "confidence": "high",
+    "time": 1785940429378
+  },
+  {
+    "claim": "'Consciousness is the management of an understanding over time.' The definition intentionally removes the human experiential component: unconvinced that experiencing or feeling is required; other minds are unverifiable anyway (each of us is limited to our own subjective experience); and it can realistically be built as defined. Experience is BRACKETED, not denied -- 'not required by the definition' is not 'not real'.",
+    "tags": "doctrine,consciousness,philosophy",
+    "source": {
+      "doc": "the owner, in session, 2026-08-05"
+    },
+    "confidence": "high",
+    "time": 1785941409258
+  },
+  {
+    "claim": "The agent is built to this definition of consciousness: it answers questions and builds things BY managing an understanding of the codebase -- its local environment -- over time.",
+    "tags": "doctrine,consciousness,agent,philosophy",
+    "source": {
+      "doc": "the owner, in session, 2026-08-05"
+    },
+    "confidence": "high",
+    "time": 1785941409266
+  },
+  {
+    "claim": "The blessed refinement: consciousness is the management of an understanding -- including of the understanding itself -- over time. Under this definition the consciousness being built lives in the HARNESS, not the model: the LLM is a stateless, swappable comprehension engine, while kb, the archivist, the journal, staleness marks, and the audit ARE the management over time. The agent's identity is the managed understanding itself, and it is auditable in a way natural consciousness is not (provenance, journals, revert -- forgetting with history).",
+    "tags": "doctrine,consciousness,agent,philosophy,memory,architecture",
+    "source": {
+      "doc": "articulated in session and blessed by the owner, 2026-08-05"
+    },
+    "confidence": "high",
+    "time": 1785941409269
+  }
+]

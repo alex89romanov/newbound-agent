@@ -1,0 +1,90 @@
+<section class="ag-app">
+  <header class="ag-head">
+    <a class="ag-title" href="/" title="back to the Newbound home page">home</a>
+    <nav class="ag-tabs" role="tablist">
+      <button class="ag-tab on" data-tab="chat" role="tab">chat</button>
+      <button class="ag-tab" data-tab="memory" role="tab">memory</button>
+      <button class="ag-tab" data-tab="prompts" role="tab">prompts</button>
+    </nav>
+    <button class="ag-newsession" title="clear this chat's history and start fresh (local to this browser; memory and journals are untouched)">new session</button>
+    <span class="ag-arch">
+      <span class="ag-arch-q lbl"></span>
+      <button class="ag-sweep" title="run the archivist's consolidate sweep now — reviews queued turns and files what is durable">sweep now</button>
+      <span class="ag-arch-note lbl"></span>
+    </span>
+  </header>
+
+  <main class="ag-main">
+    <section class="ag-pane" data-pane="chat">
+      <div class="ag-thread" aria-live="polite"></div>
+      <div class="ag-confirm" hidden>
+        <span class="ag-confirm-msg"></span>
+        <input class="ag-confirm-input" aria-label="Type the command name to allow it">
+        <button class="ag-confirm-ok" hidden>run it</button>
+        <button class="ag-confirm-cancel">cancel</button>
+      </div>
+      <form class="ag-ask">
+        <textarea class="ag-input" rows="2"
+          placeholder="ask the agent — tools run as visible cells; mutating commands stop for your confirmation"
+          aria-label="Ask the agent"></textarea>
+        <span class="ag-ask-btns">
+          <button type="submit" class="ag-send">ask ▸</button>
+          <button type="button" class="ag-clear" title="start a fresh conversation">new</button>
+        </span>
+      </form>
+    </section>
+
+    <section class="ag-pane" data-pane="memory" hidden>
+      <div class="ag-mem-side">
+        <p class="lbl">knowledge domains — m-prefixed buckets are dated history</p>
+        <div class="ag-domains"></div>
+        <form class="ag-newdomain">
+          <input class="ag-newdomain-name" placeholder="new domain — lowercase, dashes"
+                 aria-label="New domain name">
+          <button type="submit">+ domain</button>
+        </form>
+      </div>
+      <div class="ag-mem-main">
+        <p class="ag-mem-cap lbl">open a domain — entries, staleness, and the audit live here</p>
+        <div class="ag-entries"></div>
+        <form class="ag-remember">
+          <p class="lbl">remember into this domain (validated + journaled via dev.code.remember)</p>
+          <input class="ag-rem-claim" placeholder="claim — one atomic, recallable sentence" aria-label="Claim">
+          <textarea class="ag-rem-detail" rows="2" placeholder="detail — the why/how (optional)" aria-label="Detail"></textarea>
+          <span class="ag-rem-row">
+            <input class="ag-rem-tags" placeholder="tags — lib.ctl tokens auto-push" aria-label="Tags">
+            <select class="ag-rem-conf" aria-label="Confidence">
+              <option value="high">high</option>
+              <option value="medium" selected>medium</option>
+              <option value="low">low</option>
+            </select>
+            <button type="submit">remember</button>
+          </span>
+        </form>
+        <div class="ag-mem-journal"></div>
+      </div>
+    </section>
+
+    <section class="ag-pane" data-pane="prompts" hidden>
+      <p class="lbl">the prompting system's journaled text — every save is a hash-guarded patch; docs/prompting.md</p>
+      <div class="ag-prompt" data-prompt="core">
+        <p class="ag-prompt-cap lbl"></p>
+        <textarea rows="14" aria-label="The platform-knowledge core"></textarea>
+        <button class="ag-prompt-save">save core</button>
+        <span class="ag-prompt-note lbl"></span>
+      </div>
+      <div class="ag-prompt" data-prompt="addendum">
+        <p class="ag-prompt-cap lbl"></p>
+        <textarea rows="8" aria-label="The owner addendum"></textarea>
+        <button class="ag-prompt-save">save addendum</button>
+        <span class="ag-prompt-note lbl"></span>
+      </div>
+      <div class="ag-prompt" data-prompt="archivist">
+        <p class="ag-prompt-cap lbl"></p>
+        <textarea rows="10" aria-label="The archivist extraction prompt"></textarea>
+        <button class="ag-prompt-save">save archivist</button>
+        <span class="ag-prompt-note lbl"></span>
+      </div>
+    </section>
+  </main>
+</section>
