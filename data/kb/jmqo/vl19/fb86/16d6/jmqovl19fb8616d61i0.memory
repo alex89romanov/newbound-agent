@@ -147,5 +147,34 @@
     },
     "confidence": "high",
     "time": 1786295580721
+  },
+  {
+    "claim": "dev.code.set_groups derives the ENFORCED readers arrays from the groups string at save time, at all three levels: library meta.json; control record plus its inline data records (app.read's gate); command META record (the array check_security reads via lookup_command_id) plus impl record. Empty groups derives [] = admin-only. Returns changed/groups/readers.",
+    "detail": "Restores the retired editcontrol/editcommand derivation (readers = groups.split(',')). Library-level readers refresh into system.libraries on restart. writers is never touched (only app.delete consults it).",
+    "tags": "security,set_groups,readers,dev.code",
+    "source": {
+      "doc": "authored+verified on a disposable, session 2026-08-09 (branch claude/dev-ui-security-integration-lnonp5)"
+    },
+    "confidence": "high",
+    "time": 1786309390464
+  },
+  {
+    "claim": "patch_command_body, set_command_imports, and upsert_command preserve existing readers/writers on the records they rewrite; before 2026-08-09 every code edit reset a gated command to admin-only, because flowlang's data::write::write stamps whatever arrays it is passed.",
+    "tags": "security,readers,dev.code,preservation",
+    "source": {
+      "doc": "authored+verified on a disposable, session 2026-08-09 (branch claude/dev-ui-security-integration-lnonp5)"
+    },
+    "confidence": "high",
+    "time": 1786309390468
+  },
+  {
+    "claim": "check_security's group loop passes when the library readers contain 'anonymous' OR the caller's group, so library=anonymous plus per-command groups is the fine-grained convention; check_auth (app.read/write/delete and app.exec-by-id) has NO anonymous pass-through - the group must appear in BOTH the library readers and the record readers, so group-gating a control's records for non-admin readers also requires that group at the library level.",
+    "detail": "Verified live: /dev/lib_info gated to 'testers' executed for a testers user and denied anonymous/other; app.read of a testers-gated control in the anonymous-readers dev library denied the testers user (admin passed). Command::new reads readers from the command META record, not the impl record.",
+    "tags": "security,check_security,check_auth,enforcement",
+    "source": {
+      "doc": "authored+verified on a disposable, session 2026-08-09 (branch claude/dev-ui-security-integration-lnonp5)"
+    },
+    "confidence": "high",
+    "time": 1786309390471
   }
 ]
