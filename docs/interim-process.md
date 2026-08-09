@@ -245,7 +245,23 @@ or a thin bridge both fit behind it without changing the harness around it.
   upstream 0.3.30+), the bench CLAUDE.md chronicle (distill → kb).
 - Sync: the mirror to upstream HEAD; crates to flowlang 0.3.31 /
   ndata 0.3.17 (0.3.17 fixes the JSON parser rejecting negative numbers —
-  flow diagrams with nodes at negative coordinates depend on it).
+  flow diagrams with nodes at negative coordinates depend on it). **Not
+  cosmetic [verified]**: on the mirror's 0.3.28, a missing declared param
+  on a static (newbound_core) command still panics uncaught and kills the
+  `newbound mcp` process — the overlay probe demonstrated it live; the
+  0.3.30+ builder's wrapper guard is the fix, which upstream's rebuild
+  already carries.
+
+**Executed and verified 2026-08-09** (this session): the agent repo was
+carved (agent + kb + skeletal scratch + docs + tools, 178 files), the
+mirror-side removal staged on `claude/newbound-workflow-review-eotm2p`
+with `.mcp.json` added, and the symlink overlay proven end to end —
+`tools/overlay.sh` linked six paths, host + all three dylibs built through
+the links, and `tools/overlay-probe.py` passed 7/7 against `newbound mcp`:
+libraries discovered through symlinks (129 tools incl. all 43 `dev-code-*`),
+a static command executed a real store read, and the agent FFI dylib
+dispatched through the overlay. (kb lists no tools by design — it is a
+data-only library.)
 
 ---
 
