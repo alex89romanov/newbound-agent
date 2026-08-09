@@ -13,6 +13,7 @@
   },
   {
     "claim": "position:fixed escapes a shadow root (it positions against the viewport) — a previewed full-page control can overlay the real page and swallow clicks; contain:layout paint on the shadow host is the designed fix",
+    "detail": "Found via dev.frame's preview hijacking the workbench facet chips (the fr-stage overlay). The fix is designed but NOT yet applied — dev.preview still lacks the containment.",
     "tags": "dev.preview,css,open-issue",
     "source": {
       "lib": "dev",
@@ -21,8 +22,7 @@
       "hash": "72e7e6dc4c1b9f05"
     },
     "confidence": "high",
-    "time": 1785504820517,
-    "detail": "Found via dev.frame's preview hijacking the workbench facet chips (the fr-stage overlay). The fix is designed but NOT yet applied — dev.preview still lacks the containment."
+    "time": 1785504820517
   },
   {
     "claim": "tokens.css is kit contract v1 — token NAMES are frozen (graphite/paper/accent/facet-hue/semantic/type-role sets, .lbl, [hidden]!important, reduced-motion); values may tune",
@@ -32,5 +32,14 @@
     },
     "confidence": "high",
     "time": 1785504820517
+  },
+  {
+    "claim": "The dev UI's deliberate set_groups act: shelf fan 'groups' panel (library), workbench meta-row groups form (control), command-meta groups editor (command) - each a separate form from desc/tags per the 2026-07-31 correction, with a known-groups hint from security.groups and a two-click confirm on clearing. Cards and stacks carry a gate badge: groups verbatim, anonymous = open (no badge), none = admin-only.",
+    "tags": "dev.shelf,dev.workbench,dev.card,groups,security,ui",
+    "source": {
+      "doc": "authored+verified on a disposable, session 2026-08-09 (branch claude/dev-ui-security-integration-lnonp5)"
+    },
+    "confidence": "high",
+    "time": 1786309390473
   }
 ]
