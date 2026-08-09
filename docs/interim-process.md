@@ -39,9 +39,15 @@ disposable verify) was built around three constraints that no longer exist:
 ### `newbound` (upstream, mraiser/newbound)
 Canon for the platform: `newbound_core`, the static-rooted libraries
 (`app`, `dev`, `peer`, `security`, `flow`), flowlang/ndata as crates.
-The owner pulls; nothing is ever pushed there directly (standing rule).
 
-### `newbound-agent` (new repo — the durable home of the harness)
+**The push rule, as amended by the owner (2026-08-09):** on the owner's
+own sessions and repos, work lands as **branches** — and **nothing merges
+to master without his express permission**. (The old absolute
+never-push-to-`mraiser/*` rule remains in force for Alex's sessions.)
+A brand-new repo's *initial* push is the one exception: there is no
+master to protect yet.
+
+### `newbound-agent` (mraiser/newbound-agent — the durable home of the harness)
 Contains everything that is the agent's, not the platform's:
 
 - `data/agent/`, `data/kb/` — the store libraries (journals travel inside
@@ -82,12 +88,12 @@ the newbound checkout carries symlinks into it: `data/agent`, `data/kb`,
 the newbound repo, and even then only when editing from a working install
 rather than a clean one.
 
-### `alex89romanov/newbound` (the mirror) — de-forked
+### `alex89romanov/newbound` (the mirror) — de-forked, and shrinking further
 With agent/kb/scratch moved out, the mirror stops being a long-lived fork.
-Its job shrinks to staging **short-lived branches** of platform-side work
-(newbound_core changes, e.g. additions to `dev.code`) for the owner to
-review and pull. It tracks upstream closely; its durable delta trends to
-zero.
+Under the amended push rule its staging role shrinks again: sessions the
+owner drives push platform-side branches **directly to upstream** for him
+to merge. The mirror remains only for Alex-driven sessions (where the old
+never-push rule still applies) and retires when it has no remaining job.
 
 ### `newbound-bench` — retired
 Its three residual jobs are all covered: the review mirror is unnecessary

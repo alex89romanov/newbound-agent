@@ -21,7 +21,7 @@ about this one.
 
 ## Setup (symlink overlay)
 
-Check this repo out next to a newbound checkout, then:
+Check this repo out (github.com/mraiser/newbound-agent) next to a newbound checkout, then:
 
 ```bash
 cd path/to/newbound
