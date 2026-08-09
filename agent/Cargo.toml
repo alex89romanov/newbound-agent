@@ -7,8 +7,8 @@ edition = "2021"
 crate-type = ["dylib"]
 
 [dependencies]
-flowlang = { version="0.3.28" }
-ndata = "0.3.16"
+flowlang = { version="0.3.31" }
+ndata = "0.3.17"
 serde = { version = "1.0", features = ["derive"], optional = true }
 serde_json = { version = "1.0", optional = true }
 ureq = { version = "2.9", features = ["json"] }
@@ -19,3 +19,7 @@ python_runtime = ["flowlang/python_runtime"]
 reload = []
 default = []
 
+
+# Self-contained: not a member of a host checkout's cargo workspace
+# (upstream has no exclude list for the overlay paths).
+[workspace]

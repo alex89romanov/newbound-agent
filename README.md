@@ -35,13 +35,25 @@ symlinks (`read_dir` + `Path::is_dir()` — verified), so the platform,
 `flowb`, the hot-reload watcher, and `newbound mcp` see ordinary
 directories.
 
-Then build as usual:
+Then build. On a checkout whose generated initializer doesn't yet know
+these FFI crates (upstream master — it has no agent blocks and no
+hot-reload watcher until regenerated), the first build is a three-step:
 
 ```bash
-cargo build --release --features=serde_support        # host
-(cd agent && cargo build --release)                   # dylibs hot-load;
-(cd kb && cargo build --release)                      #   no restart needed
+tools/gen-cmd-crate.py .                       # only if cmd/ is absent
+cargo build --release --features=serde_support # host, once
+./target/release/newbound rebuild              # regenerate initializer
+                                               #   (now sees agent/kb/scratch)
+cargo build --release --features=serde_support # host again, with FFI blocks
+(cd agent && cargo build --release --features=serde_support,python_runtime)
+(cd kb && cargo build --release)               # dylibs hot-load from here on;
+(cd scratch && cargo build --release)          #   no restart needed
 ```
+
+Do not commit the regenerated initializer to the newbound repo — the
+agent is optional there by design; the regeneration is local state, like
+the build itself. On a checkout that already carries the FFI blocks (the
+old mirror), the plain host + dylib builds suffice.
 
 ## The scratch pattern
 
