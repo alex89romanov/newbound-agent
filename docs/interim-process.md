@@ -249,10 +249,11 @@ or a thin bridge both fit behind it without changing the harness around it.
 - Retire: `export-bench.py`, `nbtransport.py`, the HTTP era of
   `install-bench.py`, `patches/flowlang-missing-param-abort.patch` (fixed
   upstream 0.3.30+), the bench CLAUDE.md chronicle (distill → kb).
-- Sync: the mirror to upstream HEAD; crates to flowlang 0.3.31 /
-  ndata 0.3.17 (0.3.17 fixes the JSON parser rejecting negative numbers —
-  flow diagrams with nodes at negative coordinates depend on it). **Not
-  cosmetic [verified]**: on the mirror's 0.3.28, a missing declared param
+- ~~Sync~~ **Done (2026-08-09)**: upstream master and the agent crates
+  are all at flowlang 0.3.31 / ndata 0.3.17 (0.3.17 fixes the JSON
+  parser rejecting negative numbers — flow diagrams with nodes at
+  negative coordinates depend on it). The mirror is superseded rather
+  than synced. It was **not cosmetic [verified]**: on the mirror's 0.3.28, a missing declared param
   on a static (newbound_core) command still panics uncaught and kills the
   `newbound mcp` process — the overlay probe demonstrated it live; the
   0.3.30+ builder's wrapper guard is the fix, which upstream's rebuild

@@ -32,6 +32,9 @@ edition = "2021"
 
 [dependencies]
 flowlang = "0.3"
+ndata = "0.3"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
 
 [features]
 serde_support = []
