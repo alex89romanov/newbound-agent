@@ -1,0 +1,29 @@
+[
+  {
+    "claim": "The nebula library (mraiser/newbound_nebula, store v42) is four controls: `nebula` carries the app UI and all 14 rust commands; `lighthouse`, `network`, `member` are popup forms only. The 14 commands split into release management (info, install_release), CA/certs (create_network, add_member), rollout (join_network executed on the remote peer via the send_*(..., target) peer proxy, members), config rendering (save_config, build_config — duplicated YAML template), and systemd control (install/uninstall/start/stop/restart_service); convert_legacy is a dead stub.",
+    "tags": "nebula,architecture,controls",
+    "source": {
+      "doc": "read from data/nebula @ d0bcb0a, 2026-08-09"
+    },
+    "confidence": "high",
+    "time": 1786292476509
+  },
+  {
+    "claim": "Nebula key doctrine: every private key lives under runtime/nebula/networks/<name>/ (gitignored by the repo), the CA key never leaves the owning instance, and member cert+key travel only as join_network parameters over the already-encrypted peer channel. The 2023 code has one wart to fix: create_network and add_member stage ca.key/certs through the process working directory (rename/copy dance) instead of using nebula-cert's -ca-key/-ca-crt/-out-crt/-out-key flags — a crash mid-command leaves a CA key in the checkout root.",
+    "tags": "nebula,security,keys,certs",
+    "source": {
+      "doc": "src/nebula/nebula/{create_network,add_member}.rs @ d0bcb0a"
+    },
+    "confidence": "high",
+    "time": 1786292476511
+  },
+  {
+    "claim": "The nebula overhaul strategy (awaiting owner review) is docs/overhaul-strategy.md on branch claude/nebula-library-overhaul-2gg43z of mraiser/newbound_nebula: repackage on the newbound-agent FFI pattern (meta.json root=nebula, cargo ffi dylib, tracked generated crate), install via dev.github.import + one rebuild/restart, rewrite cert commands to use nebula-cert flags, dedupe the YAML template, drop attohttpc for system_call curl, delete the pre-split src/ tree and Java relics, fill desc everywhere, keep commands admin-only.",
+    "tags": "nebula,overhaul,strategy,packaging",
+    "source": {
+      "doc": "docs/overhaul-strategy.md, 2026-08-09"
+    },
+    "confidence": "high",
+    "time": 1786292476512
+  }
+]

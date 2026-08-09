@@ -102,5 +102,32 @@
     },
     "confidence": "high",
     "time": 1785964641067
+  },
+  {
+    "claim": "dev.github.import is the drop-in library install path: given a git URL whose repo has data/<lib> and runtime/<lib> at its root, it clones into repositories/<lib>, symlinks both into the instance, calls load_library then rebuild_lib. dev.github has only import and list — no update or remove; update today is `git pull` in repositories/<lib> plus rebuild_lib by hand. A brand-new FFI root additionally needs `newbound rebuild` + host build + restart before the watcher and initializer know the crate.",
+    "tags": "platform-api,dev.github,install,ffi",
+    "source": {
+      "doc": "newbound_core/src/dev/github/import.rs, verified 2026-08-09"
+    },
+    "confidence": "high",
+    "time": 1786292476513
+  },
+  {
+    "claim": "App discovery and activation: an app is any runtime/<name>/app.properties; activation is membership in the comma-separated `apps` key of config.properties, written by app/settings (which re-runs init_globals — no restart to activate a facet-served app). app.properties' `libraries=` list drives load_library at init. The peer-to-peer alternative to git import is dev/install_lib, which streams the library zip from a peer and copies data/<lib>/_APPS/<app> out to runtime/<app>.",
+    "tags": "platform-api,apps,activation,install_lib",
+    "source": {
+      "doc": "flowlang appserver.rs init_globals + newbound_core app/{apps,settings}.rs, dev/dev/install_lib.rs, verified 2026-08-09"
+    },
+    "confidence": "high",
+    "time": 1786292476516
+  },
+  {
+    "claim": "Command exposure model (check_security): with security on, a command executes anonymously only if BOTH the library meta's readers and the command record's readers contain 'anonymous'; otherwise the session user's groups must intersect the command's readers, and the 'admin' group always passes. Empty readers on a command record therefore means admin-only — the right default for commands that shell out to sudo.",
+    "tags": "platform-api,security,readers,groups",
+    "source": {
+      "doc": "newbound_core/src/security/security/init.rs check_security, verified 2026-08-09"
+    },
+    "confidence": "high",
+    "time": 1786292476517
   }
 ]
