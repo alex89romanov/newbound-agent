@@ -25,5 +25,14 @@
     },
     "confidence": "high",
     "time": 1786292476512
+  },
+  {
+    "claim": "The nebula overhaul executed 2026-08-09 (branch claude/nebula-library-overhaul-2gg43z on newbound_nebula + newbound): FFI dylib packaging (root=nebula, tracked crate, no deps - attohttpc replaced by curl over system_call), all 14 commands re-authored via dev.code on a disposable (cert commands use nebula-cert -ca-key/-out flags so the CA key never leaves networks/<name>/; add_member's -group flag corrected to -groups - the old flag silently misfiled group membership; members keyed by peer name not path; one config template in save_config; systemd unit is Type=simple with Restart=on-failure), convert_legacy deleted, remove_member added behind the UI's delete button, descs everywhere, 17 orphaned Java-era records removed by reference-walk. Install story: dev.github.import + one restart + app activation, proven end to end on a fresh disposable including a real v1.9.5 release download and nebula-cert verify. NOT verified (owner hardware): live systemd ops, tun devices, real overlay traffic; publishapp intentionally not run so the owner's identity, not a scratch identity, signs the app republish.",
+    "tags": "nebula,overhaul,verification,keys",
+    "source": {
+      "doc": "this session's verification battery (47 checks) + import/update/remove wire tests, 2026-08-09"
+    },
+    "confidence": "high",
+    "time": 1786295588125
   }
 ]

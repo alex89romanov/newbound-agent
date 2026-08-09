@@ -129,5 +129,23 @@
     },
     "confidence": "high",
     "time": 1786292476517
+  },
+  {
+    "claim": "The flowlang builder has three verified gaps around FFI library crates (all worked around, all wanting an upstream flow-repo PR): (1) the default generated Cargo.toml declares serde/serde_json optional deps but omits the serde_support/python_runtime/javascript_runtime feature blocks, so any compile passing --features=serde_support fails until the features are added - which is why the agent/kb/scratch/nebula repos track their crate Cargo.tomls by hand; (2) the generated <ctl>/mod.rs cmdinit is append-only across regenerations - stale command ids accumulate (a delete+re-upsert leaves both generations registered) and the built dylib lags the sources by one compile - the clean reset is delete the generated src dir and run `newbound rebuild`; (3) build_lib answers 'unchanged' when a repo's tracked generated src already matches the store, so rebuild_lib skips the crate build and a fresh install never produces an artifact - dev.github.import/update now build the crate unconditionally.",
+    "tags": "platform-api,flowlang,builder,ffi,bug",
+    "source": {
+      "doc": "verified live during the nebula overhaul, 2026-08-09"
+    },
+    "confidence": "high",
+    "time": 1786295573656
+  },
+  {
+    "claim": "Store meta.json cargo dependencies are the source the builder regenerates crate Cargo.tomls from - bumping a crate version in a Cargo.toml without updating the owning library's store meta makes every subsequent rebuild silently regress it. The 2026-08-09 flowlang 0.3.31 / ndata 0.3.17 sync had this latent regression via data/app/meta.json (still 0.3.30/0.3.16, masked by Cargo.lock semver compatibility); fixed via save_library_config on the nebula-overhaul branch. Corollary: dev.dev.compile on a newbound_core-rooted library builds only the newbound_core package as an error check - the host binary relink is a separate explicit `cargo build` at the checkout root, per the interim-process restart table.",
+    "tags": "platform-api,build,meta.json,cargo,drift",
+    "source": {
+      "doc": "verified live during the nebula overhaul, 2026-08-09"
+    },
+    "confidence": "high",
+    "time": 1786295580721
   }
 ]
