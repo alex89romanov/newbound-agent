@@ -288,5 +288,15 @@
     },
     "confidence": "high",
     "time": 1786368120043
+  },
+  {
+    "claim": "One add-on = ONE plugin-registry entry (the owner's refinement, 2026-08-10: if no sane person would ever install just one of the pieces, it's one entry, not three). The single registered payload control brings every other surface itself - static children for what can install at boot, and its own watcher for slots that appear later.",
+    "detail": "The reference: the agent add-on registers only agentmodules -> dev.dev. The cluster's children install the shared modules and describebtn (a document-level listener, armed at boot before the workbench exists); the cluster's js watches for the notebook's .ss-plugins slot and installs askrow into it whenever an unclaimed one appears, marking it with the same data-nb-plugin attribute the loader's registry pass uses so the mechanisms coexist. Gotcha: a cluster child installing at boot runs BEFORE the boot publishes __benchPlatform.moduleUrls - resolve shared modules with requireModule(name), the order-free registry, never import(moduleUrls[...]).",
+    "tags": "doctrine,plugins,graft,one-entry,cluster,requireModule",
+    "source": {
+      "doc": "the owner's directive + browser-verified (single-entry disposable), session 2026-08-10, branch claude/newbound-missing-library-fixes-bx9bs0 (agent.agentmodules html+js, agent.askrow, agent.describebtn)"
+    },
+    "confidence": "high",
+    "time": 1786368902316
   }
 ]

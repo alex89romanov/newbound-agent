@@ -8,11 +8,13 @@
 (async () => {
   if (document.__nbAgentDescribe) return;
   document.__nbAgentDescribe = true;
-  const P = globalThis.__benchPlatform;
-  if (!P) return;
+  // requireModule, not moduleUrls: as a cluster child this installs at
+  // boot, BEFORE the boot publishes moduleUrls — the registry resolves
+  // whenever the modules land, order-free.
+  if (typeof requireModule !== "function") return;
   const [{ store }, loop] = await Promise.all([
-    import(P.moduleUrls["assets/store.js"]),
-    import(P.moduleUrls["assets/agentloop.js"]),
+    requireModule("store", "describebtn"),
+    requireModule("agentloop", "describebtn"),
   ]);
   document.addEventListener("nb-command-meta", (ev) => {
     const { lib, ctl, cmd, groups, descInput, note } = ev.detail ?? {};

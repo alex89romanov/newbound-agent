@@ -7,19 +7,18 @@
 // the graft. No platform surface names this library.
 var UUID = this.UUID;
 (async () => {
-  const P = globalThis.__benchPlatform;
   const el = document.getElementById(UUID);
-  if (!P || !el) return;
+  if (!el || typeof requireModule !== "function") return;
   const notebook = el.nbNotebook;
   if (!notebook) {
     console.warn("askrow: the slot carries no notebook API — not wiring");
     return;
   }
   const [{ store }, { chatctx }, loop, promptMod] = await Promise.all([
-    import(P.moduleUrls["assets/store.js"]),
-    import(P.moduleUrls["assets/chatctx.js"]),
-    import(P.moduleUrls["assets/agentloop.js"]),
-    import(P.moduleUrls["assets/agentprompt.js"]),
+    requireModule("store", "askrow"),
+    requireModule("chatctx", "askrow"),
+    requireModule("agentloop", "askrow"),
+    requireModule("agentprompt", "askrow"),
   ]);
   const toast = notebook.toast;
 
