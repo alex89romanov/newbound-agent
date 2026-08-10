@@ -34,5 +34,14 @@
     },
     "confidence": "high",
     "time": 1786295588125
+  },
+  {
+    "claim": "The nebula UI was rebuilt 2026-08-10 on the tokens.css kit (branch claude/nebula-library-overhaul-2gg43z, ea1c503, awaiting merge): all four controls' facets re-authored via patch_control_facet on a disposable; app.ui dependency dropped (own tabs/modal/status strip); owner-vs-joined gating from info.owner; outcomes read from data.status because the exec envelope is 'ok' even for failed object-returning commands. Traps hit and worth keeping: jQuery attr(name,null) does NOT remove an attribute (use removeAttr, or [hidden] never unhides); the server caches built jsapi per process, so facet js edits need an instance restart to serve (facet html/css serve fresh); mounting app:tokens via a hidden data-control div injects the kit css globally from any classic-mount app.",
+    "tags": "nebula,ui,frontend,kit,tokens,jsapi",
+    "source": {
+      "doc": "live Playwright verification on the disposable, 21 checks, 2026-08-10"
+    },
+    "confidence": "high",
+    "time": 1786320393147
   }
 ]
