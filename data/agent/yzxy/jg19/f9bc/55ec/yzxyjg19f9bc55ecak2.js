@@ -17,6 +17,54 @@
 import { store } from "./store.js";
 import { packFor, ready as memoryReady } from "./memory.js";
 
+// ── this library's own wire ─────────────────────────────────
+// The platform's store carries no add-on-specific API: the provider owns
+// its library name and command names. Everything below rides the store's
+// generic by-name surface; resolution failures come back as err envelopes
+// (never throws), so callers branch on status only.
+async function agentCall(ctl, cmd, args) {
+  const r = await store.invoke("agent", ctl, cmd, args);
+  return r instanceof Error ? { status: "err", msg: r.message } : r.envelope;
+}
+
+/** The MCP tool list (agent.plugin.list_tools, FLAT {tools:[...]}). */
+export function listTools() {
+  return agentCall("plugin", "list_tools", {});
+}
+
+/** One chat_llm completion (agent.llm — the OpenAI-compatible bridge to
+    the instance's configured model). JSONObject envelope: the payload
+    ({kind, content | tool_calls, assistant_message}) sits under data.
+    chatTurn below drives this directly — control_query and tool_loop are
+    deliberately not called. */
+export function chatLlm(messages, tools) {
+  return agentCall("llm", "chat_llm", { messages, tools });
+}
+
+/** Draft a command description (agent.plugin.describe_command, String). */
+export function describeCommand(args) {
+  return agentCall("plugin", "describe_command", args);
+}
+
+/** The archivist's intake (docs/memory.md) — the session fires and
+    forgets; resolution failures resolve to Error values, not rejections. */
+export function logTurn(entry) {
+  return store.invoke("agent", "archivist", "log_turn", entry);
+}
+
+/** chat_llm reads system.apps.agent.runtime (VLLM_URL/VLLM_MODEL) —
+    absent when the agent app isn't exposed. The session shows whatever
+    non-empty string this returns beneath a failed ask. */
+export function errorHint(msg) {
+  if (/Key '(agent|VLLM_URL|VLLM_MODEL)' not found/.test(msg ?? "")) {
+    return "This instance's agent app isn't configured: add `agent` to " +
+      "config.properties apps=, put VLLM_URL and VLLM_MODEL in " +
+      "runtime/agent/botd.properties, and restart " +
+      "(tools/scratch-instance.md has the recipe).";
+  }
+  return "";
+}
+
 // Generous: the autonomous developer workflow legitimately spends rounds
 // on compile-debug cycles.
 export const MAX_ROUNDS = 10;
@@ -321,7 +369,7 @@ export async function chatTurn({ messages, tools, execTool, onRound }) {
     return [{ role: "system", content: pack.block }, ...messages];
   };
   for (let round = 0; round < MAX_ROUNDS; round++) {
-    const r = await store.chatLlm(convo(), tools);
+    const r = await chatLlm(convo(), tools);
     if (r.status !== "ok") throw new Error(r.msg ?? "chat_llm failed");
     const d = r.data ?? {};
     // Failures ride INSIDE the FLAT envelope: wrapper-caught panics as
@@ -357,7 +405,7 @@ export async function chatTurn({ messages, tools, execTool, onRound }) {
   messages.push({ role: "user", content:
     "[Tool budget exhausted. Do not request tools. Answer NOW from what you already have: what you completed, what succeeded or failed (name any patch ids), and what remains undone.]" });
   try {
-    const r = await store.chatLlm(convo(), []);
+    const r = await chatLlm(convo(), []);
     if (r.status === "ok") {
       const d = r.data ?? {};
       if (d.status !== "err" && d.kind !== "error" && d.kind !== "tool_calls"

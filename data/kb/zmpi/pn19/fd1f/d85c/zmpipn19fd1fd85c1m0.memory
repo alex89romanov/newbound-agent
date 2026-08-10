@@ -268,5 +268,15 @@
     },
     "confidence": "high",
     "time": 1785941409269
+  },
+  {
+    "claim": "The dev app knows NOTHING about the agent library (the owner's rule, 2026-08-10): dev/app carry no agent names, no probes, no availability checks - only generic plugin sockets. One runtime/dev/plugins.json entry (dev.plugins) activates the whole add-on: the boot's union control directory sweeps [own lib, app] plus exactly the plugin_lib values the registry contributes, and dev.session/dev.workbench consume an optional module named `ask` (the ask-provider socket) that the add-on's cluster installs.",
+    "detail": "app.store carries no add-on API (agentLibIds/agentLibCall/listTools/chatLlm/describeCommand deleted); the provider owns its own wire via store.invoke - agent.agentloop exports listTools/chatLlm/describeCommand/logTurn/errorHint and agent.ask (module:true, in the agentmodules cluster) re-exports them plus agentprompt's ADDENDUM as the socket adapter. Verified in a real browser (Playwright) on two disposables: a plain instance boots the bench with ZERO agent-library requests and no console errors (notebook stays a REPL, generate button absent); an overlaid instance with the single registry entry gets agent controls in the union directory, the ask module registered, and the notebook wired - no install script involved.",
+    "tags": "doctrine,plugins,dev,agent-optional,ask-provider,decoupling",
+    "source": {
+      "doc": "the owner's directive + browser-verified, session 2026-08-10, branch claude/newbound-missing-library-fixes-bx9bs0 (dev.dev, dev.session, dev.workbench, dev.shelf, dev.chatctx, app.store, agent.agentloop, agent.ask, agent.agentmodules)"
+    },
+    "confidence": "high",
+    "time": 1786366539955
   }
 ]
