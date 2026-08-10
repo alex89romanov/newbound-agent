@@ -112,5 +112,12 @@
     },
     "confidence": "high",
     "time": 1786372830834
+  },
+  {
+    "claim": "The bench-graft collapse's leaf pass is done on branch claude/app-loader-control-oa4cyw: dev.toast, dev.card, dev.jump, dev.session and app.sceneplayer are stock-dialect controls.",
+    "detail": "Recipe proven: ES-module body becomes the api-object constructor body; host->ME (document.getElementById(me.UUID)); props->ME.DATA (functions survive, installControl stores DATA by reference); exported api -> me.* methods; async setup queues behind a readyP promise with waitReady(cb) for embedders (sceneplayer). Verified on a disposable instance with Playwright: all five mount via installControl and exercise real store calls. /dev/ is BROKEN on this branch until the container pass (frame/workbench/editors/shelf/preview still mount via app.loader). Remaining: container pass, peer viewer off player/bridge, delete loader/bridge/player, shrink the dev boot.",
+    "tags": "bench-collapse",
+    "confidence": "high",
+    "time": 1786399738623
   }
 ]

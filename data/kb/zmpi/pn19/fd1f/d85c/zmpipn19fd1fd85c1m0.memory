@@ -328,5 +328,12 @@
     },
     "confidence": "high",
     "time": 1786376193672
+  },
+  {
+    "claim": "Vendored ES-module bundles are imported via page-relative URLs (e.g. ../app/asset/app/vendor/nb_three/scenestage.js), never absolute /app/... paths, so tunneled mounts under /peer/remote/UUID/local/ resolve inside the tunnel.",
+    "detail": "All newbound URLs are /appname/pagename, so ../ from any page is the (possibly tunneled) instance root — the owner's stated rationale for the relative-URL convention (2026-08-10). The bench layer's origin-rooted URLs (loader ROOT, boot fetches, assetRoots) were tunnel-blind; the collapse removes them. Grep for absolute /app/ in facets as a bug check.",
+    "tags": "bench-collapse",
+    "confidence": "high",
+    "time": 1786399738722
   }
 ]

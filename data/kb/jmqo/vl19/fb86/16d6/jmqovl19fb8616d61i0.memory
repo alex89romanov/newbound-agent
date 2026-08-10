@@ -186,5 +186,12 @@
     },
     "confidence": "high",
     "time": 1786365273284
+  },
+  {
+    "claim": "app.store exports ensureConnected(): a single-flight same-origin connect (saved same-origin live config wins) that store-consuming controls call before store use.",
+    "detail": "Moved from app.loader's mount path during the bench collapse so controls carry no ambient boot-environment dependency. dev.jump (search), dev.session (run) and app.sceneplayer call it. Throws when the platform is unreachable.",
+    "tags": "bench-collapse",
+    "confidence": "high",
+    "time": 1786399738682
   }
 ]
