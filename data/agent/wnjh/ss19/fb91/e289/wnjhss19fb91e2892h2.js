@@ -202,7 +202,7 @@ export async function init(host) {
   let mcpTools = null;
   async function ensureCatalog() {
     if (mcpTools !== null) return mcpTools;
-    const r = await store.listTools();
+    const r = await agent.listTools();
     mcpTools = r.status === "ok" ? (r.tools ?? []) : [];
     return mcpTools;
   }

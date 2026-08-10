@@ -13,8 +13,9 @@
 // (cache-busting — remember() writes server-side, so the store's record
 // cache must be dropped or revalidation is a no-op), so a remembered
 // entry shows in the counts by the NEXT ask, no reload needed.
-// dest-agent: rides the agent plugin (the agentmodules cluster) — no
-// part of the dev app names the memory system.
+// dest-agent: rides the agent add-on's own installs (the app boot and
+// the bench grafts carry this module) — no part of the dev app names
+// the memory system.
 import { chatctx } from "./chatctx.js";
 import { store } from "./store.js";
 

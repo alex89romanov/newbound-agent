@@ -102,5 +102,15 @@
     },
     "confidence": "high",
     "time": 1786289737656
+  },
+  {
+    "claim": "Before deleting a control, grep EVERY library for references - including the add-on's own app surfaces, not just the platform's. The agent library is both a bench plugin AND a standalone app (/agent/index.html, boot control agent.agent): a control retired from the bench story may still be load-bearing in the app story.",
+    "detail": "The incident: retiring the agentmodules cluster after checking only dev/app broke the Agent app's boot (it installed the cluster to build its module world) and the chat control (it called store.listTools, deleted from app.store in the same rework). Fix: the app boot installs agentloop/agentprompt/memory directly; chat rides agentloop.listTools. Also the disposable-instance recipe for testing published apps: runtime/<app>/app.properties (copy from data/<lib>/_APPS/<app>/app.properties) AND runtime/<app>/src (copy of _APPS/<app>/src) - do_get serves app pages from runtime/<app>/html/ then runtime/<app>/src/html/<app>/.",
+    "tags": "workflow,deletion,references,agent-app,disposable,runtime",
+    "source": {
+      "doc": "regression found by the owner on his live instance + fixed and browser-verified, session 2026-08-10, branch claude/newbound-missing-library-fixes-bx9bs0 (agent.agent, agent.chat, agent.memory)"
+    },
+    "confidence": "high",
+    "time": 1786372830834
   }
 ]
