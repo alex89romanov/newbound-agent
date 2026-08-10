@@ -133,5 +133,12 @@
     "tags": "bench-collapse",
     "confidence": "high",
     "time": 1786403684763
+  },
+  {
+    "claim": "Both app boots are pure markup: dev.dev html = a dev:plugins div plus a stock dev:frame div (js facet empty; the control keeps its compile/rebuild commands); agent.agent html = one agent:chat div.",
+    "detail": "Boot-level plugin registry entries must name a selector — the hidden-holder fallback died with the imperative boot. The entire page load is api.js default activation: shell index.js activateControls(document) -> body data-control -> nested divs all the way down.",
+    "tags": "bench-collapse",
+    "confidence": "high",
+    "time": 1786405099434
   }
 ]
