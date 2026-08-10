@@ -43,5 +43,14 @@
     },
     "confidence": "high",
     "time": 1786320393147
+  },
+  {
+    "claim": "Install-path doctrine, per the owner (2026-08-10): the peer-to-peer path (dev.dev.install_lib streaming over the peer channel, driven from the app's own UI) is THE install story for users' peers; dev.github.import is the developer path for the first instance only. A session initially replaced the broken P2P button with git-import guidance — wrong direction, corrected. The fix that made P2P work for FFI libraries is dev.dev.activate_lib: one shared activation step (initializer regen, in-place manifest mend for the builder's default Cargo.toml, unconditional crate build, host rebuild, 'RESTART:' answer) called by both install_lib and github.import. Verified on a P2P-shaped disposable (real dirs, no repo, no crate): activate → restart → all commands live.",
+    "tags": "nebula,p2p,install,doctrine,activate_lib",
+    "source": {
+      "doc": "the owner's correction in session + disposable verification, 2026-08-10"
+    },
+    "confidence": "high",
+    "time": 1786321383753
   }
 ]
