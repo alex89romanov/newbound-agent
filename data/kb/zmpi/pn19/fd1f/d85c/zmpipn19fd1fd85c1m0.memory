@@ -278,5 +278,15 @@
     },
     "confidence": "high",
     "time": 1786366539955
+  },
+  {
+    "claim": "Plugins graft onto things that don't know anything about them (the owner's rule, verbatim, 2026-08-10). A platform surface may expose only GENERIC graft points - a slot element, a small API on that slot, a bubbling DOM event - and must carry zero knowledge of any particular plugin: no names, no probes, no availability checks, no plugin-shaped interfaces. Everything a plugin needs beyond those graft points, the plugin brings itself.",
+    "detail": "The reference implementation: dev.session exposes .ss-plugins carrying an nbNotebook API (pushCell/cells/confirmTyped/confirmLite/busy/toast) and an nb-session-open event - agent.askrow grafts the entire chat surface there; dev.workbench renders a .cm-ext slot per command-meta panel and dispatches nb-command-meta - agent.describebtn injects the generate button from a document-level listener; the loader's pluginPass (dev.plugins registry entries with target/selector) is the mount mechanism. Anti-pattern to reject in review: a 'neutral socket' module whose interface mirrors one plugin's export list (the deleted agent.ask) - coupling wearing a neutral badge. Gotcha fixed en route: loader.js pluginEntries read r.status off store.invoke's {envelope,ms} wrapper, so the registry always parsed as empty and the pass had never fired.",
+    "tags": "doctrine,plugins,graft,decoupling,dev,notebook,workbench",
+    "source": {
+      "doc": "the owner's directive + browser-verified on two disposables, session 2026-08-10, branch claude/newbound-missing-library-fixes-bx9bs0 (dev.session, dev.workbench, app.loader, agent.askrow, agent.describebtn; agent.ask deleted)"
+    },
+    "confidence": "high",
+    "time": 1786368120043
   }
 ]
