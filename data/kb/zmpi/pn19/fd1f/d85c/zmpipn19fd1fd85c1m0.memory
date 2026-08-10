@@ -308,5 +308,15 @@
     },
     "confidence": "high",
     "time": 1786370816243
+  },
+  {
+    "claim": "The knowledge in a graft flows ONE way: the plugin is allowed to know things about what it's grafting onto, not the other way around (the owner, verbatim, 2026-08-10). Corollary: one add-on registers ONE plugins.json entry - a headless entry-point control (target dev.dev, selector \"\": the boot parks it in its hidden holder) that itself knows the host's graft spots and checks them on a heartbeat, filling any unclaimed one.",
+    "detail": "The reference: agent.bench is the whole registration - one entry, target dev.dev, selector \"\". Its ready() sets a 250ms setInterval running two querySelectors (.ss-plugins in the notebook drawer, .wb-plugins in the workbench - both lazy-mounted and remounted fresh) and installControls askrow/describebtn into unclaimed spots, stamping the loader pass's own data-nb-plugin marker so the mechanisms coexist. A dumb poll over named spots beats a MutationObserver: same latency in practice, no page-wide mutation surveillance, auditable in five lines. dev carries the spots and nothing else.",
+    "tags": "doctrine,plugins,graft,one-entry,knowledge-direction,heartbeat",
+    "source": {
+      "doc": "the owner's directive + browser-verified (single-entry disposable), session 2026-08-10, branch claude/newbound-missing-library-fixes-bx9bs0 (agent.bench; dev unchanged)"
+    },
+    "confidence": "high",
+    "time": 1786371315474
   }
 ]
