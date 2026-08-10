@@ -298,5 +298,15 @@
     },
     "confidence": "high",
     "time": 1786368902316
+  },
+  {
+    "claim": "This is a VERY MATURE platform - versions of it have been around for thirty years - so if you're writing a bunch of scaffolding you probably shouldn't be (the owner, 2026-08-10). Before inventing any mechanism, go find the existing pattern: stock installControl(el, lib, ctl, cb, data), me.ready (fires with your parent's DOM present and your own subtree activated), el.api walking for inter-control APIs, data-control child divs for composition, and the dev.plugins registry for grafts. The platform already solved lifecycle, ordering, and composition.",
+    "detail": "The case study: an agent session hand-rolled a MutationObserver, two document-level CustomEvents, and a DOM-property capability protocol (slot.nbNotebook) to graft the ask row and describe button - all of it re-deriving, ambiently and probabilistically, what the stock patterns guarantee lineally. dev.plugins' own js facet is 27 lines and already was the whole pattern: me.ready -> walk up for the host -> read the registry -> installControl at the entry's selector. The collapse replaced everything with: session sets root.api (the stock convention), askrow/describebtn are classic me.ready controls carrying their module deps as hidden data-control child divs (module registration is idempotent - consumers can share deps), and two registry entries mount them. Ambient coupling (document events, page-wide observers, properties stashed on DOM nodes) is also a SECURITY smell: lineal wiring is auditable by reading the parent; ambient wiring requires auditing every script on the page.",
+    "tags": "doctrine,scaffolding,mature-platform,stock-patterns,ready,el-api,installControl,security",
+    "source": {
+      "doc": "the owner's directive, verbatim in the claim, session 2026-08-10, branch claude/newbound-missing-library-fixes-bx9bs0 (dev.session, agent.askrow, agent.describebtn; agent.agentmodules deleted; reference: dev.plugins js facet)"
+    },
+    "confidence": "high",
+    "time": 1786370816243
   }
 ]

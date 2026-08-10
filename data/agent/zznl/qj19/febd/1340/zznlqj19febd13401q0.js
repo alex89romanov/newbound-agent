@@ -1,17 +1,20 @@
 // askrow — the agent add-on's chat surface, grafted into the notebook's
 // plugin slot by the registry (dev.plugins: target dev.session, selector
-// .ss-plugins). The notebook knows nothing about this control: everything
-// it needs arrives through the slot's nbNotebook API plus the page's
-// shared modules, and everything agent-flavored — prompts, tool defs,
-// gating vocabulary, the archivist, config hints — stays on this side of
-// the graft. No platform surface names this library.
-var UUID = this.UUID;
-(async () => {
-  const el = document.getElementById(UUID);
-  if (!el || typeof requireModule !== "function") return;
-  const notebook = el.nbNotebook;
-  if (!notebook) {
-    console.warn("askrow: the slot carries no notebook API — not wiring");
+// .ss-plugins). Classic through and through: the module dependencies are
+// child divs of this control (activated before me.ready fires —
+// registration is idempotent), and the notebook is found the stock way,
+// walking up the DOM to the first ancestor carrying `.api`. Everything
+// agent-flavored — prompts, tool defs, gating vocabulary, the archivist,
+// config hints — stays on this side of the graft; dev names nothing.
+var me = this;
+var ME = $('#' + me.UUID)[0];
+
+me.ready = async function () {
+  var up = $(ME).parent();
+  while (up[0] && !up[0].api) up = up.parent();
+  const notebook = up[0] ? up[0].api : null;
+  if (!notebook || !notebook.pushCell) {
+    console.warn("askrow: no notebook api above the graft point — not wiring");
     return;
   }
   const [{ store }, { chatctx }, loop, promptMod] = await Promise.all([
@@ -25,12 +28,12 @@ var UUID = this.UUID;
   const PINS_KEY = "bench.chat.pins";   // {add:[], remove:[]} vs DEFAULT_TOOLS
   const HISTORY_CELLS = 12;   // notebook cells folded into the agent's context
 
-  const askInput = el.querySelector(".ss-ask");
-  const sendBtn = el.querySelector(".ss-send");
-  const ctxRows = el.querySelector(".ss-ctx-rows");
-  const toolPick = el.querySelector(".ss-toolpick");
-  const toolList = el.querySelector(".ss-toollist");
-  const toolsBtn = el.querySelector(".ss-tools");
+  const askInput = ME.querySelector(".ss-ask");
+  const sendBtn = ME.querySelector(".ss-send");
+  const ctxRows = ME.querySelector(".ss-ctx-rows");
+  const toolPick = ME.querySelector(".ss-toolpick");
+  const toolList = ME.querySelector(".ss-toollist");
+  const toolsBtn = ME.querySelector(".ss-tools");
   const ctxChecked = new Map();
   let mcpTools = null;
 
@@ -54,8 +57,10 @@ var UUID = this.UUID;
       ctxRows.appendChild(none);
     }
   }
-  el.addEventListener("nb-session-open", renderContextRows);
+  // snapshot() is live — render now, refresh whenever the ask row takes
+  // focus (the moment freshness matters); no events, no observers
   renderContextRows();
+  askInput.addEventListener("focus", renderContextRows);
 
   // Pins are OVERRIDES against DEFAULT_TOOLS: attachment is a context
   // optimization, not permission — every command stays reachable through
@@ -330,4 +335,4 @@ var UUID = this.UUID;
       ask();
     }
   });
-})();
+};

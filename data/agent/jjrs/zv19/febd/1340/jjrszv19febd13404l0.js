@@ -1,22 +1,24 @@
-// describebtn — the agent add-on's desc drafter, grafted onto the
-// workbench's command-meta panel. The workbench knows nothing about this
-// control: it renders a .cm-ext slot in each panel and announces it with
-// a bubbling nb-command-meta event; this document-level listener injects
-// the generate button and drives agent.plugin.describe_command. Mounted
-// (headless) through the plugin registry; the listener registers once
-// per page across workbench remounts.
-(async () => {
-  if (document.__nbAgentDescribe) return;
-  document.__nbAgentDescribe = true;
-  // requireModule, not moduleUrls: as a cluster child this installs at
-  // boot, BEFORE the boot publishes moduleUrls — the registry resolves
-  // whenever the modules land, order-free.
-  if (typeof requireModule !== "function") return;
+// describebtn — the agent add-on's desc drafter, grafted into the
+// workbench by the registry (dev.plugins: target dev.workbench, selector
+// .wb-plugins). Classic and lineal: module dependencies are child divs
+// (activated before me.ready; registration is idempotent), and the
+// listener sits on THIS control's host — the mount slot's parent, the
+// workbench root — so nothing outside this workbench instance is
+// touched, and a remount gets a fresh listener with the fresh DOM. The
+// workbench announces each command-meta panel with a bubbling
+// nb-command-meta event; this control injects the generate button and
+// drives agent.plugin.describe_command.
+var me = this;
+var ME = $('#' + me.UUID)[0];
+
+me.ready = async function () {
+  var host = ME.parentElement;
+  if (!host) return;
   const [{ store }, loop] = await Promise.all([
     requireModule("store", "describebtn"),
     requireModule("agentloop", "describebtn"),
   ]);
-  document.addEventListener("nb-command-meta", (ev) => {
+  host.addEventListener("nb-command-meta", (ev) => {
     const { lib, ctl, cmd, groups, descInput, note } = ev.detail ?? {};
     const slotEl = ev.target;
     if (!lib || !slotEl || slotEl.querySelector(".cm-gen")) return;
@@ -55,4 +57,4 @@
     });
     slotEl.appendChild(gen);
   });
-})();
+};
