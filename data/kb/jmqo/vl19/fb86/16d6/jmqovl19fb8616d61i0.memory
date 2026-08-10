@@ -193,5 +193,12 @@
     "tags": "bench-collapse",
     "confidence": "high",
     "time": 1786399738682
+  },
+  {
+    "claim": "Vendored ES bundles live at /app/asset/<lib>/vendor/... — nb_codemirror/cm6.js under dev, nb_three (scenestage.js, three.module.js) under app — and stock controls import them with page-relative dynamic import('../app/asset/...').",
+    "detail": "A module loaded from its real URL resolves its own internal relative imports natively, so no rewriting machinery is needed; blob-URL modules were the only reason the loader rewrote specifiers. The nb.js/store client still fetches against location.origin (tunnel-blind) — a known follow-up now fixable in one place.",
+    "tags": "bench-collapse",
+    "confidence": "high",
+    "time": 1786401039423
   }
 ]

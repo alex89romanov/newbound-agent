@@ -119,5 +119,12 @@
     "tags": "bench-collapse",
     "confidence": "high",
     "time": 1786399738623
+  },
+  {
+    "claim": "The bench-graft container pass is done on branch claude/app-loader-control-oa4cyw: all eight dev containers (frame, shelf, workbench, editor, preview, floweditor, sceneeditor, floweditor3d) and the dev.dev boot are stock; /dev/ verified end-to-end headless with zero console errors.",
+    "detail": "Uniform wrapper: async prelude awaits requireModule deps + page-relative vendor dynamic imports, original body unchanged, init(ME, ME.DATA), api Object.assign'd onto me plus waitReady(cb). Child mounts via a local mount(name, el, props) helper over installControl honoring waitReady, child library explicit. dev.session html carries the classic dev:plugins div (replaces the loader's per-mount plugin pass); the boot keeps only the dev.dev-target plugin pass and mounts dev.frame stock. app.modules no longer installs loader. Remaining graft: delete app.loader/bridge/player + migrate the peer viewer (deletion pass), and convert agent.agent/agent.chat in the agent repo (they still build __benchPlatform).",
+    "tags": "bench-collapse",
+    "confidence": "high",
+    "time": 1786401039404
   }
 ]
