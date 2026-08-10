@@ -8,7 +8,7 @@
 // addendum / archivist — all journaled facet patches), and the ARCHIVIST
 // strip (queue depth + sweep now).
 import { store } from "../../assets/store.js";
-import { chatctx } from "../../assets/chatctx.js";
+import { viewctx } from "../../assets/viewctx.js";
 import * as agent from "../../assets/agentloop.js";
 import { ADDENDUM } from "../../assets/agentprompt.js";
 import "../../assets/memory.js";   // registers the memory fence provider
@@ -300,7 +300,7 @@ export async function init(host) {
       }
       messages[0].content = core + "\n\n" + CHAT_SHELL + agent.TOOLS_PROMPT +
         (addendum ? "\n\nOWNER ADDENDUM\n" + addendum : "");
-      const ctx = agent.contextBlock(chatctx.snapshot());
+      const ctx = agent.contextBlock(viewctx.snapshot());
       if (ctx) {
         messages.push({ role: "user", content: "[CONTEXT]\n\n" + ctx },
                       { role: "user", content: message });

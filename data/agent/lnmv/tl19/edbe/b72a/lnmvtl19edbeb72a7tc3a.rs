@@ -29,7 +29,7 @@ fn clamp(s: &str, budget: usize) -> String {
 // -----------------------------------------------------------------------------
 
 let sys_prompt = {
-  // The PLATFORM-KNOWLEDGE CORE is store-resident (dev.prompts `prompt`
+  // The PLATFORM-KNOWLEDGE CORE is store-resident (agent.prompts `prompt`
   // facet - docs/prompting.md in the bench repo): ONE journaled source of
   // truth shared with the bench notebook's agentloop. A missing core
   // FAILS LOUD - a silently thin prompt regresses the confabulation
@@ -42,7 +42,7 @@ let sys_prompt = {
   // command call would tie this to dev.editcontrol surviving the cruft
   // audit. The index is the thing that actually holds the answer.
   let pid = {
-    let list = pstore.get_data("dev", "controls").get_object("data").get_array("list");
+    let list = pstore.get_data("agent", "controls").get_object("data").get_array("list");
     let mut found = String::new();
     for i in 0..list.len() {
       let it = list.get_object(i);
@@ -50,17 +50,17 @@ let sys_prompt = {
     }
     found
   };
-  let missing = !pstore.exists("dev", &pid) || {
-    let d = pstore.get_data("dev", &pid).get_object("data");
+  let missing = !pstore.exists("agent", &pid) || {
+    let d = pstore.get_data("agent", &pid).get_object("data");
     !d.has("prompt") || d.get_string("prompt").trim().is_empty()
   };
   if missing {
     let mut o = DataObject::new();
     o.put_string("status", "err");
-    o.put_string("msg", "dev.prompts `prompt` facet unavailable - the platform curriculum is store-resident (docs/prompting.md); pull canon");
+    o.put_string("msg", "agent.prompts `prompt` facet unavailable - the curriculum is store-resident (docs/prompting.md); pull canon");
     return o;
   }
-  let core = pstore.get_data("dev", &pid).get_object("data").get_string("prompt");
+  let core = pstore.get_data("agent", &pid).get_object("data").get_string("prompt");
   let shell = r#"
 
 The Newbound Commands in the `code` control of the `dev` library are available to you as native tools. Call them through the tool-calling interface - do not describe tool calls in text. Tool names are in the format library-control-command (e.g. dev-code-read_command).

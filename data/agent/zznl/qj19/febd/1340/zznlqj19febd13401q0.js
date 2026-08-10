@@ -17,9 +17,9 @@ me.ready = async function () {
     console.warn("askrow: no notebook api above the graft point — not wiring");
     return;
   }
-  const [{ store }, { chatctx }, loop, promptMod] = await Promise.all([
+  const [{ store }, { viewctx }, loop, promptMod] = await Promise.all([
     requireModule("store", "askrow"),
-    requireModule("chatctx", "askrow"),
+    requireModule("viewctx", "askrow"),
     requireModule("agentloop", "askrow"),
     requireModule("agentprompt", "askrow"),
   ]);
@@ -40,7 +40,7 @@ me.ready = async function () {
   const stripThink = (t) => t.replace(/<think>[\s\S]*?<\/think>\n?/g, "").trim();
 
   function renderContextRows() {
-    const snap = chatctx.snapshot();
+    const snap = viewctx.snapshot();
     ctxRows.replaceChildren(...snap.map(({ key, label }) => {
       const l = document.createElement("label");
       const cb = document.createElement("input");
@@ -134,10 +134,143 @@ me.ready = async function () {
     if (!toolPick.hidden && mcpTools === null) await renderTools();
   });
 
+  // ── chat cells: THIS control's cell kinds, rendered by this control ──
+  // The notebook knows nothing about chat; it renders command cells and
+  // dividers, and hands custom kinds to whoever registered them.
+  function renderReply(host, raw) {
+    const lines = (raw ?? "").split("\n");
+    let think = null;
+    let code = null;
+    let lang = null;
+    let textBuf = [];
+    const flushText = () => {
+      const t = textBuf.join("\n").trim();
+      if (t) host.appendChild(document.createTextNode(t + "\n"));
+      textBuf = [];
+    };
+    for (const line of lines) {
+      if (line.startsWith("<think>")) {
+        flushText();
+        think = [line.slice(7)];
+      } else if (line.startsWith("</think>")) {
+        const body = (think ?? []).join("\n").trim();
+        think = null;
+        if (body) {
+          const btn = document.createElement("button");
+          btn.className = "ss-think-btn";
+          btn.textContent = "show thinking ▸";
+          const div = document.createElement("div");
+          div.className = "ss-think";
+          div.hidden = true;
+          div.textContent = body;
+          btn.addEventListener("click", () => {
+            div.hidden = !div.hidden;
+            btn.textContent = div.hidden ? "show thinking ▸" : "hide thinking ▾";
+          });
+          host.append(btn, div);
+        }
+      } else if (think) {
+        think.push(line);
+      } else if (line.startsWith("```")) {
+        if (code === null) {
+          flushText();
+          lang = line.slice(3).trim().toLowerCase();
+          code = [];
+        } else {
+          host.appendChild(codeCard(code.join("\n"), lang));
+          code = null;
+        }
+      } else if (code) {
+        code.push(line);
+      } else {
+        textBuf.push(line);
+      }
+    }
+    if (code) host.appendChild(codeCard(code.join("\n"), lang));
+    flushText();
+  }
+
+  function codeCard(source, lang) {
+    const card = document.createElement("div");
+    card.className = "ss-code";
+    const head = document.createElement("div");
+    head.className = "ss-code-head";
+    const tag = document.createElement("span");
+    tag.className = "langtag";
+    tag.textContent = lang || "code";
+    head.appendChild(tag);
+    const pre = document.createElement("pre");
+    pre.hidden = true;
+    pre.textContent = source;
+    const view = document.createElement("button");
+    view.textContent = "view ▸";
+    view.addEventListener("click", () => {
+      pre.hidden = !pre.hidden;
+      view.textContent = pre.hidden ? "view ▸" : "hide ▾";
+    });
+    head.appendChild(view);
+    const wb = viewctx.snapshot().find((p) => p.key === "workbench");
+    if (["html", "css", "js"].includes(lang) && store.writable() && wb) {
+      const apply = document.createElement("button");
+      apply.className = "ss-apply";
+      apply.textContent = "apply as patch ▸";
+      apply.addEventListener("click", async () => {
+        if (apply.textContent === "apply as patch ▸") {
+          apply.textContent = `replace whole ${lang} facet of ${wb.fields.ctl}?`;
+          setTimeout(() => {
+            if (!apply.disabled) apply.textContent = "apply as patch ▸";
+          }, 3000);
+          return;
+        }
+        const rf = await store.readFacet(wb.fields.lib, wb.fields.ctl, lang);
+        if (rf.status !== "ok") {
+          toast.show(`apply failed: ${rf.msg}`);
+          return;
+        }
+        const r = await store.patchFacet(wb.fields.lib, wb.fields.ctl, lang, {
+          oldSnippet: "", newSnippet: source.replace(/\r/g, ""),
+          base: rf.hash, label: "chat",
+        });
+        if (r.status !== "ok") {
+          toast.show(`apply failed: ${r.msg}`);
+          return;
+        }
+        apply.textContent = `applied · ${r.patch_id}`;
+        apply.disabled = true;
+        toast.show(`chat → patch_control_facet · ${r.patch_id} — reload the control to see it`);
+      });
+      head.appendChild(apply);
+    }
+    card.append(head, pre);
+    return card;
+  }
+
+  function renderChatCell(entry) {
+    const cell = document.createElement("div");
+    cell.className = "ss-cell ss-chat";
+    const input = document.createElement("div");
+    input.className = "ss-cell-in";
+    const who = entry.kind === "chat-user" ? "you ▸" : "agent ▸";
+    input.innerHTML = `<span class="ss-gutter"></span><span class="who"></span>`;
+    input.querySelector(".ss-gutter").textContent = `[${entry.n}·✳]`;
+    input.querySelector(".who").textContent = who;
+    const out = document.createElement("div");
+    out.className = "ss-cell-out" + (entry.error ? " err" : "");
+    if (entry.kind === "chat-agent" && !entry.error) {
+      renderReply(out, entry.text);
+    } else {
+      out.textContent = entry.text;
+    }
+    cell.append(input, out);
+    return cell;
+  }
+  notebook.addRenderer("chat-user", renderChatCell);
+  notebook.addRenderer("chat-agent", renderChatCell);
+
   let askConfirmed = new Set();   // commands typed-confirmed in the current ask
 
   function toolCell(callText, args, extra) {
-    notebook.pushCell({ agent: true, call: callText,
+    notebook.pushCell({ auto: true, call: callText,
       args: JSON.stringify(args), ...extra });
   }
 
@@ -255,7 +388,7 @@ me.ready = async function () {
       } else if (e.kind === "divider") {
         continue;
       } else {
-        activity.push(`· [${e.n}]${e.agent ? " (you ran)" : ""} ${e.call}(${e.args}) → ` +
+        activity.push(`· [${e.n}]${(e.auto ?? e.agent) ? " (you ran)" : ""} ${e.call}(${e.args}) → ` +
           (e.error ? "err: " : "ok: ") + loop.clamp(e.output ?? "", 700));
       }
     }
@@ -277,7 +410,7 @@ me.ready = async function () {
     const busy = notebook.busy("agent is thinking…");
 
     try {
-      const included = chatctx.snapshot().filter((p) => ctxChecked.get(p.key) ?? true);
+      const included = viewctx.snapshot().filter((p) => ctxChecked.get(p.key) ?? true);
       let ctxMsg = loop.contextBlock(included);
       if (activity.length) {
         // The first live run drew a confident wrong conclusion from a

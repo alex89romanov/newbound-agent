@@ -103,7 +103,7 @@ let corePromise = null;
 export function corePrompt() {
   if (!corePromise) {
     corePromise = (async () => {
-      const r = await store.readFacet("dev", "prompts", "prompt");
+      const r = await store.readFacet("agent", "prompts", "prompt");
       if (r?.status === "ok" && r.exists && (r.source ?? "").trim()) {
         return r.source.trim();
       }
@@ -136,7 +136,7 @@ const rustType = (t) => RUST_TYPE[t] ?? "String";
 
 /** The context prompt, ported from control_query: an editing preamble plus
     one fence per included piece, tagged the way the backend prompt always
-    tagged them. `included` = chatctx snapshot entries the user checked. */
+    tagged them. `included` = viewctx snapshot entries the user checked. */
 export function contextBlock(included) {
   const merged = {};
   for (const p of included) Object.assign(merged, p.fields);

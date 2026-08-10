@@ -6,7 +6,7 @@
 // {claim, detail?, tags, source?, confidence, time}. This module
 // surfaces the INDEX — names, descs, tags, entry counts, and a STALENESS
 // mark (hash-stamped sources re-checked against their referents) — as a
-// chatctx fence, so the agent knows what it knows and pulls entries on
+// viewctx fence, so the agent knows what it knows and pulls entries on
 // demand through the auto-run read family; writes go through the
 // validated `remember` command. The index STALE-WHILE-REVALIDATES: each
 // fence snapshot serves the current index and kicks a background refresh
@@ -16,7 +16,7 @@
 // dest-agent: rides the agent add-on's own installs (the app boot and
 // the bench grafts carry this module) — no part of the dev app names
 // the memory system.
-import { chatctx } from "./chatctx.js";
+import { viewctx } from "./viewctx.js";
 import { store } from "./store.js";
 
 let index = null;       // [{name, desc, tags, entries, stale}]
@@ -83,7 +83,7 @@ export const ready = (async () => {
   }
 })().catch(() => { index = null; });
 
-chatctx.register("memory", () => {
+viewctx.register("memory", () => {
   if (!refreshing && store.mode() === "live" && Date.now() - refreshedAt > 5000) kick();
   if (!index) return null;
   const lines = index.map((d) => {
@@ -97,7 +97,7 @@ chatctx.register("memory", () => {
   // instead of waiting for the model to pull. The workbench provider
   // names the open lib/ctl; the tag vocabulary rule is `lib.ctl`.
   let pushedBlock = "";
-  const wb = chatctx.peek("workbench");
+  const wb = viewctx.peek("workbench");
   const openTok = wb?.fields?.lib && wb?.fields?.ctl
     ? `${wb.fields.lib}.${wb.fields.ctl}` : null;
   if (openTok) {

@@ -38,7 +38,7 @@ a `mraiser/newbound` checkout via symlinks. The full process is
 
 ## Session end
 
-- Deposit what you learned: `dev-code-remember` for durable claims
+- Deposit what you learned: `agent-archivist-remember` for durable claims
   (domain = the kb control it belongs to). A lesson left only in chat is
   a lesson lost.
 - Commit `data/` changes and regenerated crate src **together**, on a

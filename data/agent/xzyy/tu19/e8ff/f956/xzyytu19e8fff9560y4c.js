@@ -1,7 +1,7 @@
 // agent — the Agent app's boot (docs/agent-app.md). Runs under the STOCK
 // mount, so this is CLASSIC-script code: no import/export. It builds the
 // module world the chat control needs — app.modules (store/loader/nb/
-// tokens...), dev.chatctx (the context registry), and the agent's own
+// tokens...), dev.viewctx (the context registry), and the agent's own
 // modules (agentloop/agentprompt/memory, installed directly — the old
 // agentmodules cluster retired with the bench-plugin rework) — then hands
 // the loader the union control directory and mounts agent.chat. Same
@@ -32,7 +32,7 @@
     };
     await Promise.all([
       install("app", "modules", clusterEl()),
-      install("dev", "chatctx", clusterEl()),
+      install("dev", "viewctx", clusterEl()),
       install("agent", "agentloop", clusterEl()),
       install("agent", "agentprompt", clusterEl()),
       install("agent", "memory", clusterEl()),

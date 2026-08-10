@@ -97,13 +97,6 @@ pub mod agent {
         use ::ndata::data::Data;
 
     }
-    pub mod agentmodules {
-        use ::ndata::dataobject::DataObject;
-        use ::ndata::dataarray::DataArray;
-        use ::ndata::databytes::DataBytes;
-        use ::ndata::data::Data;
-
-    }
     pub mod memory {
         use ::ndata::dataobject::DataObject;
         use ::ndata::dataarray::DataArray;
@@ -137,8 +130,45 @@ pub mod agent {
             ::flowlang::rustcmd::RustCmd::new("grkhrm19fb91df28dj1").execute(d).expect("Rust command execution failed").get_object("a")
         }
 
+        pub fn remember(lib: String, domain: String, entry: DataObject, author: String) -> DataObject {
+            let mut d = DataObject::new();
+            d.put_string("lib", &lib);
+            d.put_string("domain", &domain);
+            d.put_object("entry", entry);
+            d.put_string("author", &author);
+            ::flowlang::rustcmd::RustCmd::new("kkjzwq19fec41bc01j1").execute(d).expect("Rust command execution failed").get_object("a")
+        }
+
     }
     pub mod chat {
+        use ::ndata::dataobject::DataObject;
+        use ::ndata::dataarray::DataArray;
+        use ::ndata::databytes::DataBytes;
+        use ::ndata::data::Data;
+
+    }
+    pub mod askrow {
+        use ::ndata::dataobject::DataObject;
+        use ::ndata::dataarray::DataArray;
+        use ::ndata::databytes::DataBytes;
+        use ::ndata::data::Data;
+
+    }
+    pub mod describebtn {
+        use ::ndata::dataobject::DataObject;
+        use ::ndata::dataarray::DataArray;
+        use ::ndata::databytes::DataBytes;
+        use ::ndata::data::Data;
+
+    }
+    pub mod bench {
+        use ::ndata::dataobject::DataObject;
+        use ::ndata::dataarray::DataArray;
+        use ::ndata::databytes::DataBytes;
+        use ::ndata::data::Data;
+
+    }
+    pub mod prompts {
         use ::ndata::dataobject::DataObject;
         use ::ndata::dataarray::DataArray;
         use ::ndata::databytes::DataBytes;
@@ -595,6 +625,12 @@ pub mod dev {
             ::flowlang::rustcmd::RustCmd::new("yypums1847731c7fap5").execute(d).expect("Rust command execution failed").get_string("a")
         }
 
+        pub fn activate_lib(lib: String) -> String {
+            let mut d = DataObject::new();
+            d.put_string("lib", &lib);
+            ::flowlang::rustcmd::RustCmd::new("lrgoyo19fe9049accu1").execute(d).expect("Rust command execution failed").get_string("a")
+        }
+
     }
     pub mod editcommand {
         use ::ndata::dataobject::DataObject;
@@ -733,6 +769,19 @@ pub mod dev {
         pub fn list() -> DataObject {
             let d = DataObject::new();
             ::flowlang::rustcmd::RustCmd::new("lovuhn189dc981ebch2f").execute(d).expect("Rust command execution failed").get_object("a")
+        }
+
+        pub fn update(lib: String) -> String {
+            let mut d = DataObject::new();
+            d.put_string("lib", &lib);
+            ::flowlang::rustcmd::RustCmd::new("hioqsq19fe7789bcaj1").execute(d).expect("Rust command execution failed").get_string("a")
+        }
+
+        pub fn remove(lib: String, delete_repository: bool) -> String {
+            let mut d = DataObject::new();
+            d.put_string("lib", &lib);
+            d.put_boolean("delete_repository", delete_repository);
+            ::flowlang::rustcmd::RustCmd::new("lumrkn19fe778ea1bu3").execute(d).expect("Rust command execution failed").get_string("a")
         }
 
     }
@@ -880,13 +929,6 @@ pub mod dev {
 
     }
     pub mod facets {
-        use ::ndata::dataobject::DataObject;
-        use ::ndata::dataarray::DataArray;
-        use ::ndata::databytes::DataBytes;
-        use ::ndata::data::Data;
-
-    }
-    pub mod chatctx {
         use ::ndata::dataobject::DataObject;
         use ::ndata::dataarray::DataArray;
         use ::ndata::databytes::DataBytes;
@@ -1263,15 +1305,6 @@ pub mod dev {
             ::flowlang::rustcmd::RustCmd::new("ywwgiq19fb84a4e57h3").execute(d).expect("Rust command execution failed").get_object("a")
         }
 
-        pub fn remember(lib: String, domain: String, entry: DataObject, author: String) -> DataObject {
-            let mut d = DataObject::new();
-            d.put_string("lib", &lib);
-            d.put_string("domain", &domain);
-            d.put_object("entry", entry);
-            d.put_string("author", &author);
-            ::flowlang::rustcmd::RustCmd::new("zjqnjs19fb8b46738r1").execute(d).expect("Rust command execution failed").get_object("a")
-        }
-
         pub fn set_command_imports(lib: String, ctl: String, cmd: String, imports: String) -> DataObject {
             let mut d = DataObject::new();
             d.put_string("lib", &lib);
@@ -1282,7 +1315,7 @@ pub mod dev {
         }
 
     }
-    pub mod prompts {
+    pub mod viewctx {
         use ::ndata::dataobject::DataObject;
         use ::ndata::dataarray::DataArray;
         use ::ndata::databytes::DataBytes;
@@ -1321,6 +1354,13 @@ pub mod kb {
 
     }
     pub mod doctrine {
+        use ::ndata::dataobject::DataObject;
+        use ::ndata::dataarray::DataArray;
+        use ::ndata::databytes::DataBytes;
+        use ::ndata::data::Data;
+
+    }
+    pub mod nebula {
         use ::ndata::dataobject::DataObject;
         use ::ndata::dataarray::DataArray;
         use ::ndata::databytes::DataBytes;
@@ -1571,10 +1611,13 @@ pub struct old_agent_plugin {}
 pub struct old_agent_scratch {}
 pub struct old_agent_agentloop {}
 pub struct old_agent_agentprompt {}
-pub struct old_agent_agentmodules {}
 pub struct old_agent_memory {}
 pub struct old_agent_archivist {}
 pub struct old_agent_chat {}
+pub struct old_agent_askrow {}
+pub struct old_agent_describebtn {}
+pub struct old_agent_bench {}
+pub struct old_agent_prompts {}
 pub struct old_app_api {}
 pub struct old_app_app {}
 pub struct old_app_appcard {}
@@ -1628,15 +1671,15 @@ pub struct old_dev_flowproject {}
 pub struct old_dev_flowprims {}
 pub struct old_dev_flowlayout {}
 pub struct old_dev_facets {}
-pub struct old_dev_chatctx {}
 pub struct old_dev_devmodules {}
 pub struct old_dev_code {}
-pub struct old_dev_prompts {}
+pub struct old_dev_viewctx {}
 pub struct old_kb_platform_api {}
 pub struct old_kb_workflow {}
 pub struct old_kb_frontend {}
 pub struct old_kb_m2026_07 {}
 pub struct old_kb_doctrine {}
+pub struct old_kb_nebula {}
 pub struct old_peer_headsup {}
 pub struct old_peer_peer {}
 pub struct old_peer_peer_model {}
@@ -1652,10 +1695,13 @@ pub struct old_agent {
     pub scratch: old_agent_scratch,
     pub agentloop: old_agent_agentloop,
     pub agentprompt: old_agent_agentprompt,
-    pub agentmodules: old_agent_agentmodules,
     pub memory: old_agent_memory,
     pub archivist: old_agent_archivist,
     pub chat: old_agent_chat,
+    pub askrow: old_agent_askrow,
+    pub describebtn: old_agent_describebtn,
+    pub bench: old_agent_bench,
+    pub prompts: old_agent_prompts,
 }
 pub struct old_app {
     pub api: old_app_api,
@@ -1713,10 +1759,9 @@ pub struct old_dev {
     pub flowprims: old_dev_flowprims,
     pub flowlayout: old_dev_flowlayout,
     pub facets: old_dev_facets,
-    pub chatctx: old_dev_chatctx,
     pub devmodules: old_dev_devmodules,
     pub code: old_dev_code,
-    pub prompts: old_dev_prompts,
+    pub viewctx: old_dev_viewctx,
 }
 pub struct old_kb {
     pub platform_api: old_kb_platform_api,
@@ -1724,6 +1769,7 @@ pub struct old_kb {
     pub frontend: old_kb_frontend,
     pub m2026_07: old_kb_m2026_07,
     pub doctrine: old_kb_doctrine,
+    pub nebula: old_kb_nebula,
 }
 pub struct old_peer {
     pub headsup: old_peer_headsup,
@@ -1758,10 +1804,13 @@ pub const fn new() -> api {
             scratch: old_agent_scratch {},
             agentloop: old_agent_agentloop {},
             agentprompt: old_agent_agentprompt {},
-            agentmodules: old_agent_agentmodules {},
             memory: old_agent_memory {},
             archivist: old_agent_archivist {},
             chat: old_agent_chat {},
+            askrow: old_agent_askrow {},
+            describebtn: old_agent_describebtn {},
+            bench: old_agent_bench {},
+            prompts: old_agent_prompts {},
         },
         app: old_app {
             api: old_app_api {},
@@ -1819,10 +1868,9 @@ pub const fn new() -> api {
             flowprims: old_dev_flowprims {},
             flowlayout: old_dev_flowlayout {},
             facets: old_dev_facets {},
-            chatctx: old_dev_chatctx {},
             devmodules: old_dev_devmodules {},
             code: old_dev_code {},
-            prompts: old_dev_prompts {},
+            viewctx: old_dev_viewctx {},
         },
         kb: old_kb {
             platform_api: old_kb_platform_api {},
@@ -1830,6 +1878,7 @@ pub const fn new() -> api {
             frontend: old_kb_frontend {},
             m2026_07: old_kb_m2026_07 {},
             doctrine: old_kb_doctrine {},
+            nebula: old_kb_nebula {},
         },
         peer: old_peer {
             headsup: old_peer_headsup {},
@@ -1894,6 +1943,10 @@ impl old_agent_archivist {
     #[deprecated(note = "use api::agent::archivist::queue_status instead")]
     pub fn queue_status(&self) -> DataObject {
         self::agent::archivist::queue_status()
+    }
+    #[deprecated(note = "use api::agent::archivist::remember instead")]
+    pub fn remember(&self, lib: String, domain: String, entry: DataObject, author: String) -> DataObject {
+        self::agent::archivist::remember(lib, domain, entry, author)
     }
 }
 impl old_app_app {
@@ -2039,6 +2092,10 @@ impl old_dev_dev {
     pub fn rebuild_lib(&self, lib: String) -> String {
         self::dev::dev::rebuild_lib(lib)
     }
+    #[deprecated(note = "use api::dev::dev::activate_lib instead")]
+    pub fn activate_lib(&self, lib: String) -> String {
+        self::dev::dev::activate_lib(lib)
+    }
 }
 impl old_dev_editcommand {
     #[deprecated(note = "use api::dev::editcommand::compile_command instead")]
@@ -2100,6 +2157,14 @@ impl old_dev_github {
     #[deprecated(note = "use api::dev::github::list instead")]
     pub fn list(&self) -> DataObject {
         self::dev::github::list()
+    }
+    #[deprecated(note = "use api::dev::github::update instead")]
+    pub fn update(&self, lib: String) -> String {
+        self::dev::github::update(lib)
+    }
+    #[deprecated(note = "use api::dev::github::remove instead")]
+    pub fn remove(&self, lib: String, delete_repository: bool) -> String {
+        self::dev::github::remove(lib, delete_repository)
     }
 }
 impl old_dev_libsettings {
@@ -2282,10 +2347,6 @@ impl old_dev_code {
     #[deprecated(note = "use api::dev::code::set_groups instead")]
     pub fn set_groups(&self, lib: String, ctl: String, cmd: String, groups: String, author: String) -> DataObject {
         self::dev::code::set_groups(lib, ctl, cmd, groups, author)
-    }
-    #[deprecated(note = "use api::dev::code::remember instead")]
-    pub fn remember(&self, lib: String, domain: String, entry: DataObject, author: String) -> DataObject {
-        self::dev::code::remember(lib, domain, entry, author)
     }
     #[deprecated(note = "use api::dev::code::set_command_imports instead")]
     pub fn set_command_imports(&self, lib: String, ctl: String, cmd: String, imports: String) -> DataObject {

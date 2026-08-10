@@ -318,5 +318,15 @@
     },
     "confidence": "high",
     "time": 1786371315474
+  },
+  {
+    "claim": "The platform stands alone (the owner, 2026-08-10): newbound_core and the store libraries carry ZERO knowledge of agent, kb, chat, or LLM - no code, no content, no facet vocabulary, no comments, no UI copy. Verified by unlinking the overlay, regenerating, compiling clean, and grepping the crate empty. kb is data-only (just memories); its write door is agent.archivist.remember; the curriculum is agent.prompts; dev.code is facet-agnostic (any named text facet; only structural record keys refused); the notebook renders command cells and dividers, with custom kinds rendered by whoever registered them (addRenderer); viewctx replaces chatctx.",
+    "detail": "Mechanics for future sessions: the MCP deposit tool is agent-archivist-remember now (dev-code-remember is deleted). src/generated_initializer.rs is the ONLY overlay-local file - the committed version is platform-only (no FFI crates); newbound rebuild with the overlay linked regenerates it with agent/kb/scratch and that regeneration stays uncommitted; newbound rebuild ALSO overwrites newbound_core/src/api.rs with overlay sections - git-restore api.rs after an overlay rebuild, commit only the platform-only api.rs. Dylib commands load at startup only via the overlay initializer; one-shot `newbound exec` of a dylib command can race the load. delete_command and delete_control do NOT regenerate mod.rs/api.rs - run rebuild (overlay unlinked) and remove orphaned generated files in the same commit.",
+    "tags": "doctrine,separation-of-concerns,platform-standalone,facet-agnostic,kb-data-only,overlay,initializer",
+    "source": {
+      "doc": "the owner's directives 2026-08-10 + standalone-build verified, branch claude/newbound-missing-library-fixes-bx9bs0 (both repos)"
+    },
+    "confidence": "high",
+    "time": 1786376193672
   }
 ]
