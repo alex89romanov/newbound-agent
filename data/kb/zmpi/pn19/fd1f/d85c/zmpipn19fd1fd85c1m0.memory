@@ -335,5 +335,12 @@
     "tags": "bench-collapse",
     "confidence": "high",
     "time": 1786399738722
+  },
+  {
+    "claim": "The client platform is api.js alone: controls mount via installControl, shared code lives in LIBRARY controls (idempotent window.NB_* globals defined in ready, dependencies as hidden data-control child divs), and commands are called by name via invokeCommand — there is no module registry, no store layer, no client connection state.",
+    "detail": "The owner's collapse, completed 2026-08-10 on branch claude/app-loader-control-oa4cyw. api.js gained one primitive (invokeCommand: lookupID + record read + app/exec over json(), websocket-native and tunnel-relative) and LOST the whole NB_MODULES/requireModule/installModule block. app.nb, app.store, app.loader, app.bridge, app.player, app.modules, dev.devmodules are deleted. ES modules survive only inside vendored bundles (nb_three, nb_codemirror), consumed via browser-native dynamic import of real asset URLs. The saves-ON/writable/mock/connect-dialog posture is gone — server-side security is the gate; session/chat keep the typed-confirm ceremony for non-read-listed commands.",
+    "tags": "bench-collapse",
+    "confidence": "high",
+    "time": 1786403684694
   }
 ]

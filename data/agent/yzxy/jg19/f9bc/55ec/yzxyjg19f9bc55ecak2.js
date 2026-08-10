@@ -14,21 +14,41 @@
 // MCP tools (agent.plugin.list_tools) arrive as {name:"lib-ctl-cmd",
 // description, inputSchema} — inputSchema is a real JSON Schema.
 
-import { store } from "./store.js";
-import { packFor, ready as memoryReady } from "./memory.js";
 
 // ── this library's own wire ─────────────────────────────────
 // The platform's store carries no add-on-specific API: the provider owns
 // its library name and command names. Everything below rides the store's
 // generic by-name surface; resolution failures come back as err envelopes
 // (never throws), so callers branch on status only.
+//
+// LIBRARY control — headless: defines window.NB_AGENTLOOP once (idempotent across
+// installs). Consumers list this control as a hidden data-control child
+// div and use the global from their ready.
+
+var me = this;
+var ME = document.getElementById(me.UUID);
+
+me.ready = function () {
+  if (window.NB_AGENTLOOP) return;
+  const { packFor, ready: memoryReady } = window.NB_MEMORY;
+  const jsonP = (c2, v2) => new Promise((res2) => json(c2, v2, res2));
+  const invokeP = (l2, c2, m2, a2) => new Promise((res2) => invokeCommand(l2, c2, m2, a2, res2));
+  const invoke = async (l2, c2, m2, a2) => {
+    const t0 = performance.now();
+    const envelope = await invokeP(l2, c2, m2, a2);
+    return { envelope, ms: Math.round(performance.now() - t0) };
+  };
+  const code = (m2, a2) => invokeP("dev", "code", m2, a2);
+  const readFacet = (l2, c2, f2) => code("read_control_facet", { lib: l2, ctl: c2, facet: f2 });
+  window.NB_AGENTLOOP = (function () {
+
 async function agentCall(ctl, cmd, args) {
-  const r = await store.invoke("agent", ctl, cmd, args);
-  return r instanceof Error ? { status: "err", msg: r.message } : r.envelope;
+  const r = await invoke("agent", ctl, cmd, args);
+  return r.envelope;
 }
 
 /** The MCP tool list (agent.plugin.list_tools, FLAT {tools:[...]}). */
-export function listTools() {
+function listTools() {
   return agentCall("plugin", "list_tools", {});
 }
 
@@ -37,25 +57,25 @@ export function listTools() {
     ({kind, content | tool_calls, assistant_message}) sits under data.
     chatTurn below drives this directly — control_query and tool_loop are
     deliberately not called. */
-export function chatLlm(messages, tools) {
+function chatLlm(messages, tools) {
   return agentCall("llm", "chat_llm", { messages, tools });
 }
 
 /** Draft a command description (agent.plugin.describe_command, String). */
-export function describeCommand(args) {
+function describeCommand(args) {
   return agentCall("plugin", "describe_command", args);
 }
 
 /** The archivist's intake (docs/memory.md) — the session fires and
     forgets; resolution failures resolve to Error values, not rejections. */
-export function logTurn(entry) {
-  return store.invoke("agent", "archivist", "log_turn", entry);
+function logTurn(entry) {
+  return invoke("agent", "archivist", "log_turn", entry);
 }
 
 /** chat_llm reads system.apps.agent.runtime (VLLM_URL/VLLM_MODEL) —
     absent when the agent app isn't exposed. The session shows whatever
     non-empty string this returns beneath a failed ask. */
-export function errorHint(msg) {
+function errorHint(msg) {
   if (/Key '(agent|VLLM_URL|VLLM_MODEL)' not found/.test(msg ?? "")) {
     return "This instance's agent app isn't configured: add `agent` to " +
       "config.properties apps=, put VLLM_URL and VLLM_MODEL in " +
@@ -67,7 +87,7 @@ export function errorHint(msg) {
 
 // Generous: the autonomous developer workflow legitimately spends rounds
 // on compile-debug cycles.
-export const MAX_ROUNDS = 10;
+const MAX_ROUNDS = 10;
 
 // The system prompt lives client-side now — the cost of skipping
 // control_query, and the point: the bench knows what the model is looking
@@ -80,7 +100,7 @@ export const MAX_ROUNDS = 10;
 // agent app's tool_loop. SYSTEM_PROMPT here is the notebook's SHELL —
 // venue, fences, memory, answer style; session assembles core + shell +
 // TOOLS_PROMPT + the owner addendum at ask time.
-export const SYSTEM_PROMPT = `Right now you are speaking through the session notebook of Bench, the Newbound IDE — the user sees every tool call you make as a notebook cell.
+const SYSTEM_PROMPT = `Right now you are speaking through the session notebook of Bench, the Newbound IDE — the user sees every tool call you make as a notebook cell.
 
 WHAT YOU SEE
 - Current code arrives in fenced blocks labeled lib:ctl.facet (facets) or lib:ctl:command.lang (command bodies; the first line may be a synthesized signature comment). A flow body arrives as JSON labeled lib:ctl:command.flow.
@@ -100,10 +120,10 @@ HOW TO ANSWER
 // clears the cache so the next ask retries, and the error is LOUD —
 // a silently thin prompt regresses the confabulation lesson.
 let corePromise = null;
-export function corePrompt() {
+function corePrompt() {
   if (!corePromise) {
     corePromise = (async () => {
-      const r = await store.readFacet("agent", "prompts", "prompt");
+      const r = await readFacet("agent", "prompts", "prompt");
       if (r?.status === "ok" && r.exists && (r.source ?? "").trim()) {
         return r.source.trim();
       }
@@ -116,7 +136,7 @@ export function corePrompt() {
 
 // The tool model (owner's design, 2026-07-25): DISCOVERY is always on,
 // ATTACHMENT is a context optimization, AUTHORIZATION happens per call.
-export const TOOLS_PROMPT = `
+const TOOLS_PROMPT = `
 
 TOOLS
 Newbound commands are your tools, named library-control-command (e.g. dev-code-read_command). Call them through the tool-calling interface — never by describing a call in text. Every call you make appears as a cell in the user's notebook.
@@ -137,7 +157,7 @@ const rustType = (t) => RUST_TYPE[t] ?? "String";
 /** The context prompt, ported from control_query: an editing preamble plus
     one fence per included piece, tagged the way the backend prompt always
     tagged them. `included` = viewctx snapshot entries the user checked. */
-export function contextBlock(included) {
+function contextBlock(included) {
   const merged = {};
   for (const p of included) Object.assign(merged, p.fields);
   const { lib, ctl } = merged;
@@ -170,11 +190,11 @@ export function contextBlock(included) {
   return out;
 }
 
-export const clamp = (s, n = 2000) =>
+const clamp = (s, n = 2000) =>
   s.length <= n ? s : s.slice(0, n) + `\n…[${s.length - n} chars clipped]`;
 
 /** MCP tool descriptors -> OpenAI function defs, enabled names only. */
-export function toolDefs(mcpTools, enabledNames) {
+function toolDefs(mcpTools, enabledNames) {
   const on = new Set(enabledNames);
   return (mcpTools ?? [])
     .filter((t) => on.has(t.name))
@@ -193,7 +213,7 @@ export function toolDefs(mcpTools, enabledNames) {
 // Attached-by-default: the read family (auto-run) plus the journaled
 // workhorses (each call confirm-gated). Everything else stays reachable
 // through call_command. The picker stores per-user add/remove overrides.
-export const DEFAULT_TOOLS = [
+const DEFAULT_TOOLS = [
   "dev-code-read_control_facet", "dev-code-read_command",
   "dev-code-read_flow_body", "dev-code-list_control_patches",
   "dev-code-list_libraries", "dev-code-list_controls",
@@ -206,7 +226,7 @@ export const DEFAULT_TOOLS = [
 ];
 
 /** The always-attached meta-tools: discovery + the gateway. */
-export const META_TOOL_DEFS = [
+const META_TOOL_DEFS = [
   {
     type: "function",
     function: {
@@ -259,7 +279,7 @@ const READ_TOOL_PREFIXES = [
 // formation belongs to the archivist, and the prompt says so.
 const AUTO_OVERRIDES = new Set(["dev-code-remember"]);
 
-export function gateFor(name, entry) {
+function gateFor(name, entry) {
   if (AUTO_OVERRIDES.has(name)) return "auto";
   const tags = entry?.tags ?? [];
   if (tags.includes("agent-confirm")) return "confirm";
@@ -272,7 +292,7 @@ export function gateFor(name, entry) {
 /** Light client-side check of args against a catalog inputSchema — enough
     for the model to self-correct: missing required keys and gross type
     mismatches, reported together. Null = fine. */
-export function schemaComplaints(schema, args) {
+function schemaComplaints(schema, args) {
   if (!schema || typeof args !== "object" || args === null) return null;
   const problems = [];
   for (const req of schema.required ?? []) {
@@ -294,7 +314,7 @@ export function schemaComplaints(schema, args) {
 }
 
 /** Search the catalog for find_tools: token match on name + description. */
-export function searchCatalog(catalog, query, limit = 12) {
+function searchCatalog(catalog, query, limit = 12) {
   const tokens = (query ?? "").toLowerCase().split(/[^a-z0-9_]+/).filter(Boolean);
   if (!tokens.length) return [];
   const scored = [];
@@ -323,7 +343,7 @@ export function searchCatalog(catalog, query, limit = 12) {
 }
 
 /** "lib-ctl-cmd" -> {lib, ctl, cmd} (ctl may itself contain dashes). */
-export function parseToolName(name) {
+function parseToolName(name) {
   const parts = name.split("-");
   if (parts.length < 3) return null;
   return { lib: parts[0], ctl: parts.slice(1, -1).join("-"), cmd: parts.at(-1) };
@@ -335,7 +355,7 @@ export function parseToolName(name) {
  * commands behind the typed confirm, runs it, and resolves the tool-result
  * CONTENT string (or a denial note). Returns the final text.
  */
-export async function chatTurn({ messages, tools, execTool, onRound }) {
+async function chatTurn({ messages, tools, execTool, onRound }) {
   const seen = new Map();   // result text -> tool name, for the context guard
   // Recall layer 4: the mode-keyed pack for THIS ask, APPENDED to the one
   // system message on every provider call but never written into the
@@ -416,3 +436,7 @@ export async function chatTurn({ messages, tools, execTool, onRound }) {
   } catch { /* fall through to the honest stop */ }
   return "(stopped: the agent used its whole tool budget without a final answer)";
 }
+
+    return { listTools, chatLlm, describeCommand, logTurn, errorHint, MAX_ROUNDS, SYSTEM_PROMPT, corePrompt, TOOLS_PROMPT, contextBlock, clamp, toolDefs, DEFAULT_TOOLS, META_TOOL_DEFS, gateFor, schemaComplaints, searchCatalog, parseToolName, chatTurn };
+  })();
+};

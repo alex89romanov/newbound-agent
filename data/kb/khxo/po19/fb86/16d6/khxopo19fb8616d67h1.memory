@@ -126,5 +126,12 @@
     "tags": "bench-collapse",
     "confidence": "high",
     "time": 1786401039404
+  },
+  {
+    "claim": "Bench collapse complete in both repos: dev IDE, peer viewer, and the agent app (chat/askrow/describebtn/agentloop/agentprompt/memory) all run stock; /dev/, /peer/ and /agent/ verified headless with zero console errors.",
+    "detail": "Library ready-ordering rule: a library control defines its global in me.ready and lists its own library deps as child divs; api.js activation guarantees children's readys before the parent's, transitively — so consumers gate their init on me.ready (readyP = new Promise(res => me.ready = res)). Remaining vestige: dev.code.set_module_flag (newbound_core-rooted, needs host rebuild to delete — left for a platform-side cleanup on a session without the overlay initializer entanglement). Known follow-up: /agent/ serving requires runtime/agent scaffold (publishapp output) — clone-fresh instances need the _APPS/agent copy, same as the disposable recipe's metaidentity seeding.",
+    "tags": "bench-collapse",
+    "confidence": "high",
+    "time": 1786403684763
   }
 ]

@@ -6,5 +6,20 @@
 // proves out, promote it into agentloop.js's base prompt.
 //
 // Keep it a plain template literal. Empty string = no addendum.
+//
+// LIBRARY control — headless: defines window.NB_AGENTPROMPT once (idempotent across
+// installs). Consumers list this control as a hidden data-control child
+// div and use the global from their ready.
 
-export const ADDENDUM = ``;
+var me = this;
+var ME = document.getElementById(me.UUID);
+
+me.ready = function () {
+  if (window.NB_AGENTPROMPT) return;
+  window.NB_AGENTPROMPT = (function () {
+
+const ADDENDUM = ``;
+
+    return { ADDENDUM };
+  })();
+};

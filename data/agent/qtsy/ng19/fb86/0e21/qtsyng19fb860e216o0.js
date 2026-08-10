@@ -16,31 +16,50 @@
 // dest-agent: rides the agent add-on's own installs (the app boot and
 // the bench grafts carry this module) — no part of the dev app names
 // the memory system.
-import { viewctx } from "./viewctx.js";
-import { store } from "./store.js";
+//
+// LIBRARY control — headless: defines window.NB_MEMORY once (idempotent across
+// installs). Consumers list this control as a hidden data-control child
+// div and use the global from their ready.
+
+var me = this;
+var ME = document.getElementById(me.UUID);
+
+me.ready = function () {
+  if (window.NB_MEMORY) return;
+  const { viewctx } = window.NB_VIEWCTX;
+  const jsonP = (c2, v2) => new Promise((res2) => json(c2, v2, res2));
+  const invokeP = (l2, c2, m2, a2) => new Promise((res2) => invokeCommand(l2, c2, m2, a2, res2));
+  const code = (m2, a2) => invokeP("dev", "code", m2, a2);
+  const readRec = async (l2, id2) => {
+    const r2 = await jsonP("../app/read", "lib=" + encodeURIComponent(l2) + "&id=" + encodeURIComponent(id2));
+    return r2.status === "ok" ? r2.data : new Error(r2.msg || "read failed");
+  };
+  const controlsOf = async (l2) => {
+    const d2 = await readRec(l2, "controls");
+    return d2 instanceof Error ? d2 : (d2.list ?? []);
+  };
+  const readFacet = (l2, c2, f2) => code("read_control_facet", { lib: l2, ctl: c2, facet: f2 });
+  window.NB_MEMORY = (function () {
 
 let index = null;       // [{name, desc, tags, entries, stale}]
 let refreshing = null;  // the in-flight refresh promise, single-flight
 let refreshedAt = 0;
 
 async function refresh() {
-  if (store.mode() !== "live") { index = null; return; }
-  store.invalidateControls("kb");
-  const controls = await store.controls("kb");
+  const controls = await controlsOf("kb");
   if (controls instanceof Error || controls.length === 0) { index = null; return; }
   const hashes = new Map();          // "lib:ctl:facet" -> current hash | null
   async function referentHash(s) {
     const key = `${s.lib}:${s.ctl}:${s.facet}`;
     if (!hashes.has(key)) {
-      const r = await store.readFacet(s.lib, s.ctl, s.facet);
+      const r = await readFacet(s.lib, s.ctl, s.facet);
       hashes.set(key, r?.status === "ok" ? r.hash : null);
     }
     return hashes.get(key);
   }
   const out = [];
   for (const c of controls) {
-    store.invalidateControl("kb", c.id);
-    const rec = await store.control("kb", c.id);
+    const rec = await readRec("kb", c.id);
     if (rec instanceof Error) continue;
     let entries = -1;                // -1 = unparsable; shown without count
     let stale = 0;
@@ -71,20 +90,12 @@ function kick() {
   return refreshing;
 }
 
-// The boot installs modules BEFORE the frame seeds the connection, so
-// store.mode() is null at install time — poll briefly for the connection,
-// then build the first index.
-export const ready = (async () => {
-  for (let i = 0; i < 24; i++) {
-    const m = store.mode();
-    if (m === "live") { await kick(); return; }
-    if (m === "mock") return;               // mock: no store, no memory
-    await new Promise((res) => setTimeout(res, 500));
-  }
-})().catch(() => { index = null; });
+// The first index builds as soon as this library installs — the platform
+// serves the page, so the connection is simply there.
+const ready = kick().catch(() => { index = null; });
 
 viewctx.register("memory", () => {
-  if (!refreshing && store.mode() === "live" && Date.now() - refreshedAt > 5000) kick();
+  if (!refreshing && Date.now() - refreshedAt > 5000) kick();
   if (!index) return null;
   const lines = index.map((d) => {
     const n = d.entries >= 0
@@ -148,7 +159,7 @@ const MODES = [
     ["workflow", "process", "mcp", "discovery", "desc", "memory", "p2p", "dogfood", "runtime", "config"]],
 ];
 
-export function modesFor(text) {
+function modesFor(text) {
   const t = String(text || "");
   return MODES.filter(([, re]) => re.test(t)).map(([name]) => name);
 }
@@ -157,7 +168,7 @@ export function modesFor(text) {
     domain's tags) intersect the matched modes' tag sets. Null when no
     mode matches, nothing hits, or memory isn't live. Capped, overflow
     counted — the model is told where the rest lives. */
-export function packFor(text, cap = 12) {
+function packFor(text, cap = 12) {
   if (!index) return null;
   const modes = modesFor(text);
   if (!modes.length) return null;
@@ -182,4 +193,6 @@ export function packFor(text, cap = 12) {
     block: "```memory:pack (modes: " + modes.join(", ") + ")\n" + shown.join("\n") + over + "\n```" };
 }
 
-export { refresh };
+    return { refresh, ready, modesFor, packFor };
+  })();
+};

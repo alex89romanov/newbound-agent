@@ -14,10 +14,13 @@ var ME = $('#' + me.UUID)[0];
 me.ready = async function () {
   var host = ME.parentElement;
   if (!host) return;
-  const [{ store }, loop] = await Promise.all([
-    requireModule("store", "describebtn"),
-    requireModule("agentloop", "describebtn"),
-  ]);
+  const loop = window.NB_AGENTLOOP;
+  const invokeP = (l2, c2, m2, a2) => new Promise((res2) => invokeCommand(l2, c2, m2, a2, res2));
+  const readCommand = async (l2, c2, m2) => {
+    const r2 = await invokeP("dev", "code", "read_command", { lib: l2, ctl: c2, cmd: m2 });
+    if (r2.status !== "ok") return r2;
+    return { status: "ok", ...(r2.data && typeof r2.data === "object" ? r2.data : {}) };
+  };
   host.addEventListener("nb-command-meta", (ev) => {
     const { lib, ctl, cmd, groups, descInput, note } = ev.detail ?? {};
     const slotEl = ev.target;
@@ -29,7 +32,7 @@ me.ready = async function () {
     gen.addEventListener("click", async () => {
       gen.disabled = true;
       note.textContent = "generating…";
-      const rc = await store.readCommand(lib, ctl, cmd);
+      const rc = await readCommand(lib, ctl, cmd);
       if (rc.status !== "ok") {
         note.textContent = `could not read the command: ${rc.msg}`;
         gen.disabled = false;

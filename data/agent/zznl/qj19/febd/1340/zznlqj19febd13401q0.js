@@ -17,12 +17,26 @@ me.ready = async function () {
     console.warn("askrow: no notebook api above the graft point — not wiring");
     return;
   }
-  const [{ store }, { viewctx }, loop, promptMod] = await Promise.all([
-    requireModule("store", "askrow"),
-    requireModule("viewctx", "askrow"),
-    requireModule("agentloop", "askrow"),
-    requireModule("agentprompt", "askrow"),
-  ]);
+  const { viewctx } = window.NB_VIEWCTX;
+  const loop = window.NB_AGENTLOOP;
+  const promptMod = window.NB_AGENTPROMPT;
+  const jsonP = (c2, v2) => new Promise((res2) => json(c2, v2, res2));
+  const invokeP = (l2, c2, m2, a2) => new Promise((res2) => invokeCommand(l2, c2, m2, a2, res2));
+  const invoke = async (l2, c2, m2, a2) => {
+    const t0 = performance.now();
+    const envelope = await invokeP(l2, c2, m2, a2);
+    return { envelope, ms: Math.round(performance.now() - t0) };
+  };
+  const code = (m2, a2) => invokeP("dev", "code", m2, a2);
+  let AUTHOR = "dev";
+  jsonP("../security/current_user", null).then((r2) => {
+    if (r2.status === "ok" && r2.data) AUTHOR = r2.data.displayname || r2.data.id || "dev";
+  });
+  const readFacet = (l2, c2, f2) => code("read_control_facet", { lib: l2, ctl: c2, facet: f2 });
+  const patchFacet = (l2, c2, f2, { oldSnippet, newSnippet, base = "", label = "" }) =>
+    code("patch_control_facet", { lib: l2, ctl: c2, facet: f2, old_snippet: oldSnippet,
+      new_snippet: newSnippet, base, label, author: AUTHOR });
+
   const toast = notebook.toast;
 
   const PINS_KEY = "bench.chat.pins";   // {add:[], remove:[]} vs DEFAULT_TOOLS
@@ -210,7 +224,7 @@ me.ready = async function () {
     });
     head.appendChild(view);
     const wb = viewctx.snapshot().find((p) => p.key === "workbench");
-    if (["html", "css", "js"].includes(lang) && store.writable() && wb) {
+    if (["html", "css", "js"].includes(lang) && wb) {
       const apply = document.createElement("button");
       apply.className = "ss-apply";
       apply.textContent = "apply as patch ▸";
@@ -222,12 +236,12 @@ me.ready = async function () {
           }, 3000);
           return;
         }
-        const rf = await store.readFacet(wb.fields.lib, wb.fields.ctl, lang);
+        const rf = await readFacet(wb.fields.lib, wb.fields.ctl, lang);
         if (rf.status !== "ok") {
           toast.show(`apply failed: ${rf.msg}`);
           return;
         }
-        const r = await store.patchFacet(wb.fields.lib, wb.fields.ctl, lang, {
+        const r = await patchFacet(wb.fields.lib, wb.fields.ctl, lang, {
           oldSnippet: "", newSnippet: source.replace(/\r/g, ""),
           base: rf.hash, label: "chat",
         });
@@ -334,11 +348,6 @@ me.ready = async function () {
     const catalog = await ensureCatalog();
     const entry = catalog.find((t) => t.name === name);
     if (loop.gateFor(name, entry) !== "auto") {
-      if (!store.writable()) {
-        toolCell(callText, args, { error: true,
-          output: "blocked: mutating tool on a read-only connection" });
-        return "BLOCKED: this connection is read-only; mutating tools are unavailable.";
-      }
       const confirmed = askConfirmed.has(target.cmd)
         ? await notebook.confirmLite(target.cmd,
             `the agent wants to run "${target.cmd}" again in this ask:`)
@@ -350,7 +359,7 @@ me.ready = async function () {
       }
       askConfirmed.add(target.cmd);
     }
-    const result = await store.invoke(target.lib, target.ctl, target.cmd, args);
+    const result = await invoke(target.lib, target.ctl, target.cmd, args);
     let entryOut;
     let content;
     if (result instanceof Error) {
@@ -398,10 +407,6 @@ me.ready = async function () {
   async function ask() {
     const message = askInput.value.trim();
     if (!message) return;
-    if (store.mode() !== "live") {
-      toast.show("the agent needs a live connection (agent.llm on the instance)");
-      return;
-    }
     askInput.value = "";
     sendBtn.disabled = true;
     // history BEFORE the new cell lands, or this question shows up twice

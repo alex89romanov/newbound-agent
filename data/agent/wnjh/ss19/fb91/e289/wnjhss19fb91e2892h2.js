@@ -7,11 +7,43 @@
 // edit / forget — and remember-by-form), the PROMPTS editors (core /
 // addendum / archivist — all journaled facet patches), and the ARCHIVIST
 // strip (queue depth + sweep now).
-import { store } from "../../assets/store.js";
-import { viewctx } from "../../assets/viewctx.js";
-import * as agent from "../../assets/agentloop.js";
-import { ADDENDUM } from "../../assets/agentprompt.js";
-import "../../assets/memory.js";   // registers the memory fence provider
+
+var me = this;
+var ME = document.getElementById(me.UUID);
+
+var readyP = new Promise(function (res) { me.ready = res; }).then(async () => {
+  const { viewctx } = window.NB_VIEWCTX;
+  const agent = window.NB_AGENTLOOP;
+  const { ADDENDUM } = window.NB_AGENTPROMPT;
+  const jsonP = (c2, v2) => new Promise((res2) => json(c2, v2, res2));
+  const invokeP = (l2, c2, m2, a2) => new Promise((res2) => invokeCommand(l2, c2, m2, a2, res2));
+  const invoke = async (l2, c2, m2, a2) => {
+    const t0 = performance.now();
+    const envelope = await invokeP(l2, c2, m2, a2);
+    return { envelope, ms: Math.round(performance.now() - t0) };
+  };
+  const code = (m2, a2) => invokeP("dev", "code", m2, a2);
+  let AUTHOR = "dev";
+  jsonP("../security/current_user", null).then((r2) => {
+    if (r2.status === "ok" && r2.data) AUTHOR = r2.data.displayname || r2.data.id || "dev";
+  });
+  const readRec = async (l2, id2) => {
+    const r2 = await jsonP("../app/read", "lib=" + encodeURIComponent(l2) + "&id=" + encodeURIComponent(id2));
+    return r2.status === "ok" ? r2.data : new Error(r2.msg || "read failed");
+  };
+  const controlsOf = async (l2) => {
+    const d2 = await readRec(l2, "controls");
+    return d2 instanceof Error ? d2 : (d2.list ?? []);
+  };
+  const readFacet = (l2, c2, f2) => code("read_control_facet", { lib: l2, ctl: c2, facet: f2 });
+  const patchFacet = (l2, c2, f2, { oldSnippet, newSnippet, base = "", label = "" }) =>
+    code("patch_control_facet", { lib: l2, ctl: c2, facet: f2, old_snippet: oldSnippet,
+      new_snippet: newSnippet, base, label, author: AUTHOR });
+  const listPatches = (l2, c2, n2) => code("list_control_patches", { lib: l2, ctl: c2, limit: n2 ?? 0 });
+  const userP = async () => {
+    const r2 = await jsonP("../security/current_user", null);
+    return r2.status === "ok" ? (r2.data ?? null) : null;
+  };
 
 const CHAT_SHELL = `Right now you are speaking through the Newbound Agent app — a standalone chat. There is no IDE around you; every tool call you make renders as a visible cell in this thread, and mutating commands stop for the user's typed confirmation.
 
@@ -29,28 +61,7 @@ HOW TO ANSWER
 
 const STORE_KEY = "agent.chat.v1";
 
-export async function init(host) {
-  // ── the connection ───────────────────────────────────────────────────
-  // The loader's ensureConnected runs before any mounted control's init,
-  // with the read-only platform default. The agent app is a WRITE venue by
-  // design — the memory audit and the prompt editors are its purpose;
-  // every write is journaled and the server enforces real permissions
-  // regardless — so reconnect writable. The dev app's SAVED posture
-  // (bench.connection) is put back untouched: this page's writability is
-  // its own, not a flag quietly flipped on the IDE.
-  if (!store.writable()) {
-    const savedRaw = localStorage.getItem("bench.connection");
-    const r = await store.connect({ mode: "live", baseUrl: location.origin,
-      sessionid: "", writable: true });
-    if (savedRaw === null) localStorage.removeItem("bench.connection");
-    else localStorage.setItem("bench.connection", savedRaw);
-    if (r instanceof Error) {
-      host.querySelector(".ag-thread").textContent =
-        "not connected: " + r.message + " — sign in via the instance and reload.";
-      return {};
-    }
-  }
-
+async function init(host) {
   // ── tabs ─────────────────────────────────────────────────────────────
   for (const tab of host.querySelectorAll(".ag-tab")) {
     tab.addEventListener("click", () => {
@@ -64,7 +75,7 @@ export async function init(host) {
   // ── the archivist strip ──────────────────────────────────────────────
   const archQ = host.querySelector(".ag-arch-q");
   async function refreshArchivist() {
-    const r = await store.invoke("agent", "archivist", "queue_status", {});
+    const r = await invoke("agent", "archivist", "queue_status", {});
     if (r instanceof Error || r.envelope.status !== "ok") { archQ.textContent = ""; return; }
     const n = r.envelope.queued ?? 0;
     archQ.textContent = `archivist: ${n} turn${n === 1 ? "" : "s"} queued`;
@@ -73,7 +84,7 @@ export async function init(host) {
     const btn = ev.currentTarget;
     btn.disabled = true;
     btn.textContent = "sweeping…";
-    const r = await store.invoke("agent", "archivist", "consolidate", {});
+    const r = await invoke("agent", "archivist", "consolidate", {});
     btn.disabled = false;
     btn.textContent = "sweep now";
     const env = r instanceof Error ? { status: "err", msg: r.message } : r.envelope;
@@ -264,7 +275,7 @@ export async function init(host) {
       }
       askConfirmed.add(target.cmd);
     }
-    const result = await store.invoke(target.lib, target.ctl, target.cmd, args);
+    const result = await invoke(target.lib, target.ctl, target.cmd, args);
     if (result instanceof Error) {
       toolCell(callText, args, { error: true, output: result.message });
       return `ERROR: ${result.message}`;
@@ -315,7 +326,7 @@ export async function init(host) {
       busyEl.remove();
       transcript.splice(transcript.indexOf(busy), 1);
       pushCell({ kind: "agent", text });
-      store.invoke("agent", "archivist", "log_turn", {
+      invoke("agent", "archivist", "log_turn", {
         venue: "agent-app", ask: message.slice(0, 4000),
         reply: (text ?? "").slice(0, 4000), tools: "", author: "agent-app",
       }).catch(() => {});
@@ -355,16 +366,14 @@ export async function init(host) {
   let openDomainName = null;
 
   async function loadDomains() {
-    store.invalidateControls("kb");
-    const controls = await store.controls("kb");
+    const controls = await controlsOf("kb");
     domainsEl.replaceChildren();
     if (controls instanceof Error) {
       domainsEl.textContent = "kb unavailable: " + controls.message;
       return;
     }
     for (const c of controls.slice().sort((a, b) => a.name.localeCompare(b.name))) {
-      store.invalidateControl("kb", c.id);
-      const rec = await store.control("kb", c.id);
+      const rec = await readRec("kb", c.id);
       const btn = document.createElement("button");
       btn.className = "ag-domain" + (c.name === openDomainName ? " on" : "");
       let n = "?";
@@ -382,7 +391,7 @@ export async function init(host) {
     for (const b of domainsEl.querySelectorAll(".ag-domain")) {
       b.classList.toggle("on", b.textContent.startsWith(`kb.${name} `) || b.textContent === `kb.${name}`);
     }
-    const r = await store.readFacet("kb", name, "memory");
+    const r = await readFacet("kb", name, "memory");
     entriesEl.replaceChildren();
     journalEl.replaceChildren();
     if (r.status !== "ok") { entriesEl.textContent = "read failed: " + r.msg; return; }
@@ -393,7 +402,7 @@ export async function init(host) {
 
     const save = async (next, label) => {
       const body = JSON.stringify(next, null, 2) + "\n";
-      const pr = await store.patchFacet("kb", name, "memory",
+      const pr = await patchFacet("kb", name, "memory",
         { oldSnippet: r.source, newSnippet: body, base: r.hash, label });
       if (pr.status !== "ok") { note(memCap, `save failed: ${pr.msg}`, true); return false; }
       await openDomain(name);
@@ -423,7 +432,7 @@ export async function init(host) {
         .filter(Boolean).join(" · ");
       card.appendChild(meta);
       if (e.source?.lib && e.source?.hash) {
-        store.readFacet(e.source.lib, e.source.ctl, e.source.facet).then((ref) => {
+        readFacet(e.source.lib, e.source.ctl, e.source.facet).then((ref) => {
           if (ref.status === "ok" && ref.hash !== e.source.hash) {
             const s = document.createElement("span");
             s.className = "ag-stale";
@@ -482,7 +491,7 @@ export async function init(host) {
       entriesEl.appendChild(card);
     });
 
-    const j = await store.listPatches("kb", name, 10);
+    const j = await listPatches("kb", name, 10);
     if (j.status === "ok") {
       for (const p of (j.patches ?? []).filter((p) => p.facet === "memory")) {
         const line = document.createElement("div");
@@ -501,8 +510,8 @@ export async function init(host) {
     if (g(".ag-rem-detail")) entry.detail = g(".ag-rem-detail");
     if (g(".ag-rem-tags")) entry.tags = g(".ag-rem-tags");
     entry.confidence = host.querySelector(".ag-rem-conf").value;
-    const user = await store.user();
-    const r = await store.agentCall("remember", {
+    const user = await userP();
+    const r = await invokeP("agent", "archivist", "remember", {
       lib: "kb", domain: openDomainName, entry,
       author: user?.displayname || user?.id || "owner",
     });
@@ -518,7 +527,7 @@ export async function init(host) {
     ev.preventDefault();
     const name = host.querySelector(".ag-newdomain-name").value.trim();
     if (!/^[a-z][a-z0-9-]*$/.test(name)) { note(memCap, "lowercase + dashes", true); return; }
-    const r = await store.agentCall("add_control", { lib: "kb", ctl: name });
+    const r = await code("add_control", { lib: "kb", ctl: name });
     if (r.status !== "ok") { note(memCap, `add failed: ${r.msg}`, true); return; }
     host.querySelector(".ag-newdomain-name").value = "";
     await loadDomains();
@@ -531,13 +540,13 @@ export async function init(host) {
     { key: "addendum", lib: "agent", ctl: "agentprompt", facet: "js",
       cap: "the OWNER ADDENDUM — appended to every notebook/chat prompt; your experiment surface",
       extract: (src) => {
-        const m = src.match(/export const ADDENDUM = `([\s\S]*?)`;/);
+        const m = src.match(/const ADDENDUM = `([\s\S]*?)`;/);
         return m ? m[1].replace(/\\`/g, "`").replace(/\\\$/g, "$").replace(/\\\\/g, "\\") : null;
       },
       inject: (src, text) => {
         const esc = text.replace(/\\/g, "\\\\").replace(/`/g, "\\`").replace(/\$/g, "\\$");
-        return src.replace(/export const ADDENDUM = `[\s\S]*?`;/,
-          "export const ADDENDUM = `" + esc + "`;");
+        return src.replace(/const ADDENDUM = `[\s\S]*?`;/,
+          "const ADDENDUM = `" + esc + "`;");
       } },
     { key: "archivist", lib: "agent", ctl: "archivist", facet: "prompt",
       cap: "the ARCHIVIST's extraction prompt — what gets remembered, and how conservatively" },
@@ -551,7 +560,7 @@ export async function init(host) {
       const ta = block.querySelector("textarea");
       const status = block.querySelector(".ag-prompt-note");
       block.querySelector(".ag-prompt-cap").textContent = p.cap;
-      const r = await store.readFacet(p.lib, p.ctl, p.facet);
+      const r = await readFacet(p.lib, p.ctl, p.facet);
       if (r.status !== "ok") { status.textContent = "read failed: " + r.msg; ta.disabled = true; continue; }
       let text = r.source;
       if (p.extract) {
@@ -565,10 +574,10 @@ export async function init(host) {
       }
       ta.value = text;
       block.querySelector(".ag-prompt-save").addEventListener("click", async () => {
-        const cur = await store.readFacet(p.lib, p.ctl, p.facet);
+        const cur = await readFacet(p.lib, p.ctl, p.facet);
         if (cur.status !== "ok") { note(status, "re-read failed: " + cur.msg, true); return; }
         const next = p.inject ? p.inject(cur.source, ta.value) : ta.value;
-        const pr = await store.patchFacet(p.lib, p.ctl, p.facet,
+        const pr = await patchFacet(p.lib, p.ctl, p.facet,
           { oldSnippet: cur.source, newSnippet: next, base: cur.hash,
             label: `prompt: ${p.key} edited in the agent app` });
         note(status, pr.status === "ok"
@@ -586,3 +595,11 @@ export async function init(host) {
 
   return { dispose() { /* nothing persistent beyond localStorage */ } };
 }
+
+  return init(ME, ME.DATA || {});
+}).catch(function (e) {
+  console.log("chat failed to start: " + (e && e.message ? e.message : e));
+  return null;
+});
+readyP.then(function (api) { if (api) Object.assign(me, api); });
+me.waitReady = function (cb) { readyP.then(function () { cb(me); }); };
