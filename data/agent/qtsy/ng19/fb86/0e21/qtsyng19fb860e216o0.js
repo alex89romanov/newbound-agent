@@ -10,11 +10,10 @@
 // demand through the auto-run read family; writes go through the
 // validated `remember` command. The index STALE-WHILE-REVALIDATES: each
 // fence snapshot serves the current index and kicks a background refresh
-// (cache-busting — remember() writes server-side, so the store's record
-// cache must be dropped or revalidation is a no-op), so a remembered
-// entry shows in the counts by the NEXT ask, no reload needed.
-// dest-agent: rides the agent add-on's own installs (the app boot and
-// the bench grafts carry this module) — no part of the dev app names
+// (reads here are uncached, so server-side remember() writes show), and
+// a remembered entry is in the counts by the NEXT ask, no reload needed.
+// dest-agent: rides the agent add-on's own installs (chat and the
+// notebook grafts list this library) — no part of the dev app names
 // the memory system.
 //
 // LIBRARY control — headless: defines window.NB_MEMORY once (idempotent across
@@ -104,7 +103,7 @@ viewctx.register("memory", () => {
     return `- kb.${d.name}${n}${t} — ${d.desc || "no desc"}`;
   });
   // Recall layer 3 (docs/prompting.md): entries TAGGED for the surface
-  // open on the bench are procedurally relevant — push them, capped,
+  // open in the workbench are procedurally relevant — push them, capped,
   // instead of waiting for the model to pull. The workbench provider
   // names the open lib/ctl; the tag vocabulary rule is `lib.ctl`.
   let pushedBlock = "";

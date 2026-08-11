@@ -16,8 +16,8 @@
 
 
 // ── this library's own wire ─────────────────────────────────
-// The platform's store carries no add-on-specific API: the provider owns
-// its library name and command names. Everything below rides the store's
+// The platform carries no add-on-specific API: the provider owns its
+// library name and command names. Everything below rides invokeCommand's
 // generic by-name surface; resolution failures come back as err envelopes
 // (never throws), so callers branch on status only.
 //
@@ -90,7 +90,7 @@ function errorHint(msg) {
 const MAX_ROUNDS = 10;
 
 // The system prompt lives client-side now — the cost of skipping
-// control_query, and the point: the bench knows what the model is looking
+// control_query, and the point: the notebook knows what the model is looking
 // at and how its replies get used. The platform-knowledge sections are
 // the owner's, folded in from agent.llm.tool_loop's prompt (his call:
 // without them the model can't write ndata-correct code or reason about
