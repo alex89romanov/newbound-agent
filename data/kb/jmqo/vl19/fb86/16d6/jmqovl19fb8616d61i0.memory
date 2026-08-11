@@ -272,5 +272,19 @@
     "tags": "cmd-crate,serde,mcp,panic",
     "confidence": "high",
     "time": 1786479035557
+  },
+  {
+    "claim": "FIXED (branch claude/hollis-repo-evaluation-85817i, commit ccc81ce): dev.github.import now calls init_globals() so it works under bare 'newbound exec'; dev.dev.activate_lib appends the [workspace] opt-out whenever absent (no longer keyed on serde_support); dev.libsettings.save_library_config accepts 'root' as fallback for 'library_root' and never clobbers a non-empty stored root - all three verified end-to-end on a disposable instance (single exec import of hollis: clone -> activate -> build -> OK).",
+    "detail": "Supersedes the failure-mode claims deposited earlier this session; those describe master behavior until the branch merges.",
+    "tags": "dev.github,activate_lib,libsettings,fixed",
+    "confidence": "high",
+    "time": 1786482273494
+  },
+  {
+    "claim": "The cmd crate's optional serde/serde_json are activated by the owner's prescribed feature pattern (implemented, same branch): cmd/Cargo.toml defines serde_support = [serde, serde_json, flowlang/serde_support, ndata/serde_support] and the host Cargo.toml forwards cmd/serde_support from its own serde_support feature - the general rule for any subcrate needing serde is that two-sided wiring, with a matching python_runtime pattern when python is needed.",
+    "detail": "The hollis-in-cmd compile failure that first exposed this was itself fallout from the root:\"\" meta corruption - a lib whose root is blanked is generated into cmd as rootless, and build_all does not clean cmd/src/<lib> when the lib regains its own root (stale files linger; flowlang-side hygiene item).",
+    "tags": "cmd-crate,serde,feature-wiring,build_all",
+    "confidence": "high",
+    "time": 1786482273738
   }
 ]
