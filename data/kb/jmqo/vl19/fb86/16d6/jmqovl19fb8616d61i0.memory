@@ -286,5 +286,12 @@
     "tags": "cmd-crate,serde,feature-wiring,build_all",
     "confidence": "high",
     "time": 1786482273738
+  },
+  {
+    "claim": "flowlang branch claude/hollis-repo-evaluation-85817i (commit d27c110, repo mraiser/flow) fixes both Tranche-C items: mcp::invoke wraps Command::lookup+execute in catch_unwind so a tools/call for an unregistered command (e.g. an FFI dylib that failed to load) returns an isError result instead of killing the server, and builder::build_all sweeps stale per-library module dirs plus their lib.rs/cmdinit.rs lines out of crates that are not the library's declared root (new util::remove_mod_file_content).",
+    "detail": "Both verified on a disposable newbound with [patch.crates-io] flowlang = { path = ... }: broken-dylib call answered with 'Tool ... failed: No such command ...' and the server kept serving tools/list; a planted cmd/src/<lib> was removed by 'newbound rebuild' with runtime/ untouched. Not yet published to crates.io - newbound consumes flowlang from the registry, so the fixes reach the platform only after the owner publishes (0.3.32) and bumps.",
+    "tags": "flowlang,mcp,panic-guard,build_all,stale-modules",
+    "confidence": "high",
+    "time": 1786487289900
   }
 ]
