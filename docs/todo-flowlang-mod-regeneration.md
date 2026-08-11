@@ -83,3 +83,13 @@ shared roles: `app.ui` css; reference external consumer:
 core references nothing outside newbound_core). The dev frame keeps
 its own chrome and breadcrumb but opens with the same glyph + unlinked
 app name ("Development") — no app deviates from the pattern.
+
+Status update (2026-08-11, later in the same session): the convention
+work is merged to the defaults (newbound master `8c8f7b7`,
+newbound_nebula main `fd160af`), and the kb deposits that were stranded
+on `claude/nebula-library-overhaul-2gg43z` (the v52 wire-contract
+lesson, the v52 fold record, the v44/v51 drift workflow rule) are
+merged to newbound-agent master via a union merge of the appended
+claims (`8ab7b15`) — no unmerged kb claims remain on any branch. The
+only outstanding archivist work is depositing the nb-head doctrine
+claim above.
