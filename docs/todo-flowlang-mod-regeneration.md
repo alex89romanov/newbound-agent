@@ -81,4 +81,5 @@ newbound + newbound_nebula): app titlebars open with a tiny home glyph
 shared roles: `app.ui` css; reference external consumer:
 `nebula.nebula` (externals conform by copy, never by reference —
 core references nothing outside newbound_core). The dev frame keeps
-its own structure, aligned on href/tooltip only.
+its own chrome and breadcrumb but opens with the same glyph + unlinked
+app name ("Development") — no app deviates from the pattern.
