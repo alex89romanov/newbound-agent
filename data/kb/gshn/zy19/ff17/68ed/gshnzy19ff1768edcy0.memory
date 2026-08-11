@@ -97,5 +97,14 @@
     },
     "confidence": "high",
     "time": 1786466219199
+  },
+  {
+    "claim": "The rpicam fix landed 2026-08-11 (mraiser/camera 017351c, authored entirely via dev.code upsert/patch/set_imports): available probes rpicam-vid then libcamera-vid via a camera_tool(kind) helper, parses --list-cameras with trimmed-line prefix logic instead of char positions, and emits device keys libcamera:<index> - the camera index rides the device string, so snapshot and start_recording pass --camera <index> with NO command-signature or UI changes (the UI treats device keys as opaque), and legacy saved device=libcamera-apps still means index 0 via is_libcamera/camera_index helpers used by snapshot, start_recording, play, on_capture. Verified with shim binaries: two-camera parse with formats/sizes, --camera 1 reaching the still tool from device libcamera:1, portrait swap at rot=90, and libcamera-* fallback when rpicam-* is absent. NOT verified on real camera hardware. Editing lesson: patch_command_body compiles after each patch, so a multi-patch type change (the syscmd &str->String move) reports a compile_error on the intermediate patch - the edit still persists and the final patch goes green; sequence patches so the last one restores compilability.",
+    "tags": "camera,rpicam,libcamera,index,fix,dev-code",
+    "source": {
+      "doc": "shim-verified in-session, mraiser/camera 017351c, 2026-08-11"
+    },
+    "confidence": "high",
+    "time": 1786466839987
   }
 ]
