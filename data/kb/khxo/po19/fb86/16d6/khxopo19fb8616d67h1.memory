@@ -147,5 +147,12 @@
     "tags": "bench-collapse",
     "confidence": "high",
     "time": 1786407391814
+  },
+  {
+    "claim": "Headless E2E gotchas proven this stretch: Playwright locators PIERCE shadow roots (the workbench preview renders the host control's own markup — scope or .first() every chrome selector), controls that mount sequentially race naive counts (wait for the specific element, not a tally), and async ready-chains mean globals/canvases appear after the selector does — assert after the chain, or navigate directly.",
+    "detail": "Login for E2E: set a fresh sessionid cookie, GET /app/login?user=admin&pass=<from users/admin.properties>, then navigate. WebGL renders headless (THREE r180 grid confirmed) — no flags needed with the preinstalled Chromium.",
+    "tags": "frontend,bench-collapse",
+    "confidence": "high",
+    "time": 1786411234270
   }
 ]

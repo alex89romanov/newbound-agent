@@ -41,5 +41,33 @@
     },
     "confidence": "high",
     "time": 1786309390473
+  },
+  {
+    "claim": "The stock activation lifecycle: a control's js runs as a classic script at html injection (its own DOM and ME.DATA are usable at construction); nested .data-control children then activate depth-first; per element cb(api) fires and then api.ready in the same tick, with children's readys strictly before the parent's; the plugin pass runs last, after ready.",
+    "detail": "This ordering is the entire dependency mechanism: library controls define their window.NB_* global in ready, consumers gate their async setup on their own ready (readyP = new Promise(res => me.ready = res)), and anything a parent needs from an async child rides the waitReady(cb) convention. cb-before-ready in the same tick means an api handed to installControl's callback may not be async-complete yet — construction-time method definitions or waitReady cover it. Records don't uniformly carry db/lib keys (older do, newer don't), so resolve the owning library from context — installControl stashes it as el.nblib.",
+    "tags": "frontend,bench-collapse",
+    "confidence": "high",
+    "time": 1786411222001
+  },
+  {
+    "claim": "jsapi send_* wrappers are function declarations inside the control's own constructor scope — callable only from that control's js facet, never reachable from outside through el.api.",
+    "detail": "So a control cannot borrow another control's jsapi by mounting it; cross-control command calls go through invokeCommand (api.js) by name. The wrappers take trailing (cb, peer) — a non-empty peer builds ../peer/remote/<peer>/app/exec, so remote-peer invocation is built into every generated wrapper.",
+    "tags": "frontend,bench-collapse",
+    "confidence": "high",
+    "time": 1786411225985
+  },
+  {
+    "claim": "A js facet is CLASSIC script: modern syntax is fine (const, arrows, async/await, template literals, optional chaining, dynamic import()); only import/export STATEMENTS are excluded, and a literal </script> sequence anywhere in the source breaks injection.",
+    "detail": "build() wraps the facet in a <script> tag by string concatenation, so </script> must be written as <\\/script> inside strings/regexes. Dynamic import() resolves against the PAGE base (document.baseURI) — which is why page-relative ../app/asset/... vendor imports are tunnel-correct.",
+    "tags": "frontend,bench-collapse",
+    "confidence": "high",
+    "time": 1786411230372
+  },
+  {
+    "claim": "Control css rides <style scoped> per instance, but `scoped` is dead in browsers — every control's css is effectively GLOBAL and duplicated per mounted instance; class-prefixed selectors are the real scoping.",
+    "detail": "Prefix every rule with the control's root class (.nb-toast, .wb-…); duplicates across instances are harmless (identical rules). Library controls with css-only facets (app.tokens) inject the same way — idempotent because the rules are identical.",
+    "tags": "frontend,bench-collapse",
+    "confidence": "high",
+    "time": 1786411232343
   }
 ]

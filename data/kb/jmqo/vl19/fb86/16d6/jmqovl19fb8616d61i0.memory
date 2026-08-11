@@ -214,5 +214,12 @@
     "tags": "bench-collapse",
     "confidence": "high",
     "time": 1786409801876
+  },
+  {
+    "claim": "Both web transports inject EVERY request field into a command's params as nn_<key> — nn_sessionid is just the one the author-defaulting uses; nn_session (the whole session object), headers-derived fields, etc. are equally available to any command that declares them.",
+    "detail": "HTTP: app/exec puts nn_sessionid into args after check_auth; websocket: the cmd handler copies all request fields as nn_* into params before dispatch (app/service/init.rs). Declared params are REQUIRED by the generated wrapper, so a command declaring nn_* still works on the web (injected) but CLI/MCP callers must pass it explicitly (\"\").",
+    "tags": "frontend,bench-collapse",
+    "confidence": "high",
+    "time": 1786411233530
   }
 ]
