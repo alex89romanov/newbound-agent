@@ -160,5 +160,14 @@
     },
     "confidence": "high",
     "time": 1786472610434
+  },
+  {
+    "claim": "Camera-less operation fixed 2026-08-11 (mraiser/camera f25beec, on the branch): three workstation findings - (1) the live control resolution fallback stored its default ARRAY back into me.status.resolution so the next poll split an array (TypeError killed the poll chain; pre-branch bug, adjacent adjustSizes always had the typeof guard); (2) available v4l2 branch returned the raw system_call failure object as the camera tree when v4l2-ctl gave no output, which the settings UI rendered as camera err / resolution Uxundefined by string-indexing the error message - now returns an empty tree; (3) camera_settings shows an explicit No-cameras-detected option and the snapshot preview requires positive numeric geometry (Uxundefined passed an indexOf-x check at position 1 - validate by parsing, not by substring). Verified on a failing-v4l2-ctl disposable via Playwright: empty tree, no-cameras dialog, zero JS errors, zero panics. General lesson: a command result that can be an error-shaped object must never be iterated as data - and UI guards should parse, not pattern-match.",
+    "tags": "camera,camera-less,available,settings,guards,uxundefined",
+    "source": {
+      "doc": "owner screenshot + workstation-shaped disposable verification, mraiser/camera f25beec, 2026-08-11"
+    },
+    "confidence": "high",
+    "time": 1786473573882
   }
 ]
