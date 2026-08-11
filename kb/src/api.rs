@@ -161,13 +161,6 @@ pub mod agent {
         use ::ndata::data::Data;
 
     }
-    pub mod bench {
-        use ::ndata::dataobject::DataObject;
-        use ::ndata::dataarray::DataArray;
-        use ::ndata::databytes::DataBytes;
-        use ::ndata::data::Data;
-
-    }
     pub mod prompts {
         use ::ndata::dataobject::DataObject;
         use ::ndata::dataarray::DataArray;
@@ -1274,6 +1267,11 @@ pub mod dev {
             ::flowlang::rustcmd::RustCmd::new("opoush19fbdfbfefbn1").execute(d).expect("Rust command execution failed").get_object("a")
         }
 
+        pub fn init() -> DataObject {
+            let d = DataObject::new();
+            ::flowlang::rustcmd::RustCmd::new("ioyipx19feee23f1bq1").execute(d).expect("Rust command execution failed").get_object("a")
+        }
+
     }
     pub mod viewctx {
         use ::ndata::dataobject::DataObject;
@@ -1576,7 +1574,6 @@ pub struct old_agent_archivist {}
 pub struct old_agent_chat {}
 pub struct old_agent_askrow {}
 pub struct old_agent_describebtn {}
-pub struct old_agent_bench {}
 pub struct old_agent_prompts {}
 pub struct old_app_api {}
 pub struct old_app_app {}
@@ -1653,7 +1650,6 @@ pub struct old_agent {
     pub chat: old_agent_chat,
     pub askrow: old_agent_askrow,
     pub describebtn: old_agent_describebtn,
-    pub bench: old_agent_bench,
     pub prompts: old_agent_prompts,
 }
 pub struct old_app {
@@ -1755,7 +1751,6 @@ pub const fn new() -> api {
             chat: old_agent_chat {},
             askrow: old_agent_askrow {},
             describebtn: old_agent_describebtn {},
-            bench: old_agent_bench {},
             prompts: old_agent_prompts {},
         },
         app: old_app {
@@ -2286,6 +2281,10 @@ impl old_dev_code {
     #[deprecated(note = "use api::dev::code::set_command_imports instead")]
     pub fn set_command_imports(&self, lib: String, ctl: String, cmd: String, imports: String) -> DataObject {
         self::dev::code::set_command_imports(lib, ctl, cmd, imports)
+    }
+    #[deprecated(note = "use api::dev::code::init instead")]
+    pub fn init(&self) -> DataObject {
+        self::dev::code::init()
     }
 }
 impl old_peer_peer {

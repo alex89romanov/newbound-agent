@@ -221,5 +221,19 @@
     "tags": "frontend,bench-collapse",
     "confidence": "high",
     "time": 1786411233530
+  },
+  {
+    "claim": "dev.code.set_timer fails under `newbound exec` (add_timer needs the `system` globals that only init_globals creates) - run it through `newbound mcp` instead.",
+    "detail": "The failure is late: the timer component record and the control's timer entry are already written when add_timer panics, and the _patches journal entry is skipped. Re-running the same set_timer over mcp replaces the record and journals normally (replace-only semantics heal the partial write). Observed 2026-08-11 wiring dev.code.init.",
+    "tags": "set_timer, exec, mcp, globals",
+    "confidence": "high",
+    "time": 1786419691108
+  },
+  {
+    "claim": "dev.code.init (boot timer, start 0, once) seeds runtime/metaidentity with the default identity \"Some Dev\" when the record is absent, so fresh clones publish without hand-seeding.",
+    "detail": "Same pattern as security.security.init: an init timer on the dev.code control. No-op when an identity exists; edit via the workbench publish pane or dev.code.set_meta_identity. Landed on branch claude/metaidentity-startup-init-euh44x (newbound 6018c09); the scratch-instance recipes no longer seed by hand. Timers only fire under `newbound` (run mode) - exec and mcp modes never start timer_loop.",
+    "tags": "metaidentity, publishapp, boot, dev.code",
+    "confidence": "high",
+    "time": 1786419738826
   }
 ]
