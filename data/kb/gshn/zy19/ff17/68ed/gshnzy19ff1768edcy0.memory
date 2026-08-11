@@ -133,5 +133,14 @@
     },
     "confidence": "high",
     "time": 1786470506843
+  },
+  {
+    "claim": "Packaging/pagination pass landed 2026-08-11 (mraiser/camera ccf452a; newbound branch got default.nix + ffmpeg/v4l-utils): events_page(since, limit) added as a NEW command (newest limit events >= since, ascending) so the events signature stays peer-stable; the DVR events tab requests newest-500 via events_page with automatic fallback to events for older hosts - the try-new-fall-back-to-old pattern is the compatibility idiom for extending the command surface. README rewritten: distro ffmpeg + v4l-utils (source build obsolete), rpicam-apps era, dev.github.import as primary install with corrected manual symlink steps (camera crate symlink + newbound rebuild + both builds for hot reload), built-binary systemd unit replacing the cargo-run forking one, NixOS via the dev shell. A Nix flake/module was deliberately NOT written: no nix binary in the container means it could not be verified, and unverified infrastructure does not ship - offered as owner-side or nix-capable-session follow-up. Verified: events_page semantics via seed_run fixtures (all/limit/since/combined all exact); README install steps mirror the activate_lib flow proven earlier in-session.",
+    "tags": "camera,events-page,pagination,readme,packaging,systemd,nixos,compat-idiom",
+    "source": {
+      "doc": "seed_run fixture tests + this session prior verifications, mraiser/camera ccf452a, 2026-08-11"
+    },
+    "confidence": "high",
+    "time": 1786470927668
   }
 ]
