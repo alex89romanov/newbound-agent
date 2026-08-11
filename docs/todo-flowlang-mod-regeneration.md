@@ -67,3 +67,18 @@ Rebuild each mod file from the store's current state every build:
 Constraint: newbound pins `flowlang = "0.3.31"` from crates.io, so the
 fix lands as a flowlang release + version bump in newbound, and in the
 external library crates (nebula, agent, kb, scratch) which pin the same.
+
+---
+
+## Also pending kb deposit (same reason: no MCP this session)
+
+For `kb.doctrine` — **the nb-head navigation convention** (adopted
+2026-08-11, implemented on `claude/nebula-nav-ui-convention-xpucyk` in
+newbound + newbound_nebula): app titlebars open with a tiny home glyph
+(`&#8962;`) linking to `../app/index.html` with `title` and `aria-label`
+"All apps", followed by the app name as plain unlinked text
+(`.nb-home` / `.nb-title`). Canonical markup: `app.ui_reference`;
+shared roles: `app.ui` css; reference external consumer:
+`nebula.nebula` (externals conform by copy, never by reference —
+core references nothing outside newbound_core). The dev frame keeps
+its own structure, aligned on href/tooltip only.
