@@ -190,5 +190,12 @@
     },
     "confidence": "high",
     "time": 1786469780483
+  },
+  {
+    "claim": "mraiser/hollis as published does not compile: its code imports transcribe_rs (Moonshine ONNX), ort and ureq, none declared in the crate manifest or store meta; the working closure in the CCR sandbox was transcribe-rs {0.3, features=[onnx]}, ort =2.0.0-rc.12 (pinned by transcribe-rs 0.3.11), ureq 2.x, whisper-rs without cuda, plus apt libasound2-dev and ort-sys linked against pip onnxruntime 1.28.0 (ORT_STRATEGY=system ORT_PREFER_DYNAMIC_LINK=1 ORT_LIB_LOCATION with a libonnxruntime.so.1 soname symlink; the pyke CDN binary download is blocked by the egress proxy).",
+    "detail": "Deposited after the hollis end-to-end install exercise, 2026-08-11. All seven hollis commands ship with blank desc, so they are invisible to newbound mcp tools/list (blank-desc omission).",
+    "tags": "hollis,dependencies,onnxruntime,ccr",
+    "confidence": "high",
+    "time": 1786479035776
   }
 ]

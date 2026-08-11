@@ -1,9 +1,9 @@
 [
   {
-    "claim": "A String return rides the exec envelope's msg with status ok even for ERROR:-prefixed texts \u2014 branch on the prefix and relay it verbatim",
+    "claim": "A String return rides the exec envelope's msg with status ok even for ERROR:-prefixed texts — branch on the prefix and relay it verbatim",
     "tags": "dev.github,envelope",
     "source": {
-      "doc": "CONTRACT.md \u00a76.3"
+      "doc": "CONTRACT.md §6.3"
     },
     "confidence": "high",
     "time": 1785504820517
@@ -13,43 +13,43 @@
     "detail": "store.appCmdUrl builds such links; the archive panel's zip download depends on this.",
     "tags": "app,archive,envelope",
     "source": {
-      "doc": "CONTRACT.md \u00a76.3"
+      "doc": "CONTRACT.md §6.3"
     },
     "confidence": "high",
     "time": 1785504820517
   },
   {
-    "claim": "list_control_patches returns newest-FIRST \u2014 two probe harnesses have failed by reading the wrong end",
+    "claim": "list_control_patches returns newest-FIRST — two probe harnesses have failed by reading the wrong end",
     "tags": "dev.code,journal",
     "source": {
-      "doc": "CONTRACT.md \u00a76"
+      "doc": "CONTRACT.md §6"
     },
     "confidence": "high",
     "time": 1785504820517
   },
   {
-    "claim": "/app/read answers 500 for the runtime library (store-only, never app-loaded) \u2014 read runtime state through dedicated commands (get_meta_identity, dev.plugins.list_plugins)",
+    "claim": "/app/read answers 500 for the runtime library (store-only, never app-loaded) — read runtime state through dedicated commands (get_meta_identity, dev.plugins.list_plugins)",
     "tags": "runtime,dev.code",
     "source": {
-      "doc": "CONTRACT.md \u00a76.3"
+      "doc": "CONTRACT.md §6.3"
     },
     "confidence": "high",
     "time": 1785504820517
   },
   {
-    "claim": "groups is SECURITY groups; categorization lives in the tags field via set_tags \u2014 never write tags into groups",
+    "claim": "groups is SECURITY groups; categorization lives in the tags field via set_tags — never write tags into groups",
     "tags": "security,tags,dev.code",
     "source": {
-      "doc": "CONTRACT.md \u00a76.8"
+      "doc": "CONTRACT.md §6.8"
     },
     "confidence": "high",
     "time": 1785504820517
   },
   {
-    "claim": "New dev.code commands are upsert \u2192 cargo build \u2192 restart (no dylib). Agent-lib commands keep the dylib hot-swap, which can abort mid-request over HTTP \u2014 author those over MCP",
+    "claim": "New dev.code commands are upsert → cargo build → restart (no dylib). Agent-lib commands keep the dylib hot-swap, which can abort mid-request over HTTP — author those over MCP",
     "tags": "dev.code,upsert_command,mcp",
     "source": {
-      "doc": "CONTRACT.md \u00a76.6"
+      "doc": "CONTRACT.md §6.6"
     },
     "confidence": "high",
     "time": 1785504820517
@@ -58,7 +58,7 @@
     "claim": "MCP tool discovery (tools/list) depends on the desc field not being blank: a command with an empty desc is omitted from the list entirely, though direct dispatch by lib-control-command name still works. Corollary: every command must carry a desc, or agents browsing the tool list cannot find it.",
     "tags": "mcp,discovery,desc",
     "source": {
-      "doc": "the owner, in session, 2026-08-05 \u2014 explained why remember/set_tags/set_groups/set_plugin/remove_plugin were missing from tools/list"
+      "doc": "the owner, in session, 2026-08-05 — explained why remember/set_tags/set_groups/set_plugin/remove_plugin were missing from tools/list"
     },
     "confidence": "high",
     "time": 1785934811069
@@ -92,7 +92,7 @@
   },
   {
     "claim": "Every LLM provider behind agent.llm's resolver accepts exactly ONE system message, and it must be at index 0.",
-    "detail": "vLLM's chat template answers a system message at any later index \u2014 including index 1, ahead of every user turn \u2014 with a hard 400: BadRequestError \"System message must be at the beginning.\" So client-side context injection (recall layer 4's mode pack) must be APPENDED to the existing system message, never inserted beside it. Appending rather than prepending is also the cache-friendly choice: the curriculum stays a stable prefix, so server-side prefix caching still hits. agent.agentloop's chatTurn does this in convo(), which builds a merged COPY \u2014 the venue's own messages array is never mutated.",
+    "detail": "vLLM's chat template answers a system message at any later index — including index 1, ahead of every user turn — with a hard 400: BadRequestError \"System message must be at the beginning.\" So client-side context injection (recall layer 4's mode pack) must be APPENDED to the existing system message, never inserted beside it. Appending rather than prepending is also the cache-friendly choice: the curriculum stays a stable prefix, so server-side prefix caching still hits. agent.agentloop's chatTurn does this in convo(), which builds a merged COPY — the venue's own messages array is never mutated.",
     "tags": "llm,agent,platform-api,wire",
     "source": {
       "lib": "agent",
@@ -104,7 +104,7 @@
     "time": 1785964641067
   },
   {
-    "claim": "dev.github.import is the drop-in library install path: given a git URL whose repo has data/<lib> and runtime/<lib> at its root, it clones into repositories/<lib>, symlinks both into the instance, calls load_library then rebuild_lib. dev.github has only import and list \u2014 no update or remove; update today is `git pull` in repositories/<lib> plus rebuild_lib by hand. A brand-new FFI root additionally needs `newbound rebuild` + host build + restart before the watcher and initializer know the crate.",
+    "claim": "dev.github.import is the drop-in library install path: given a git URL whose repo has data/<lib> and runtime/<lib> at its root, it clones into repositories/<lib>, symlinks both into the instance, calls load_library then rebuild_lib. dev.github has only import and list — no update or remove; update today is `git pull` in repositories/<lib> plus rebuild_lib by hand. A brand-new FFI root additionally needs `newbound rebuild` + host build + restart before the watcher and initializer know the crate.",
     "tags": "platform-api,dev.github,install,ffi",
     "source": {
       "doc": "newbound_core/src/dev/github/import.rs, verified 2026-08-09"
@@ -113,7 +113,7 @@
     "time": 1786292476513
   },
   {
-    "claim": "App discovery and activation: an app is any runtime/<name>/app.properties; activation is membership in the comma-separated `apps` key of config.properties, written by app/settings (which re-runs init_globals \u2014 no restart to activate a facet-served app). app.properties' `libraries=` list drives load_library at init. The peer-to-peer alternative to git import is dev/install_lib, which streams the library zip from a peer and copies data/<lib>/_APPS/<app> out to runtime/<app>.",
+    "claim": "App discovery and activation: an app is any runtime/<name>/app.properties; activation is membership in the comma-separated `apps` key of config.properties, written by app/settings (which re-runs init_globals — no restart to activate a facet-served app). app.properties' `libraries=` list drives load_library at init. The peer-to-peer alternative to git import is dev/install_lib, which streams the library zip from a peer and copies data/<lib>/_APPS/<app> out to runtime/<app>.",
     "tags": "platform-api,apps,activation,install_lib",
     "source": {
       "doc": "flowlang appserver.rs init_globals + newbound_core app/{apps,settings}.rs, dev/dev/install_lib.rs, verified 2026-08-09"
@@ -122,7 +122,7 @@
     "time": 1786292476516
   },
   {
-    "claim": "Command exposure model (check_security): with security on, a command executes anonymously only if BOTH the library meta's readers and the command record's readers contain 'anonymous'; otherwise the session user's groups must intersect the command's readers, and the 'admin' group always passes. Empty readers on a command record therefore means admin-only \u2014 the right default for commands that shell out to sudo.",
+    "claim": "Command exposure model (check_security): with security on, a command executes anonymously only if BOTH the library meta's readers and the command record's readers contain 'anonymous'; otherwise the session user's groups must intersect the command's readers, and the 'admin' group always passes. Empty readers on a command record therefore means admin-only — the right default for commands that shell out to sudo.",
     "tags": "platform-api,security,readers,groups",
     "source": {
       "doc": "newbound_core/src/security/security/init.rs check_security, verified 2026-08-09"
@@ -195,28 +195,28 @@
     "time": 1786399738682
   },
   {
-    "claim": "Vendored ES bundles live at /app/asset/<lib>/vendor/... \u2014 nb_codemirror/cm6.js under dev, nb_three (scenestage.js, three.module.js) under app \u2014 and stock controls import them with page-relative dynamic import('../app/asset/...').",
-    "detail": "A module loaded from its real URL resolves its own internal relative imports natively, so no rewriting machinery is needed; blob-URL modules were the only reason the loader rewrote specifiers. The nb.js/store client still fetches against location.origin (tunnel-blind) \u2014 a known follow-up now fixable in one place.",
+    "claim": "Vendored ES bundles live at /app/asset/<lib>/vendor/... — nb_codemirror/cm6.js under dev, nb_three (scenestage.js, three.module.js) under app — and stock controls import them with page-relative dynamic import('../app/asset/...').",
+    "detail": "A module loaded from its real URL resolves its own internal relative imports natively, so no rewriting machinery is needed; blob-URL modules were the only reason the loader rewrote specifiers. The nb.js/store client still fetches against location.origin (tunnel-blind) — a known follow-up now fixable in one place.",
     "tags": "bench-collapse",
     "confidence": "high",
     "time": 1786401039423
   },
   {
     "claim": "The 17 author-taking dev.code commands declare nn_sessionid (platform-injected on all web calls) and default an empty author to the session user; set_module_flag no longer exists.",
-    "detail": "Browser clients pass author:\"\" \u2014 journals record the real session displayname. CLI/MCP callers pass author explicitly (provenance names like \"claude\") AND nn_sessionid:\"\" \u2014 every declared param required. The builder does not garbage-collect deleted commands: prune the generated .rs and its mod.rs registration by hand after delete_command on a static lib. Clean generated-src commits come from a de-overlay + newbound rebuild + re-overlay cycle (the de-overlayed binary loses the agent commands until re-regenerated \u2014 rebuild again after re-overlaying before any archivist call); the regenerated initializer may drop the cmd-scaffold block when data/cmd is absent \u2014 restore it rather than committing that noise.",
+    "detail": "Browser clients pass author:\"\" — journals record the real session displayname. CLI/MCP callers pass author explicitly (provenance names like \"claude\") AND nn_sessionid:\"\" — every declared param required. The builder does not garbage-collect deleted commands: prune the generated .rs and its mod.rs registration by hand after delete_command on a static lib. Clean generated-src commits come from a de-overlay + newbound rebuild + re-overlay cycle (the de-overlayed binary loses the agent commands until re-regenerated — rebuild again after re-overlaying before any archivist call); the regenerated initializer may drop the cmd-scaffold block when data/cmd is absent — restore it rather than committing that noise.",
     "tags": "bench-collapse",
     "confidence": "high",
     "time": 1786406673052
   },
   {
-    "claim": "The plugin pass is an api.js mechanic: installControl checks the registry after every control activates \u2014 selector entries install at el.querySelector(selector) scoped to the host element; selectorless entries attach a hidden headless div to the host. No control embeds a dev:plugins div; dev.plugins is just the registry home (list_plugins).",
-    "detail": "Registry fetched once per page, single-flight, err -> empty (anonymous pages simply have no plugins). Plugins get their own pass (grafts on grafts); nesting capped at 4 data-nb-plugin ancestors against cyclic registries. Selector scoping changed from document-global to host-element \u2014 entries must target selectors inside their target control. Entries apply on the next page load, same as ever.",
+    "claim": "The plugin pass is an api.js mechanic: installControl checks the registry after every control activates — selector entries install at el.querySelector(selector) scoped to the host element; selectorless entries attach a hidden headless div to the host. No control embeds a dev:plugins div; dev.plugins is just the registry home (list_plugins).",
+    "detail": "Registry fetched once per page, single-flight, err -> empty (anonymous pages simply have no plugins). Plugins get their own pass (grafts on grafts); nesting capped at 4 data-nb-plugin ancestors against cyclic registries. Selector scoping changed from document-global to host-element — entries must target selectors inside their target control. Entries apply on the next page load, same as ever.",
     "tags": "bench-collapse",
     "confidence": "high",
     "time": 1786409801876
   },
   {
-    "claim": "Both web transports inject EVERY request field into a command's params as nn_<key> \u2014 nn_sessionid is just the one the author-defaulting uses; nn_session (the whole session object), headers-derived fields, etc. are equally available to any command that declares them.",
+    "claim": "Both web transports inject EVERY request field into a command's params as nn_<key> — nn_sessionid is just the one the author-defaulting uses; nn_session (the whole session object), headers-derived fields, etc. are equally available to any command that declares them.",
     "detail": "HTTP: app/exec puts nn_sessionid into args after check_auth; websocket: the cmd handler copies all request fields as nn_* into params before dispatch (app/service/init.rs). Declared params are REQUIRED by the generated wrapper, so a command declaring nn_* still works on the web (injected) but CLI/MCP callers must pass it explicitly (\"\").",
     "tags": "frontend,bench-collapse",
     "confidence": "high",
@@ -244,5 +244,33 @@
     },
     "confidence": "high",
     "time": 1786447774149
+  },
+  {
+    "claim": "dev.github.import (and anything reaching flowlang appserver load_library) cannot run via 'newbound exec' - the exec path skips init_globals(), so load_library panics with \"Key 'system' not found\"; route such commands through 'newbound mcp' tools/call, which inits globals first.",
+    "detail": "Observed 2026-08-11 installing mraiser/hollis. src/main.rs: exec branch calls Command::lookup directly; only the mcp branch calls init_globals().",
+    "tags": "dev.github,exec,mcp,init_globals",
+    "confidence": "high",
+    "time": 1786479034893
+  },
+  {
+    "claim": "A github-imported FFI library whose crate manifest lacks a [workspace] opt-out fails activate_lib's crate build with 'current package believes it's in a workspace' - build_all writes the lib name into the host workspace exclude, but cargo canonicalizes the crate's real path to repositories/<lib>/<root>, which the exclude does not match.",
+    "detail": "activate_lib's manifest mend (which would append [workspace]) is keyed on the string 'serde_support' being absent; hollis's tracked manifest already contained it, so the mend was skipped. Fix candidates: exclude 'repositories' wholesale, or make the [workspace] append unconditional. agent/kb only dodge this because their symlinks resolve outside the checkout.",
+    "tags": "dev.github,activate_lib,workspace,ffi",
+    "confidence": "high",
+    "time": 1786479035116
+  },
+  {
+    "claim": "flowb rewrites an FFI crate's Cargo.toml dependencies from the store meta.json cargo config at activation - local manifest edits are reverted; the durable dependency fix goes through dev-libsettings-save_library_config.",
+    "detail": "save_library_config expects 'library_root' as the input key while get_library_config returns the same value as 'root'; passing 'root' silently writes root:\"\" into meta.json, which then breaks activate_lib's crate build cwd (empty dir, 'Unable to execute system call cargo'). Round-trip of get -> save is NOT safe field-for-field.",
+    "tags": "libsettings,meta.json,cargo,flowb",
+    "confidence": "high",
+    "time": 1786479035346
+  },
+  {
+    "claim": "The generated cmd crate declares serde/serde_json as optional with no feature wiring them on, so store code that does 'use serde::...' directly (hollis ask_llm/data) fails the host rebuild; the generator needs to emit them non-optional (or wire a serde_support feature) when a library's code imports them.",
+    "detail": "Also: a tools/call for a command whose dylib failed to load panics UNCAUGHT in Command::lookup ('No such command <id>') and kills the whole newbound mcp server - the per-command panic guard does not cover lookup.",
+    "tags": "cmd-crate,serde,mcp,panic",
+    "confidence": "high",
+    "time": 1786479035557
   }
 ]
