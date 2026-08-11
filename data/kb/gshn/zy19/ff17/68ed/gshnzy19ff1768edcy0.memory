@@ -88,5 +88,14 @@
     },
     "confidence": "high",
     "time": 1786463543673
+  },
+  {
+    "claim": "All 15 camera.camera commands got descs 2026-08-11 (mraiser/camera 0e5d87e, via dev.code.set_command_meta): the app is now discoverable over MCP - a live newbound mcp probe listed all 15 camera-camera-* tools with their descriptions (147 tools total on the overlaid checkout). This closes the descs-still-blank item in the repackage claim; desc changes touch only the store implementation records, not generated Rust, so no crate rebuild is needed for them (the running server re-reads tools/list per request).",
+    "tags": "camera,desc,discovery,mcp",
+    "source": {
+      "doc": "live newbound mcp tools/list probe, 2026-08-11"
+    },
+    "confidence": "high",
+    "time": 1786466219199
   }
 ]
