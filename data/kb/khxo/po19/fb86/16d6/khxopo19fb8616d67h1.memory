@@ -172,5 +172,14 @@
     },
     "confidence": "high",
     "time": 1786463543767
+  },
+  {
+    "claim": "The repository-management pattern for store libraries (owner-endorsed, proven on camera 2026-08-11): install a library repo with dev.github.import, which clones the WHOLE repo into repositories/<lib> in the checkout and symlinks data/<lib> + runtime/<lib> (+ the tracked FFI crate dir) into place - then manage git entirely from repositories/<lib> with the ordinary git CLI: check out the working branch there, commit store changes + regenerated crate src together, push. Store edits made via dev.code land in the repo working tree through the symlinks, so platform-command authoring and git management compose with no copying step. The dev.github command surface (import / list / ff-only update / remove) is deliberately thin - it is the installer, not the git workflow; branches, commits, pushes, and merges are the git CLI on repositories/<lib>. Proven end to end on mraiser/camera: imported, branch checked out in repositories/camera, and the FFI repackage + desc fill + rpicam fix + DVR pass each committed and pushed from there.",
+    "tags": "workflow,git,repositories,import,doctrine,pattern",
+    "source": {
+      "doc": "camera adoption session, four commits pushed from repositories/camera, 2026-08-11"
+    },
+    "confidence": "high",
+    "time": 1786468075645
   }
 ]
