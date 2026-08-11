@@ -124,5 +124,14 @@
     },
     "confidence": "high",
     "time": 1786469780400
+  },
+  {
+    "claim": "Motion-state safety landed 2026-08-11 (mraiser/camera 9b641d4): on_capture stores the previous frame + per-pixel SingleSumSMA noise model in a MotionState struct behind OnceLock<Mutex<..>> (poison-tolerant lock) - the old four static mut Vecs with unsafe references were a data race between overlapping keyframe events and an edition-2024 hard error; DELTA/DELTA2 turned out to be per-frame scratch nothing read across frames and became locals. No unsafe remains in authored camera command code (only the generated mirror_camera FFI entry every dylib crate carries). Verified in-process with red/blue fixture frames through the real command: begin/end/begin lifecycle, event json written and visible to events(), arithmetic exact (score 254 for red-vs-zero baseline), state persisting across calls. Harness facts: fire_event requires system.fire (a DataArray) in globals - seed it or on_capture panics mid-branch after remove_property(current_event); scratch seed_run now takes an extra param (JSON merged into the seeded runtime) and scratch.test.motion_probe drives the whole lifecycle in one process (exec processes do not share motion state between invocations).",
+    "tags": "camera,motion,static-mut,oncelock,mutex,edition-2024,fire-event,harness",
+    "source": {
+      "doc": "in-process motion_probe fixture run, mraiser/camera 9b641d4, 2026-08-11"
+    },
+    "confidence": "high",
+    "time": 1786470506843
   }
 ]
