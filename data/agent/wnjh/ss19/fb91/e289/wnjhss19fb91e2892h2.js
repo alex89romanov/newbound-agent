@@ -23,10 +23,6 @@ var readyP = new Promise(function (res) { me.ready = res; }).then(async () => {
     return { envelope, ms: Math.round(performance.now() - t0) };
   };
   const code = (m2, a2) => invokeP("dev", "code", m2, a2);
-  let AUTHOR = "dev";
-  jsonP("../security/current_user", null).then((r2) => {
-    if (r2.status === "ok" && r2.data) AUTHOR = r2.data.displayname || r2.data.id || "dev";
-  });
   const readRec = async (l2, id2) => {
     const r2 = await jsonP("../app/read", "lib=" + encodeURIComponent(l2) + "&id=" + encodeURIComponent(id2));
     return r2.status === "ok" ? r2.data : new Error(r2.msg || "read failed");
@@ -38,7 +34,7 @@ var readyP = new Promise(function (res) { me.ready = res; }).then(async () => {
   const readFacet = (l2, c2, f2) => code("read_control_facet", { lib: l2, ctl: c2, facet: f2 });
   const patchFacet = (l2, c2, f2, { oldSnippet, newSnippet, base = "", label = "" }) =>
     code("patch_control_facet", { lib: l2, ctl: c2, facet: f2, old_snippet: oldSnippet,
-      new_snippet: newSnippet, base, label, author: AUTHOR });
+      new_snippet: newSnippet, base, label, author: "" });
   const listPatches = (l2, c2, n2) => code("list_control_patches", { lib: l2, ctl: c2, limit: n2 ?? 0 });
   const userP = async () => {
     const r2 = await jsonP("../security/current_user", null);
