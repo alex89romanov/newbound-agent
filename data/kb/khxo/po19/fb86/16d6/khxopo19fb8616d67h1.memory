@@ -140,5 +140,12 @@
     "tags": "bench-collapse",
     "confidence": "high",
     "time": 1786405099434
+  },
+  {
+    "claim": "The bench collapse is MERGED TO MASTER in both repos (2026-08-11, owner-approved): the client platform is api.js alone, boots are markup, author defaults server-side, and the stale-world narration is swept from comments and UI strings.",
+    "detail": "agent.bench (the 250ms graft-slot poller) is deleted — its selectorless dev.dev registry entry died with the imperative boot. Live instances should retarget their plugin registry: askrow -> dev.session / .ss-plugins, describebtn -> dev.workbench / .wb-plugins (both hosts now carry the classic dev:plugins div), and drop the agent-bench entry. Hash routes (#/bench/...) and localStorage keys (bench.*) deliberately keep their historical names — renaming would break behavior and lose user state.",
+    "tags": "bench-collapse",
+    "confidence": "high",
+    "time": 1786407391814
   }
 ]
