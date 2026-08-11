@@ -95,7 +95,7 @@ const MAX_ROUNDS = 10;
 // the owner's, folded in from agent.llm.tool_loop's prompt (his call:
 // without them the model can't write ndata-correct code or reason about
 // the platform). Model-agnostic (Qwen or Claude).
-// The platform-knowledge CORE lives in the store (dev.prompts `prompt`
+// The platform-knowledge CORE lives in the store (agent.prompts `prompt`
 // facet — docs/prompting.md): ONE journaled curriculum shared with the
 // agent app's tool_loop. SYSTEM_PROMPT here is the notebook's SHELL —
 // venue, fences, memory, answer style; session assembles core + shell +
@@ -128,7 +128,7 @@ function corePrompt() {
         return r.source.trim();
       }
       corePromise = null;
-      throw new Error("dev.prompts `prompt` facet unavailable — the platform curriculum is store-resident (docs/prompting.md)");
+      throw new Error("agent.prompts `prompt` facet unavailable — the platform curriculum is store-resident (docs/prompting.md)");
     })();
   }
   return corePromise;

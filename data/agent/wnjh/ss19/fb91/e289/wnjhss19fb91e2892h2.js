@@ -531,8 +531,8 @@ async function init(host) {
 
   // ── prompts: three journaled editors ─────────────────────────────────
   const PROMPTS = [
-    { key: "core", lib: "dev", ctl: "prompts", facet: "prompt",
-      cap: "the platform-knowledge CORE (dev.prompts) — every consumer assembles on this" },
+    { key: "core", lib: "agent", ctl: "prompts", facet: "prompt",
+      cap: "the platform-knowledge CORE (agent.prompts) — every consumer assembles on this" },
     { key: "addendum", lib: "agent", ctl: "agentprompt", facet: "js",
       cap: "the OWNER ADDENDUM — appended to every notebook/chat prompt; your experiment surface",
       extract: (src) => {
