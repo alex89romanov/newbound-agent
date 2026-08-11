@@ -176,5 +176,14 @@
     },
     "confidence": "high",
     "time": 1786309390471
+  },
+  {
+    "claim": "COMMAND IDS ARE THE PEER-TO-PEER WIRE CONTRACT. The jsapi send_* wrappers resolve a command name to the CALLING instance's command id and ship the id to the remote (app.app.exec takes lib + id; the remote does Command::new(db, id) and panics 'Missing file data/...' when the id is absent). Signature compatibility is irrelevant if ids differ. Consequences: (1) NEVER delete_command + re-upsert a command that remote peers call - upsert_command alone already preserves BOTH the command record id and the rust source id for an existing name, so plain upsert is always the id-safe edit; delete-first is only for genuinely retiring a command; (2) dev.code.patch_command_body with an empty old_snippet is BROKEN - it ballooned a 1.8KB source record to 3.7MB of nested content (fold2, 2026-08-11) - use upsert_command for full-body rewrites; (3) save_command requires a live HTTP session (its app_read fails with Key 'data' not found over MCP). This id contract is what broke the owner's first v52 rollout against v51 peers, and retroactively explains the original v44-lineage 'incompatibility' too.",
+    "tags": "platform-api,p2p,exec,ids,wire,upsert,patch_command_body,bug",
+    "source": {
+      "doc": "live v51 peer panic log from the owner + app.app.exec source + fold2/fold3 verification, 2026-08-11"
+    },
+    "confidence": "high",
+    "time": 1786447774149
   }
 ]
