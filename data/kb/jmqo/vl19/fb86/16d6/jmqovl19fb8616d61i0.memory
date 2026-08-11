@@ -200,5 +200,12 @@
     "tags": "bench-collapse",
     "confidence": "high",
     "time": 1786401039423
+  },
+  {
+    "claim": "The 17 author-taking dev.code commands declare nn_sessionid (platform-injected on all web calls) and default an empty author to the session user; set_module_flag no longer exists.",
+    "detail": "Browser clients pass author:\"\" — journals record the real session displayname. CLI/MCP callers pass author explicitly (provenance names like \"claude\") AND nn_sessionid:\"\" — every declared param required. The builder does not garbage-collect deleted commands: prune the generated .rs and its mod.rs registration by hand after delete_command on a static lib. Clean generated-src commits come from a de-overlay + newbound rebuild + re-overlay cycle (the de-overlayed binary loses the agent commands until re-regenerated — rebuild again after re-overlaying before any archivist call); the regenerated initializer may drop the cmd-scaffold block when data/cmd is absent — restore it rather than committing that noise.",
+    "tags": "bench-collapse",
+    "confidence": "high",
+    "time": 1786406673052
   }
 ]
