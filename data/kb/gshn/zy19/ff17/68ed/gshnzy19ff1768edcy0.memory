@@ -151,5 +151,14 @@
     },
     "confidence": "high",
     "time": 1786471522001
+  },
+  {
+    "claim": "Malformed-param hardening landed 2026-08-11 (mraiser/camera 228b089, on the branch awaiting merge): all URL-facing numeric params (snapshot width/height/rot, keyframe timestamp, events_page since/limit) are String-declared and leniently parsed with soft-fails (no-signal placeholder / 0-defaults), closing the cast_params thread-panic class the owner hit from the settings preview retry loop; UI emitters guarded too (snapShot waits for populated selects, availability chains tolerate camera-less hosts, DVR picker skips an empty archive instead of a timestamp=NaN storm). Verified: every malformed variant returns 200 soft responses, valid requests unchanged, Playwright settings flow zero panics.",
+    "tags": "camera,hardening,params,panic,settings",
+    "source": {
+      "doc": "disposable repro + verification, mraiser/camera 228b089, 2026-08-11"
+    },
+    "confidence": "high",
+    "time": 1786472610434
   }
 ]
