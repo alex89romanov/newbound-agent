@@ -52,5 +52,14 @@
     },
     "confidence": "high",
     "time": 1786321383753
+  },
+  {
+    "claim": "The v52 candidate (newbound_nebula branch, 7e54739 on top of the verbatim v51 baseline eea4ef2) folds the overhaul onto the wild lineage per the owner's four calls: service model matches v51 (supervised child process via start + timer-fired init reading botd.properties start=; systemd demoted to labeled legacy toggles; init/start record ids preserved untouched so the control's timer wiring holds - never delete+upsert a timer-referenced command), tokens.css remains the style contract, publish stays under the v51 identity with meta version left at 51 for his publish to bump to 52. Facts learned: v44->v51 drift was only init/start/members-enrichment/smol-css/attohttpc-bump - all 14 shared command signatures byte-identical, so cross-version peer calls are safe; OLD/ cert archives and members_HOLD dirs nest INSIDE a network folder and are invisible to info/members; the supervised model has no process-stop (the running flag only stops the log pumps) and info does not report supervised state - both offered to the owner as follow-ups, not built.",
+    "tags": "nebula,v51,v52,fold,service-model,timer",
+    "source": {
+      "doc": "fold verification on a v51-seeded disposable: 15 command checks + 11 UI checks green, init timer observed firing at boot, 2026-08-10"
+    },
+    "confidence": "high",
+    "time": 1786445411924
   }
 ]
