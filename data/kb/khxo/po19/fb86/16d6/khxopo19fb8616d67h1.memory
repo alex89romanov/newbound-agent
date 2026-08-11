@@ -181,5 +181,14 @@
     },
     "confidence": "high",
     "time": 1786468075645
+  },
+  {
+    "claim": "Container test-lab facts proven on the camera live-stream job: apt-get install ffmpeg works in the CCR container (after apt-get update; the README source-build is never needed for tests); Playwright is preinstalled but its module resolves only from a dir with node_modules (npm i playwright in the scratchpad) and chromium.launch needs executablePath /opt/pw-browsers/chromium; that Chromium has NO H.264 decoder (MSE isTypeSupported false for all avc1) but has vp09/av01 - test H.264 player logic via a VP9 remux of the same stream and leave real-H.264 playback to stock browsers. A synthetic camera is one shim: rpicam-vid -> exec ffmpeg -re -i <long test.h264> -c copy -f h264 - (make the file longer than the test window; -stream_loop -1 on raw h264 dies at the loop point and takes the DVR pipeline down). Watch shim-dir contamination: a leftover ffmpeg arg-logging shim from an earlier test silently shadowed /usr/bin/ffmpeg and produced ghost failures. The disposable-instance recipe (kb.workflow) works verbatim in-container with cp -rL (no rsync installed); serve a store app by adding it to config.properties apps=.",
+    "tags": "workflow,testing,container,playwright,ffmpeg,shims,disposable",
+    "source": {
+      "doc": "camera live-stream verification session, 2026-08-11"
+    },
+    "confidence": "high",
+    "time": 1786469780483
   }
 ]

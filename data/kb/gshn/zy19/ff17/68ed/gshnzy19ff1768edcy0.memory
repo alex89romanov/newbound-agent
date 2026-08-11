@@ -115,5 +115,14 @@
     },
     "confidence": "high",
     "time": 1786467410790
+  },
+  {
+    "claim": "Live streaming landed 2026-08-11 (mraiser/camera bf377ec): camera.camera.live rewritten - registers a fan-out consumer, remuxes to fMP4 (frag_keyframe+empty_moov+default_base_moof, -c copy for H.264 sources so the Pi never transcodes), sets video/mp4 mime, returns the 404 sentinel when capture is off; teardown rides the platform semantics (appserver close_read on socket error makes DataBytes.write return false) plus a 32MB stalled-client cap, and start_recording prunes dead consumers - the leak is gone. The live control got an MSE player that derives the exact codec string from the init segment (avcC profile bytes for H.264, vpcC for VP9 - no guessing) with automatic JPEG-polling fallback. write_video/open_camera pid reads are has-guarded: open_camera exit removes the pid key and write_video get_boolean raced it, a pre-existing panic since v113, observed live when the capture process died. Verification matrix: in-process probe (1.1MB valid fMP4, ffprobe-clean, consumer count 1->2->1 across disconnect), Chromium playback of the player logic to 7s decoded video (VP9 variant - Playwright Chromium ships NO H.264 decoder; vp9/av1 only), and full-stack Playwright vs a disposable live server (login -> settings dvr -> UI -> fallback frames rendering, 128KB/3s from in-page fetch, 2/2 teardowns, 0 panics). Owner-side: H.264 MSE in a stock browser and real hardware.",
+    "tags": "camera,live,mse,fmp4,streaming,leak,verification",
+    "source": {
+      "doc": "disposable E2E + component tests, mraiser/camera bf377ec, 2026-08-11"
+    },
+    "confidence": "high",
+    "time": 1786469780400
   }
 ]
