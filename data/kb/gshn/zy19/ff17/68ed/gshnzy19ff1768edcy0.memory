@@ -142,5 +142,14 @@
     },
     "confidence": "high",
     "time": 1786470927668
+  },
+  {
+    "claim": "Correction to the packaging-pass record (ccf452a): the newbound default.nix ffmpeg/v4l-utils addition was rejected by the owner per the platform-repo boundary doctrine (kb.doctrine, 2026-08-11) and its branch stays unmerged; camera 9c7daeb amends the README so NixOS users bring the runtime tools themselves (nix-shell default.nix -p ffmpeg v4l-utils, plus rpicam-apps for CSI). Camera work merged to main through 9c7daeb; newbound-agent work merged to master the same day - both with the owner's express permission.",
+    "tags": "camera,packaging,nixos,correction,merge",
+    "source": {
+      "doc": "the owner's merge instruction, 2026-08-11"
+    },
+    "confidence": "high",
+    "time": 1786471522001
   }
 ]

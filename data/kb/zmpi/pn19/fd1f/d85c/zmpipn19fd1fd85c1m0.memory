@@ -342,5 +342,14 @@
     "tags": "bench-collapse",
     "confidence": "high",
     "time": 1786403684694
+  },
+  {
+    "claim": "Platform-repo boundary, per the owner (2026-08-11): sessions working on a non-core library make no changes to the newbound repo unless they are genuine bug fixes, and dependencies serving a non-newbound_core library are never added from newbound_core - a library's runtime dependencies are its own packaging concern. Stated while holding back a default.nix change that added ffmpeg/v4l-utils to the platform dev shell for the camera app: the newbound branch claude/camera-app-architecture-owco72 carrying it stays unmerged, and camera's README now brings its own tools into the shell (nix-shell default.nix -p ffmpeg v4l-utils) instead.",
+    "tags": "doctrine,newbound,boundary,dependencies,packaging",
+    "source": {
+      "doc": "the owner's merge instruction, 2026-08-11"
+    },
+    "confidence": "high",
+    "time": 1786471521758
   }
 ]
