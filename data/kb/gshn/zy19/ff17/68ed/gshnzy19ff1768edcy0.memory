@@ -106,5 +106,14 @@
     },
     "confidence": "high",
     "time": 1786466839987
+  },
+  {
+    "claim": "The DVR correctness pass landed 2026-08-11 (mraiser/camera 37a972c): status first/last scan rewritten to an Option-based extreme() walk (fixes the midnight sentinel bug where hour/minute/slot 0 dropped last, and converts slot to real seconds - the old scan was up to 30s off); events sorted server-side by time, [] on missing events dir (fresh installs used to panic), torn-write event files skipped via catch_unwind around from_string; keyframes refuses .. traversal (no-signal placeholder); snapshot V4L2 branch accepts only /dev/* devices. Verified via the scratch seed_run harness pattern: a scratch command that seeds system/apps/camera/runtime globals (storage param) then dispatches any command through Command::lookup - this makes settings-dependent camera commands fully testable under one-shot newbound exec, which otherwise panics on missing globals. Kept for reuse: exec scratch test seed_run {storage,cmdlib,cmdctl,cmdname,args}. events pagination deliberately deferred (signature stability for cross-version peers); live-server/hardware verification still owner-side.",
+    "tags": "camera,dvr,status,events,traversal,scratch,test-harness",
+    "source": {
+      "doc": "in-process fixture tests via scratch.test.seed_run, mraiser/camera 37a972c, 2026-08-11"
+    },
+    "confidence": "high",
+    "time": 1786467410790
   }
 ]
