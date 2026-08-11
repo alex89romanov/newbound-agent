@@ -31,19 +31,16 @@ It comes up with HTTP on 33182 and a freshly assigned P2P port/identity.
 Login for API use: any fresh session id in the `sessionid` cookie +
 `GET /app/login?user=admin&pass=<from newbound-scratch/users/admin.properties>`.
 
-**Seeding `runtime/metaidentity`** (needed once per disposable before
-`--publish`): the mirror gitignores `/data/runtime` (identity keys —
-redaction working as intended), so clone-built instances have no
-`metaidentity` record and `publishapp` panics on its known FIXME. Seed a
-minimal one (the record is read fresh from disk — no restart):
-
-```bash
-S=/home/gm/Desktop/Marc/newbound-scratch
-mkdir -p $S/data/runtime/meta/iden/tity/____
-cat > $S/data/runtime/meta/iden/tity/____/metaidentity <<'EOF'
-{"data":{"displayname":"scratch","organization":""},"id":"metaidentity","readers":[],"time":0,"username":"admin","writers":[]}
-EOF
-```
+**`runtime/metaidentity` seeds itself** — `dev.code.init` (timer-fired
+once at boot, like `security.security.init`) creates the record with the
+platform's historical default identity, "Some Dev", whenever it is absent
+— which it is on every clone-built instance, since the repo gitignores
+`/data/runtime` (identity keys — redaction working as intended). So a
+disposable publishes out of the box; no hand-seeding, and `publishapp`'s
+missing-record panic can't be reached from a normal boot. Change the
+identity in the workbench publish pane (or `dev-code-set_meta_identity`)
+if the test needs a specific name. Only a binary older than `dev.code.init`
+still needs the old hand-seed of a minimal record.
 
 Installing the bench on it: `python3 tools/install-bench.py --base
 http://localhost:33182 --user admin --password <pw> --disposable --publish`
@@ -106,11 +103,7 @@ sed -e 's/^http_port=.*/http_port=33199/' \
     -e 's/^apps=.*/apps=app,dev,security,peer,bench/' \
     $S/config.properties_example > $S/config.properties
 
-# seed metaidentity (same as above), then boot detached
-mkdir -p $S/data/runtime/meta/iden/tity/____
-cat > $S/data/runtime/meta/iden/tity/____/metaidentity <<'JSON'
-{"data":{"displayname":"scratch","organization":""},"id":"metaidentity","readers":[],"time":0,"username":"admin","writers":[]}
-JSON
+# boot detached (metaidentity self-seeds at boot — see above)
 cd $S && setsid nohup ./target/release/newbound > boot.log 2>&1 < /dev/null &
 ```
 
