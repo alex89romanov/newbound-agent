@@ -522,6 +522,131 @@ pub mod app {
     }
 }
 
+pub mod camera {
+    pub mod camera {
+        use ::ndata::dataobject::DataObject;
+        use ::ndata::dataarray::DataArray;
+        use ::ndata::databytes::DataBytes;
+        use ::ndata::data::Data;
+
+        pub fn available() -> DataObject {
+            let d = DataObject::new();
+            ::flowlang::rustcmd::RustCmd::new("vjpitv1843dfcd472td7").execute(d).expect("Rust command execution failed").get_object("a")
+        }
+
+        pub fn events() -> DataArray {
+            let d = DataObject::new();
+            ::flowlang::rustcmd::RustCmd::new("vyywsl18495656547m98").execute(d).expect("Rust command execution failed").get_array("a")
+        }
+
+        pub fn init() -> String {
+            let d = DataObject::new();
+            ::flowlang::rustcmd::RustCmd::new("lpxgsi18439f44808s89").execute(d).expect("Rust command execution failed").get_string("a")
+        }
+
+        pub fn keyframe(timestamp: i64) -> String {
+            let mut d = DataObject::new();
+            d.put_int("timestamp", timestamp);
+            ::flowlang::rustcmd::RustCmd::new("uypumz184f29704cbs39").execute(d).expect("Rust command execution failed").get_string("a")
+        }
+
+        pub fn keyframes(nn_path: String) -> String {
+            let mut d = DataObject::new();
+            d.put_string("nn_path", &nn_path);
+            ::flowlang::rustcmd::RustCmd::new("zvlkyu184b51974e2qa").execute(d).expect("Rust command execution failed").get_string("a")
+        }
+
+        pub fn last_keyframe() -> String {
+            let d = DataObject::new();
+            ::flowlang::rustcmd::RustCmd::new("kwpmxu1844e0f248am45").execute(d).expect("Rust command execution failed").get_string("a")
+        }
+
+        pub fn on_capture(jpg: String, timestamp: i64, mp4: String) -> String {
+            let mut d = DataObject::new();
+            d.put_string("jpg", &jpg);
+            d.put_int("timestamp", timestamp);
+            d.put_string("mp4", &mp4);
+            ::flowlang::rustcmd::RustCmd::new("twnymk1844db44f3fve4").execute(d).expect("Rust command execution failed").get_string("a")
+        }
+
+        pub fn play(nn_path: String) -> String {
+            let mut d = DataObject::new();
+            d.put_string("nn_path", &nn_path);
+            ::flowlang::rustcmd::RustCmd::new("guwsgi184b8daca10re").execute(d).expect("Rust command execution failed").get_string("a")
+        }
+
+        pub fn remove_old() -> String {
+            let d = DataObject::new();
+            ::flowlang::rustcmd::RustCmd::new("vgxvrr184f385730fy1da").execute(d).expect("Rust command execution failed").get_string("a")
+        }
+
+        pub fn settings(settings: Data) -> DataObject {
+            let mut d = DataObject::new();
+            d.set_property("settings", settings);
+            ::flowlang::rustcmd::RustCmd::new("mgyrou18447eaa6c2l78e").execute(d).expect("Rust command execution failed").get_object("a")
+        }
+
+        pub fn snapshot(device: String, format: String, width: i64, height: i64, rot: i64) -> String {
+            let mut d = DataObject::new();
+            d.put_string("device", &device);
+            d.put_string("format", &format);
+            d.put_int("width", width);
+            d.put_int("height", height);
+            d.put_int("rot", rot);
+            ::flowlang::rustcmd::RustCmd::new("suqirv184446104d3x55").execute(d).expect("Rust command execution failed").get_string("a")
+        }
+
+        pub fn start_recording() -> String {
+            let d = DataObject::new();
+            ::flowlang::rustcmd::RustCmd::new("lspkqt18439ff8220ta5").execute(d).expect("Rust command execution failed").get_string("a")
+        }
+
+        pub fn status() -> DataObject {
+            let d = DataObject::new();
+            ::flowlang::rustcmd::RustCmd::new("norphu18452a74484p2ed").execute(d).expect("Rust command execution failed").get_object("a")
+        }
+
+        pub fn stop_recording() -> String {
+            let d = DataObject::new();
+            ::flowlang::rustcmd::RustCmd::new("lkiphi1844d32b0f5z24").execute(d).expect("Rust command execution failed").get_string("a")
+        }
+
+        pub fn live() -> DataBytes {
+            let d = DataObject::new();
+            ::flowlang::rustcmd::RustCmd::new("sgmxup1869485c680qaa").execute(d).expect("Rust command execution failed").get_bytes("a")
+        }
+
+    }
+    pub mod camera_settings {
+        use ::ndata::dataobject::DataObject;
+        use ::ndata::dataarray::DataArray;
+        use ::ndata::databytes::DataBytes;
+        use ::ndata::data::Data;
+
+    }
+    pub mod dvr {
+        use ::ndata::dataobject::DataObject;
+        use ::ndata::dataarray::DataArray;
+        use ::ndata::databytes::DataBytes;
+        use ::ndata::data::Data;
+
+    }
+    pub mod live {
+        use ::ndata::dataobject::DataObject;
+        use ::ndata::dataarray::DataArray;
+        use ::ndata::databytes::DataBytes;
+        use ::ndata::data::Data;
+
+    }
+    pub mod dvr_settings {
+        use ::ndata::dataobject::DataObject;
+        use ::ndata::dataarray::DataArray;
+        use ::ndata::databytes::DataBytes;
+        use ::ndata::data::Data;
+
+    }
+}
+
 pub mod dev {
     pub mod dev {
         use ::ndata::dataobject::DataObject;
@@ -1325,6 +1450,13 @@ pub mod kb {
         use ::ndata::data::Data;
 
     }
+    pub mod camera {
+        use ::ndata::dataobject::DataObject;
+        use ::ndata::dataarray::DataArray;
+        use ::ndata::databytes::DataBytes;
+        use ::ndata::data::Data;
+
+    }
 }
 
 pub mod peer {
@@ -1599,6 +1731,11 @@ pub struct old_app_scenerun {}
 pub struct old_app_forcelayout {}
 pub struct old_app_tokens {}
 pub struct old_app_webgl {}
+pub struct old_camera_camera {}
+pub struct old_camera_camera_settings {}
+pub struct old_camera_dvr {}
+pub struct old_camera_live {}
+pub struct old_camera_dvr_settings {}
 pub struct old_dev_dev {}
 pub struct old_dev_editcommand {}
 pub struct old_dev_editcontrol {}
@@ -1630,6 +1767,7 @@ pub struct old_kb_frontend {}
 pub struct old_kb_m2026_07 {}
 pub struct old_kb_doctrine {}
 pub struct old_kb_nebula {}
+pub struct old_kb_camera {}
 pub struct old_peer_headsup {}
 pub struct old_peer_peer {}
 pub struct old_peer_peer_model {}
@@ -1678,6 +1816,13 @@ pub struct old_app {
     pub tokens: old_app_tokens,
     pub webgl: old_app_webgl,
 }
+pub struct old_camera {
+    pub camera: old_camera_camera,
+    pub camera_settings: old_camera_camera_settings,
+    pub dvr: old_camera_dvr,
+    pub live: old_camera_live,
+    pub dvr_settings: old_camera_dvr_settings,
+}
 pub struct old_dev {
     pub dev: old_dev_dev,
     pub editcommand: old_dev_editcommand,
@@ -1712,6 +1857,7 @@ pub struct old_kb {
     pub m2026_07: old_kb_m2026_07,
     pub doctrine: old_kb_doctrine,
     pub nebula: old_kb_nebula,
+    pub camera: old_kb_camera,
 }
 pub struct old_peer {
     pub headsup: old_peer_headsup,
@@ -1730,6 +1876,7 @@ pub struct old_security {
 pub struct api {
     pub agent: old_agent,
     pub app: old_app,
+    pub camera: old_camera,
     pub dev: old_dev,
     pub kb: old_kb,
     pub peer: old_peer,
@@ -1779,6 +1926,13 @@ pub const fn new() -> api {
             tokens: old_app_tokens {},
             webgl: old_app_webgl {},
         },
+        camera: old_camera {
+            camera: old_camera_camera {},
+            camera_settings: old_camera_camera_settings {},
+            dvr: old_camera_dvr {},
+            live: old_camera_live {},
+            dvr_settings: old_camera_dvr_settings {},
+        },
         dev: old_dev {
             dev: old_dev_dev {},
             editcommand: old_dev_editcommand {},
@@ -1813,6 +1967,7 @@ pub const fn new() -> api {
             m2026_07: old_kb_m2026_07 {},
             doctrine: old_kb_doctrine {},
             nebula: old_kb_nebula {},
+            camera: old_kb_camera {},
         },
         peer: old_peer {
             headsup: old_peer_headsup {},
@@ -1995,6 +2150,68 @@ impl old_app_util {
     #[deprecated(note = "use api::app::util::zip instead")]
     pub fn zip(&self, srcdir: String, destfile: String) -> bool {
         self::app::util::zip(srcdir, destfile)
+    }
+}
+impl old_camera_camera {
+    #[deprecated(note = "use api::camera::camera::available instead")]
+    pub fn available(&self) -> DataObject {
+        self::camera::camera::available()
+    }
+    #[deprecated(note = "use api::camera::camera::events instead")]
+    pub fn events(&self) -> DataArray {
+        self::camera::camera::events()
+    }
+    #[deprecated(note = "use api::camera::camera::init instead")]
+    pub fn init(&self) -> String {
+        self::camera::camera::init()
+    }
+    #[deprecated(note = "use api::camera::camera::keyframe instead")]
+    pub fn keyframe(&self, timestamp: i64) -> String {
+        self::camera::camera::keyframe(timestamp)
+    }
+    #[deprecated(note = "use api::camera::camera::keyframes instead")]
+    pub fn keyframes(&self, nn_path: String) -> String {
+        self::camera::camera::keyframes(nn_path)
+    }
+    #[deprecated(note = "use api::camera::camera::last_keyframe instead")]
+    pub fn last_keyframe(&self) -> String {
+        self::camera::camera::last_keyframe()
+    }
+    #[deprecated(note = "use api::camera::camera::on_capture instead")]
+    pub fn on_capture(&self, jpg: String, timestamp: i64, mp4: String) -> String {
+        self::camera::camera::on_capture(jpg, timestamp, mp4)
+    }
+    #[deprecated(note = "use api::camera::camera::play instead")]
+    pub fn play(&self, nn_path: String) -> String {
+        self::camera::camera::play(nn_path)
+    }
+    #[deprecated(note = "use api::camera::camera::remove_old instead")]
+    pub fn remove_old(&self) -> String {
+        self::camera::camera::remove_old()
+    }
+    #[deprecated(note = "use api::camera::camera::settings instead")]
+    pub fn settings(&self, settings: Data) -> DataObject {
+        self::camera::camera::settings(settings)
+    }
+    #[deprecated(note = "use api::camera::camera::snapshot instead")]
+    pub fn snapshot(&self, device: String, format: String, width: i64, height: i64, rot: i64) -> String {
+        self::camera::camera::snapshot(device, format, width, height, rot)
+    }
+    #[deprecated(note = "use api::camera::camera::start_recording instead")]
+    pub fn start_recording(&self) -> String {
+        self::camera::camera::start_recording()
+    }
+    #[deprecated(note = "use api::camera::camera::status instead")]
+    pub fn status(&self) -> DataObject {
+        self::camera::camera::status()
+    }
+    #[deprecated(note = "use api::camera::camera::stop_recording instead")]
+    pub fn stop_recording(&self) -> String {
+        self::camera::camera::stop_recording()
+    }
+    #[deprecated(note = "use api::camera::camera::live instead")]
+    pub fn live(&self) -> DataBytes {
+        self::camera::camera::live()
     }
 }
 impl old_dev_dev {
