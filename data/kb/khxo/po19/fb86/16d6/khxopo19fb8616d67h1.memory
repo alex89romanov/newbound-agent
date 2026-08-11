@@ -102,5 +102,14 @@
     },
     "confidence": "high",
     "time": 1786289737656
+  },
+  {
+    "claim": "Before overhauling or rewriting a published library, confirm with the owner that the git repo matches what the fleet actually runs - git can silently lag the wild. The nebula overhaul (2026-08-09/10) was built and verified against the repo's v44-lineage store while live instances ran v51; publishapp bumps versions on the publishing instance and nothing pushes canon back to git or warns of the lag. Recovery levers when this happens: the publishing instance archives every published version at runtime/dev/libraries/<lib>_<v>.zip (meta + hash alongside), and any live instance's data/<lib> IS the current version - recover the wild baseline first, diff, and fold the overhaul onto it rather than fighting it. Signature drift matters most: the peer proxy dispatches commands by name and every declared param is required, so cross-version send_* calls break exactly at renamed/re-parameterized commands.",
+    "tags": "workflow,versioning,publish,drift,nebula",
+    "source": {
+      "doc": "the owner's discovery in session, 2026-08-10 - repo v44 vs wild v51"
+    },
+    "confidence": "high",
+    "time": 1786443253555
   }
 ]
