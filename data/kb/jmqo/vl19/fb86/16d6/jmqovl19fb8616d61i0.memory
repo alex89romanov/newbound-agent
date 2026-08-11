@@ -246,6 +246,15 @@
     "time": 1786447774149
   },
   {
+    "claim": "flowlang Command::cast_params (0.3.31, command.rs:158) panics on a MALFORMED value for a declared Integer param - parse::<i64>().unwrap() - killing the HTTP handler thread; the 0.3.30 wrapper guard covers only MISSING params. Any UI that builds command URLs from unvalidated DOM values (empty select -> width=, undefined chains, Date arithmetic -> NaN) can panic a thread per request; a retrying poller makes it continuous, which is how the owner hit it in the camera settings preview (2026-08-11). Until fixed upstream, the library-side idiom is: declare URL-facing numeric params as String and parse leniently in-body with a soft-fail (camera does this across snapshot/keyframe/events_page since 228b089); declared-type changes are wire-compatible because query params are strings anyway.",
+    "tags": "flowlang,cast_params,panic,http,params,hardening",
+    "source": {
+      "doc": "owner panic report + disposable repro, flowlang 0.3.31 command.rs:158, 2026-08-11"
+    },
+    "confidence": "high",
+    "time": 1786472610314
+  },
+  {
     "claim": "dev.github.import (and anything reaching flowlang appserver load_library) cannot run via 'newbound exec' - the exec path skips init_globals(), so load_library panics with \"Key 'system' not found\"; route such commands through 'newbound mcp' tools/call, which inits globals first.",
     "detail": "Observed 2026-08-11 installing mraiser/hollis. src/main.rs: exec branch calls Command::lookup directly; only the mcp branch calls init_globals().",
     "tags": "dev.github,exec,mcp,init_globals",
