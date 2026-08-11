@@ -293,5 +293,12 @@
     "tags": "flowlang,mcp,panic-guard,build_all,stale-modules",
     "confidence": "high",
     "time": 1786487289900
+  },
+  {
+    "claim": "The flowlang/ndata version lives in FIVE hand-maintained manifests plus data/app/meta.json, and a bump must touch each one: builder::cargo::get_core_dependency_lines() reads the root Cargo.toml but is called ONLY when a subcrate manifest does not yet exist, so it seeds new crates and never rewrites an existing pin - 'newbound rebuild' will not propagate a bump to agent/kb/scratch/hollis/cmd.",
+    "detail": "data/app/meta.json is the pin for newbound_core's generated manifest (app's root is newbound_core), so it must be bumped through dev.libsettings.save_library_config or the next sync reverts newbound_core/Cargo.toml. Verified 2026-08-11 bumping 0.3.31 -> 0.3.32: after rebuild, the live hollis install still read 0.3.31 until edited directly. Note the hardcoded fallback in get_core_dependency_lines is stale (0.3.31/0.3.17); it only applies when the root Cargo.toml is missing, and would be self-maintaining as env!(\"CARGO_PKG_VERSION\").",
+    "tags": "flowlang,version-bump,builder,meta.json",
+    "confidence": "high",
+    "time": 1786489296164
   }
 ]

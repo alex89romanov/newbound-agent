@@ -204,5 +204,12 @@
     "tags": "hollis,fixed,models,discoverability",
     "confidence": "high",
     "time": 1786482273806
+  },
+  {
+    "claim": "An FFI crate whose serde deps are optional behind serde_support (the agent pattern) must be built with --features=serde_support; a bare 'cargo build --release' fails on unresolved serde/serde_json imports and on ndata's serde-gated DataObject::to_json.",
+    "detail": "Hit while rebuilding hollis at flowlang 0.3.32 - it looked like a 0.3.32 breakage but was the missing feature flag. The platform path is unaffected (build_compile_command passes the host's features), and hollis's install.sh already builds the crate with the flag.",
+    "tags": "serde_support,ffi,build",
+    "confidence": "high",
+    "time": 1786489296683
   }
 ]
