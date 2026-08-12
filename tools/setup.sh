@@ -72,6 +72,11 @@ if [ ! -d cmd/src ]; then
   "$AGENT_DIR/tools/gen-cmd-crate.py" .
 fi
 
+# Whether the host binary predates this run decides what can be said
+# about MCP attachment at the end (step 10).
+HOST_PREBUILT=no
+[ -x target/release/newbound ] && HOST_PREBUILT=yes
+
 # 3. Host build (first pass). No-op when already built.
 cargo build --release --features=serde_support
 
@@ -149,3 +154,31 @@ fi
 
 echo "== setup complete: $NB serves the store via ./target/release/newbound mcp,"
 echo "==   or run ./target/release/newbound for the web UI (agent app at /agent/index.html)"
+
+# 10. Attachment sense. The server side is proven (the probe), but whether a
+#     CLIENT holds the native attachment can't be read from here — harnesses
+#     spawn .mcp.json servers only at their own startup. Infer what we can:
+#     a live server process means some client is attached; none means none is.
+MCP_PID=$(pgrep -f 'newbound mcp$' | head -1 || true)
+if [ -n "$MCP_PID" ]; then
+  echo "== MCP: a live 'newbound mcp' process exists (pid $MCP_PID) — a client is attached"
+else
+  if [ "$HOST_PREBUILT" = no ]; then
+    echo "== MCP: no client is attached — none could be: the newbound binary was built by"
+    echo "==   THIS run, and clients spawn .mcp.json servers only when they start."
+  else
+    echo "== MCP: no live 'newbound mcp' process — no client is currently attached."
+  fi
+  if [ "${CLAUDE_CODE_REMOTE:-}" = "true" ]; then
+    echo "==   This is a Claude Code web session: attachment happens only at session start"
+    echo "==   and builds don't persist between sessions, so set the environment's setup"
+    echo "==   script to newbound-agent/tools/setup.sh to make every session attach"
+    echo "==   natively. Until then, drive the store with tools/nb-call.py (same surface)."
+  else
+    echo "==   Claude Code (CLI/IDE) reads this checkout's .mcp.json — restart it or"
+    echo "==   reconnect via /mcp. Claude Desktop doesn't read .mcp.json; add the server"
+    echo "==   to its config (Settings > Developer > Edit Config):"
+    echo "==     {\"mcpServers\": {\"newbound\": {\"command\": \"/bin/sh\","
+    echo "==       \"args\": [\"-c\", \"cd $NB && exec ./target/release/newbound mcp\"]}}}"
+  fi
+fi

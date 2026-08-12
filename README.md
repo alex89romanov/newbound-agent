@@ -80,6 +80,18 @@ the coding harness natively — but only if the binary exists when the
 session starts; a session that begins on an unbuilt container loses the
 native attachment for its lifetime even after building.
 
+Setup ends with an **attachment sense**: it can't read the client's
+tool surface, but a live `newbound mcp` process means some client is
+attached, and no process means none is — in which case it says why
+(a binary built by that very run could not have been spawned by an
+already-running client) and prints the fix for the environment it's in:
+restart/reconnect for Claude Code CLI/IDE, the environment setup script
+for web sessions, and for **Claude Desktop** — which doesn't read
+`.mcp.json` at all — a paste-ready server entry for its config
+(Settings → Developer → Edit Config) with the checkout's absolute path
+baked in, wrapped in `sh -c 'cd … && exec …'` because the server
+operates on its cwd's store.
+
 Getting the binary built *before* session start: the reliable way on
 Claude Code on the web is the **environment's setup script** — point it
 at `newbound-agent/tools/setup.sh` (it self-locates from any cwd). This
