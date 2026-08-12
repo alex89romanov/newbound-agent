@@ -46,9 +46,10 @@ Setup copies `data/agent/_APPS/agent` there, excludes it via the
 per-clone `.git/info/exclude` (the platform's tracked `.gitignore`
 doesn't know the agent), and ensures `agent` is in the `apps` list —
 creating `config.properties` from the example when absent, appending to
-the list when present. It never touches other keys; note that a bare
-`newbound mcp` run auto-creates the file with `http_port=0`, which setup
-flags but deliberately leaves alone.
+the list when present. A bare `newbound mcp` run auto-creates the file
+with `http_port=0` (no HTTP listener) — never a choice anyone made, so
+setup normalizes exactly that value to `8080`; any other key, and any
+deliberately chosen port, is left alone.
 
 The overlay symlinks `data/agent`, `data/kb`, `data/scratch`, `agent/`,
 `kb/`, `scratch/` into the checkout and marks the tracked scratch

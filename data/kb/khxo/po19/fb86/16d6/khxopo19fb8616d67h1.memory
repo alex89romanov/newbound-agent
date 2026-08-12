@@ -274,5 +274,14 @@
     },
     "confidence": "high",
     "time": 1786546223147
+  },
+  {
+    "claim": "Addendum to the app-staging claim (p30): setup.sh now NORMALIZES http_port=0 to 8080 in config.properties instead of only flagging it - a second clean-session test showed the flag-only design still cost the session a manual edit, and http_port=0 in a dev checkout is never intent, only the residue of a bare newbound-mcp run auto-creating the file. Exactly the value 0 is rewritten; any other port and all other keys stay untouched.",
+    "tags": "workflow,setup,config.properties,http_port,correction",
+    "source": {
+      "doc": "second clean-session test + tools/setup.sh, 2026-08-12"
+    },
+    "confidence": "high",
+    "time": 1786547702324
   }
 ]

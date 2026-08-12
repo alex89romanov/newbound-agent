@@ -117,7 +117,11 @@ else
   echo "== added an apps list with agent to config.properties"
 fi
 if grep -q '^http_port=0$' config.properties; then
-  echo "== note: http_port=0 in config.properties (an mcp run auto-creates it that way) — set e.g. http_port=8080 to serve the app over HTTP"
+  # http_port=0 is never a choice anyone made in a dev checkout — it is
+  # the residue of a bare `newbound mcp` run auto-creating the file.
+  # Any other value (a deliberate port) is left alone.
+  sed -i 's/^http_port=0$/http_port=8080/' config.properties
+  echo "== set http_port=8080 in config.properties (was the mcp-run default 0 = no HTTP listener)"
 fi
 
 # 7. Git hygiene, newbound side: builder-written local state stays invisible.
