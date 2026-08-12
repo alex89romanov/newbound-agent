@@ -256,5 +256,23 @@
     },
     "confidence": "high",
     "time": 1786544204816
+  },
+  {
+    "claim": "CORRECTION to the setup claim of 2026-08-12 (patch p26): repo-level .claude/settings.json SessionStart hooks do NOT fire in a two-repo CCR session - the project directory is the PARENT of the side-by-side checkouts and per-repo hooks are not loaded from source repos. Verified in a clean-session test: fresh container, hook present on the checked-out branch, binary still unbuilt when the session started; only user-level ~/.claude hooks ran. The hook stays for single-repo sessions; the reliable pre-session build is the CCR environment setup script pointing at tools/setup.sh. A first session on an unbuilt environment therefore still drives the store via tools/nb-call.py.",
+    "tags": "workflow,ccr,session-start-hook,correction,mcp",
+    "source": {
+      "doc": "clean-session test on claude/newbound-agent-startup-7wy2n0, reported 2026-08-12"
+    },
+    "confidence": "high",
+    "time": 1786546222929
+  },
+  {
+    "claim": "Serving the agent APP requires the install_lib staging the overlay never runs: the server serves only apps named in config.properties apps=, and the app shell must exist at runtime/agent. tools/setup.sh now stages it - copies data/agent/_APPS/agent to runtime/agent, adds /runtime/agent to the newbound clone .git/info/exclude (per-clone: the platform .gitignore must not know the agent), and ensures agent is in apps=, creating config.properties from the example (http_port=8080) when absent or appending when present. Caveat: a bare newbound-mcp run auto-creates config.properties with http_port=0 and no agent app - setup appends agent and flags the port but deliberately leaves other keys alone. Verified 2026-08-12 in a disposable: fresh clone -> setup.sh -> server boot -> /agent/index.html answers 200 -> both git trees still clean.",
+    "tags": "workflow,setup,install_lib,runtime-staging,config.properties,agent-app",
+    "source": {
+      "doc": "tools/setup.sh staging step + disposable server-boot test, 2026-08-12"
+    },
+    "confidence": "high",
+    "time": 1786546223147
   }
 ]

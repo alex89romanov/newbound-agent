@@ -31,12 +31,24 @@ path/to/newbound-agent/tools/setup.sh    # finds the sibling checkout;
 
 Idempotent: on a fresh clone it is the complete first-time sequence
 (symlink overlay → `cmd/` scaffold if absent → host build →
-`newbound rebuild` → host build with the FFI blocks → the three dylibs),
-finishing with the git hygiene below and the overlay probe as proof. On
-an already-set-up checkout every step short-circuits and the whole run
-takes seconds. In a Claude Code on the web session the committed
-SessionStart hook (`.claude/hooks/session-start.sh`) runs it
-automatically at container start.
+`newbound rebuild` → host build with the FFI blocks → the three dylibs
+→ agent-app staging), finishing with the git hygiene below and the
+overlay probe as proof. On an already-set-up checkout every step
+short-circuits and the whole run takes seconds. Afterwards
+`./target/release/newbound` serves the web UI (the agent app at
+`/agent/index.html`, port per `config.properties`) and
+`./target/release/newbound mcp` serves the store to a coding harness.
+
+The app staging is the piece of the platform's `install_lib` step the
+overlay doesn't cover: the server serves only apps listed in
+`config.properties`, and the app shell must exist under `runtime/agent`.
+Setup copies `data/agent/_APPS/agent` there, excludes it via the
+per-clone `.git/info/exclude` (the platform's tracked `.gitignore`
+doesn't know the agent), and ensures `agent` is in the `apps` list —
+creating `config.properties` from the example when absent, appending to
+the list when present. It never touches other keys; note that a bare
+`newbound mcp` run auto-creates the file with `http_port=0`, which setup
+flags but deliberately leaves alone.
 
 The overlay symlinks `data/agent`, `data/kb`, `data/scratch`, `agent/`,
 `kb/`, `scratch/` into the checkout and marks the tracked scratch
@@ -65,11 +77,19 @@ neither can land in an accidental commit:
 The checkout's `.mcp.json` attaches `./target/release/newbound mcp` to
 the coding harness natively — but only if the binary exists when the
 session starts; a session that begins on an unbuilt container loses the
-native attachment for its lifetime even after building. The SessionStart
-hook (or a CCR environment setup script running `tools/setup.sh`)
-closes that gap for subsequent sessions on the same container. For a
-session where attachment already failed, `tools/nb-call.py` drives the
-same tool surface over stdin JSON-RPC:
+native attachment for its lifetime even after building.
+
+Getting the binary built *before* session start: the reliable way on
+Claude Code on the web is the **environment's setup script** — point it
+at `tools/setup.sh`. This repo also carries a SessionStart hook
+(`.claude/hooks/session-start.sh`), but repo-level hooks only load when
+this repo is the session's project directory: in a two-repo session
+(newbound + newbound-agent side by side — the normal layout) the
+project directory is their parent and the hook does **not** fire
+(verified 2026-08-12).
+
+For a session where attachment already failed, `tools/nb-call.py`
+drives the same tool surface over stdin JSON-RPC:
 
 ```bash
 tools/nb-call.py --list dev-code-              # discover

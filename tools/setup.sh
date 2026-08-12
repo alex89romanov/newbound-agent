@@ -11,8 +11,11 @@
 # Idempotent: on a fully set-up checkout every step short-circuits and the
 # whole run takes seconds. On a fresh clone it is the complete first-time
 # sequence from the README (overlay -> cmd scaffold -> host build ->
-# `newbound rebuild` -> host build -> dylibs), followed by the git hygiene
-# that keeps regenerated local state out of accidental commits:
+# `newbound rebuild` -> host build -> dylibs), then the app staging the
+# overlay otherwise misses (the platform's install_lib step: the server
+# serves only apps listed in config.properties, and runtime/agent must
+# carry the app shell), followed by the git hygiene that keeps regenerated
+# local state out of accidental commits:
 #
 #   - newbound repo: Cargo.toml (workspace exclude), the generated
 #     initializer, and newbound_core/src/api.rs are rewritten by
@@ -88,13 +91,42 @@ fi
 (cd kb && cargo build --release)
 (cd scratch && cargo build --release)
 
-# 6. Git hygiene, newbound side: builder-written local state stays invisible.
+# 6. Stage the agent app — what the platform's install_lib does on a real
+#    install, which the overlay never runs. All of it is per-clone local
+#    state: runtime/agent is excluded via .git/info/exclude (the tracked
+#    .gitignore belongs to the platform and doesn't know the agent), and
+#    config.properties is already gitignored.
+if [ ! -d runtime/agent ]; then
+  cp -r data/agent/_APPS/agent runtime/agent
+  echo "== staged data/agent/_APPS/agent -> runtime/agent"
+fi
+if ! grep -qx '/runtime/agent' .git/info/exclude 2>/dev/null; then
+  echo '/runtime/agent' >> .git/info/exclude
+  echo "== added /runtime/agent to .git/info/exclude"
+fi
+if [ ! -f config.properties ]; then
+  sed 's/^apps=.*/&,agent/' config.properties_example > config.properties
+  echo "== created config.properties from the example, agent app enabled"
+elif grep -Eq '^apps=(.*,)?agent(,|$)' config.properties; then
+  : # agent already enabled
+elif grep -q '^apps=' config.properties; then
+  sed -i 's/^apps=.*/&,agent/' config.properties
+  echo "== added agent to the apps list in config.properties"
+else
+  echo 'apps=app,dev,security,peer,agent' >> config.properties
+  echo "== added an apps list with agent to config.properties"
+fi
+if grep -q '^http_port=0$' config.properties; then
+  echo "== note: http_port=0 in config.properties (an mcp run auto-creates it that way) — set e.g. http_port=8080 to serve the app over HTTP"
+fi
+
+# 7. Git hygiene, newbound side: builder-written local state stays invisible.
 for f in Cargo.toml src/generated_initializer.rs newbound_core/src/api.rs; do
   git update-index --skip-worktree "$f" 2>/dev/null || true
 done
 echo "== skip-worktree set on the builder-written newbound files (undo: git update-index --no-skip-worktree <file>)"
 
-# 7. Git hygiene, agent side: drop environment-induced api.rs regeneration.
+# 8. Git hygiene, agent side: drop environment-induced api.rs regeneration.
 (cd "$AGENT_DIR"
  for f in $CHURN_FILES; do
    case "$DIRTY_BEFORE" in
@@ -106,9 +138,10 @@ echo "== skip-worktree set on the builder-written newbound files (undo: git upda
    esac
  done)
 
-# 8. Prove it.
+# 9. Prove it.
 if [ "$PROBE" = yes ]; then
   "$AGENT_DIR/tools/overlay-probe.py" "$NB"
 fi
 
-echo "== setup complete: $NB serves the store via ./target/release/newbound mcp"
+echo "== setup complete: $NB serves the store via ./target/release/newbound mcp,"
+echo "==   or run ./target/release/newbound for the web UI (agent app at /agent/index.html)"

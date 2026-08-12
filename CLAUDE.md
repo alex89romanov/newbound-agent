@@ -23,9 +23,10 @@ a `mraiser/newbound` checkout via symlinks. The full process is
 
 ## Session start
 
-1. Overlay + build: `tools/setup.sh` — one idempotent command (the web
-   SessionStart hook runs it automatically; see README for what it
-   does). After the first build, dylibs hot-reload and only
+1. Overlay + build + app staging: `tools/setup.sh` — one idempotent
+   command (see README for what it does; repo-level SessionStart hooks
+   don't fire in two-repo web sessions, so run it if the binary is
+   missing). After the first build, dylibs hot-reload and only
    `newbound_core`-rooted Rust needs a host rebuild + restart.
 2. The platform checkout's `.mcp.json` attaches `newbound mcp` — every
    store command is a native tool, named `lib-control-command`. If the
