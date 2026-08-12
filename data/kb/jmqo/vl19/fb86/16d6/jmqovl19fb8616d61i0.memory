@@ -309,5 +309,14 @@
     "tags": "flowlang,version-bump,builder,meta.json",
     "confidence": "high",
     "time": 1786489296164
+  },
+  {
+    "claim": "Overlay-crate Cargo.toml is authoring surface, not regenerated state: the builder writes the skeleton once and later compiles never rewrite it, and library meta cargo.dependencies stays empty (set_library_meta exposes no cargo section) - an FFI crate's dependency closure is declared by hand-patching its committed Cargo.toml (agent's ureq precedent; jerry's closure now). Sandbox build fixes: fastembed->ort-sys fetches onnxruntime from parcel.pyke.io which the CCR egress proxy 403s - fetch microsoft/onnxruntime v1.20.0 release from GitHub and set ORT_LIB_LOCATION + ORT_PREFER_DYNAMIC_LINK=1 via ~/.cargo/config.toml [env] (survives builder-spawned cargo); cpal/rodio need apt libasound2-dev.",
+    "tags": "cargo,ffi,ort,fastembed,alsa,ccr,proxy,build",
+    "source": {
+      "doc": "jerry crate first build in CCR sandbox, 2026-08-12"
+    },
+    "confidence": "high",
+    "time": 1786558597916
   }
 ]

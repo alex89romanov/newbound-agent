@@ -292,5 +292,14 @@
     },
     "confidence": "high",
     "time": 1786548121136
+  },
+  {
+    "claim": "jerry is its own repo now (local /home/user/jerry; GitHub creation deferred - integration lacks repo-create permission), overlaid into the checkout exactly like the agent repo: data/jerry, jerry/, runtime/jerry symlinks + .git/info/exclude entries. Dependency surgery landed 2026-08-12 (commit 724d654): jerry.language.ask_llm delegates transport to agent.llm.ask_llm via Command::lookup (runtime meta LLM_CTL='lib:ctl:cmd' overrides; result read from 'a' then 'msg'); listen delegates capture+STT to the provider named by STT_CTL with contract {millis, sink}, provider delivers each utterance to the new sink command jerry.language.hear {text, source} -> executive input_queue; tool_loop needed no change (already transport-agnostic). TTS stays in-crate: natural-tts 0.3 dropped say_auto - use start(message, &path) + sleep_until_end.",
+    "tags": "jerry,delegation,llm_ctl,stt_ctl,hear,natural-tts,overlay",
+    "source": {
+      "doc": "jerry dependency-surgery session 2026-08-12, jerry repo commit 724d654; smoke-tested over MCP (ask_llm round-tripped agent's provider resolver)"
+    },
+    "confidence": "high",
+    "time": 1786558596973
   }
 ]
