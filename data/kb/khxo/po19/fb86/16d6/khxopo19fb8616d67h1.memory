@@ -283,5 +283,14 @@
     },
     "confidence": "high",
     "time": 1786547702324
+  },
+  {
+    "claim": "Second confirmation plus a sharper consequence for the MCP-attachment claim (p27/p29): a second clean session built the binary mid-session (14:37) and ToolSearch still found no lib-control-command tools afterward - attachment hydrates once, at session start, full stop. And build artifacts do NOT persist across sessions (consecutive test sessions each cold-started), so in the two-repo web layout - where the repo-level SessionStart hook cannot fire - native attachment NEVER happens organically. The single lever is the CCR environment setup script running newbound-agent/tools/setup.sh (self-locating from any cwd); until it is configured, nb-call.py is the norm, proven functionally complete across two sessions.",
+    "tags": "workflow,mcp,ccr,environment-setup-script,nb-call,confirmation",
+    "source": {
+      "doc": "second clean-session Q&A (ToolSearch empty post-build), 2026-08-12"
+    },
+    "confidence": "high",
+    "time": 1786548121136
   }
 ]

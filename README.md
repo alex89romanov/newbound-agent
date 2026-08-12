@@ -82,12 +82,16 @@ native attachment for its lifetime even after building.
 
 Getting the binary built *before* session start: the reliable way on
 Claude Code on the web is the **environment's setup script** — point it
-at `tools/setup.sh`. This repo also carries a SessionStart hook
+at `newbound-agent/tools/setup.sh` (it self-locates from any cwd). This
+repo also carries a SessionStart hook
 (`.claude/hooks/session-start.sh`), but repo-level hooks only load when
 this repo is the session's project directory: in a two-repo session
 (newbound + newbound-agent side by side — the normal layout) the
 project directory is their parent and the hook does **not** fire
-(verified 2026-08-12).
+(verified 2026-08-12). Build artifacts don't persist across sessions
+either — consecutive test sessions each cold-started — so without the
+environment setup script, native attachment never happens in this
+layout and `nb-call.py` is the norm.
 
 For a session where attachment already failed, `tools/nb-call.py`
 drives the same tool surface over stdin JSON-RPC:
