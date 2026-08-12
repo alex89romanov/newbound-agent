@@ -220,5 +220,14 @@
     "tags": "serde_support,ffi,build",
     "confidence": "high",
     "time": 1786489296683
+  },
+  {
+    "claim": "Two session-ops lessons from the 2026-08-12 merge round: (1) git add -A in a repo a server instance ever ran inside sweeps runtime state into the commit - a stray newbound launched from repositories/camera wrote config.properties there and it rode a commit to the remote unnoticed (cleaned in camera ebdbeab, now gitignored); prefer explicit adds or check git status before add -A in store repos. (2) CCR container state can roll back to an earlier snapshot while the remotes keep everything pushed - local reflogs missing commits that ls-remote shows is the signature; recovery is fetch + fast-forward, and it is why push-early matters. Parallel sessions are live: hollis-session merged its kb deposits with this session mid-stream (newbound-agent c560da1); union merges of kb memory facets across sessions resolve cleanly when domains differ.",
+    "tags": "workflow,git,add-all,container-rollback,parallel-sessions,merge",
+    "source": {
+      "doc": "merge-round forensics, newbound-agent 2f84f3a / camera ebdbeab, 2026-08-12"
+    },
+    "confidence": "high",
+    "time": 1786541458855
   }
 ]
