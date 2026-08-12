@@ -351,5 +351,12 @@
     },
     "confidence": "high",
     "time": 1786471521758
+  },
+  {
+    "claim": "The newbound repo MUST NOT contain references to libraries outside newbound_core (owner's rule, restated 2026-08-11): the workspace exclude line naming overlay/FFI crates (agent, kb, scratch, hollis, ...) is builder-written local state - flowlang's update_main_cargo_workspace_exclude creates it when absent on rebuild - and must never be committed; scrub it (remove the line entirely) before any commit touching Cargo.toml.",
+    "detail": "Violated twice historically: the pre-session checkout carried exclude=[agent,scratch,kb], and the 0.3.32 bump commit briefly checked in the full builder-written list. Fixed in 5656668 (line removed, rule added to CLAUDE.md). Standalone host build without the line verified; rebuild recreates it in an overlay checkout. Related trap: restoring src/generated_initializer.rs to HEAD and then rebuilding the host silently produces a binary that loads no FFI dylibs - regenerate (newbound rebuild) before any host build meant to serve agent/kb commands.",
+    "tags": "newbound,cargo,workspace-exclude,overlay,commit-hygiene",
+    "confidence": "high",
+    "time": 1786490242515
   }
 ]
