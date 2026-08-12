@@ -169,5 +169,14 @@
     },
     "confidence": "high",
     "time": 1786473573882
+  },
+  {
+    "claim": "Real-Pi log analysis 2026-08-12 (host adalbjorg): the rpicam fix, DVR pipeline, and live teardown all verified on hardware, but live views stalled ~8s because rpicam-vid ran without --inline - SPS/PPS exist only at stream start, so mid-stream fan-out attachers feed the remux headerless H.264. The DVR segmenter is immune (attaches at start, bakes headers into segment moovs) which is why recording always worked while live stalled; the lab missed it because ffmpeg-synthesized H.264 repeats parameter sets and rpicam does not. Fixed in fa892a2: --inline on the capture args + a 12s MSE stall watchdog degrading to polling. Lesson for synthetic-camera testing: strip or verify in-band parameter-set behavior - header repetition is the one big divergence between ffmpeg test streams and real rpicam output. Also seen in his log, platform-side noise worth an upstream look: the initializer/watcher treats the data/runtime registry dir as an FFI library (Failed to load runtime library ... libruntime.so; watcher entry for runtime/target/release).",
+    "tags": "camera,rpicam,inline,sps-pps,live,watchdog,hardware,runtime-lib",
+    "source": {
+      "doc": "owner Pi journal log + in-process regression, mraiser/camera fa892a2, 2026-08-12"
+    },
+    "confidence": "high",
+    "time": 1786538629042
   }
 ]
