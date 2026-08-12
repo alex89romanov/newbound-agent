@@ -48,4 +48,12 @@ link scratch      scratch
   | xargs -0 -r git update-index --skip-worktree \
   && echo "  skip-worktree set on the scratch skeleton")
 
+# The platform checkout's generated files absorb overlay knowledge on
+# every rebuild (api.rs grows agent/kb/... modules; the initializer
+# learns the FFI crates). They are tracked upstream but their overlay
+# state must never ride a commit - hide the churn per-clone, the same
+# way the scratch skeleton is handled.
+git update-index --skip-worktree newbound_core/src/api.rs src/generated_initializer.rs 2>/dev/null \
+  && echo "  skip-worktree set on newbound_core/src/api.rs and src/generated_initializer.rs"
+
 echo "done. Build the host, then the agent/kb dylibs (see README)."
