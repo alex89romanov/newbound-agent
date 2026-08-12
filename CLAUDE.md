@@ -23,11 +23,14 @@ a `mraiser/newbound` checkout via symlinks. The full process is
 
 ## Session start
 
-1. Overlay + build: see README (fresh checkout = the three-step first
-   build; after that, dylibs hot-reload and only `newbound_core`-rooted
-   Rust needs a host rebuild + restart).
+1. Overlay + build: `tools/setup.sh` — one idempotent command (the web
+   SessionStart hook runs it automatically; see README for what it
+   does). After the first build, dylibs hot-reload and only
+   `newbound_core`-rooted Rust needs a host rebuild + restart.
 2. The platform checkout's `.mcp.json` attaches `newbound mcp` — every
-   store command is a native tool, named `lib-control-command`.
+   store command is a native tool, named `lib-control-command`. If the
+   binary didn't exist when the session started, that attachment is
+   lost for the session — `tools/nb-call.py` drives the same surface.
 3. Orient from the store, not from chronicles: the kb library's memory
    facets carry doctrine (`kb.doctrine`), the working process
    (`kb.workflow`), and platform facts (`kb.platform-api`) — read them

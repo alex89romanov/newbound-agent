@@ -229,5 +229,32 @@
     },
     "confidence": "high",
     "time": 1786541458855
+  },
+  {
+    "claim": "Session setup is ONE idempotent command as of 2026-08-12: newbound-agent tools/setup.sh (finds the sibling newbound checkout, or takes its path; --no-probe to skip verification). It chains overlay.sh, the cmd scaffold when absent, the three-step first build (skipped when the generated initializer already carries the Initialize-crate markers for agent/kb/scratch), the agent(+python_runtime)/kb/scratch dylib builds, then the git hygiene both repos need, and finishes with overlay-probe as proof (132 tools, dev-code-*, FFI dispatch). A fully built checkout passes through in seconds. The committed SessionStart hook (.claude/hooks/session-start.sh, CLAUDE_CODE_REMOTE-gated, synchronous, 900s timeout) runs it automatically at web-container start.",
+    "tags": "workflow,setup,overlay,build,session-start-hook,ccr",
+    "source": {
+      "doc": "newbound-agent tools/setup.sh, branch claude/newbound-library-prep-5v5nj0, fresh-clone + idempotent tests 2026-08-12"
+    },
+    "confidence": "high",
+    "time": 1786544187900
+  },
+  {
+    "claim": "The coding harness attaches .mcp.json servers only at session start: on a fresh CCR container where target/release/newbound does not exist yet, the newbound MCP attachment fails PERMANENTLY for that session, even after the binary is built (proven 2026-08-12 - ToolSearch finds no newbound tools post-build). Fallback: tools/nb-call.py drives the identical tool surface over stdin JSON-RPC (nb-call.py [-C checkout] <tool> <json> | --list <prefix>). The durable fix is a binary that exists BEFORE session start: the SessionStart hook builds it and the container state is cached for subsequent sessions, and a CCR environment setup script running tools/setup.sh covers even the first session.",
+    "tags": "workflow,mcp,ccr,session-start,nb-call,fallback",
+    "source": {
+      "doc": "session forensics + nb-call.py, branch claude/newbound-library-prep-5v5nj0, 2026-08-12"
+    },
+    "confidence": "high",
+    "time": 1786544204723
+  },
+  {
+    "claim": "newbound rebuild regenerates EVERY FFI crate's src/api.rs against the libraries present in THAT checkout: a checkout without camera/hollis deletes their cross-library stubs from agent/ and kb/ api.rs (414 lines of pure deletions observed 2026-08-12). That is environment-induced churn, not authored work - committing it standalone would ping-pong against the owner's fuller environment. setup.sh auto-reverts it when the file was clean before setup ran; intentional regeneration (authoring that touches the crate) still commits together with its data/ changes per the drift-guard rule. The three builder-written newbound-repo files (Cargo.toml workspace exclude, src/generated_initializer.rs, newbound_core/src/api.rs) get skip-worktree instead, since reverting them would break the next host rebuild.",
+    "tags": "workflow,rebuild,api.rs,churn,skip-worktree,git-hygiene",
+    "source": {
+      "doc": "rebuild forensics + tools/setup.sh hygiene steps, 2026-08-12"
+    },
+    "confidence": "high",
+    "time": 1786544204816
   }
 ]
