@@ -56,4 +56,34 @@ link scratch      scratch
 git update-index --skip-worktree newbound_core/src/api.rs src/generated_initializer.rs 2>/dev/null \
   && echo "  skip-worktree set on newbound_core/src/api.rs and src/generated_initializer.rs"
 
+# Same story for the workspace manifest: its `exclude = [...]` line names
+# the overlay and FFI crates, `newbound rebuild` writes it when absent,
+# and the platform repo's manifest must never reference anything outside
+# newbound_core. Nothing there is worth preserving across a pull.
+git update-index --skip-worktree Cargo.toml 2>/dev/null \
+  && echo "  skip-worktree set on Cargo.toml"
+
+# Untracked residue can't be hidden with skip-worktree, and .gitignore is
+# the platform repo's tracked file - not ours to grow for overlay-local
+# convenience. Per-clone excludes instead, so `git status` stays honest
+# and a dirty tree keeps meaning "you have work to commit".
+GITDIR=$(git rev-parse --git-dir)
+EXCLUDE="$GITDIR/info/exclude"
+mkdir -p "$GITDIR/info"
+exclude() { # exclude <pattern>
+  grep -qxF "$1" "$EXCLUDE" 2>/dev/null && return 0
+  echo "$1" >> "$EXCLUDE"
+  echo "  excluded $1 (per-clone)"
+}
+exclude /server.pid
+# dev.github.import clones an FFI library to repositories/<lib> and links
+# its crate at the checkout root. .gitignore covers the store and runtime
+# halves of that import (/data/<lib>, /runtime/<lib>) but not the link.
+for entry in *; do
+  [ -L "$entry" ] || continue
+  case "$(readlink "$entry")" in
+    */repositories/*) exclude "/$entry" ;;
+  esac
+done
+
 echo "done. Build the host, then the agent/kb dylibs (see README)."
