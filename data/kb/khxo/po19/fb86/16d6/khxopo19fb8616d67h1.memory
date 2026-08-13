@@ -310,5 +310,12 @@
     },
     "confidence": "high",
     "time": 1786623809551
+  },
+  {
+    "claim": "Overlay-local state in the platform checkout is silenced per-clone by overlay.sh, never by a commit or a .gitignore edit: skip-worktree for tracked files the rebuild rewrites (newbound_core/src/api.rs, src/generated_initializer.rs, Cargo.toml exclude line, the scratch skeleton) and .git/info/exclude for untracked residue (server.pid, the root crate symlinks dev.github.import leaves for repositories/<lib>).",
+    "detail": "The point is that a dirty tree keeps meaning you have work to commit - a stop-hook or a habit of committing whatever git status shows will otherwise push the workspace exclude line or a symlink into the platform repo, which must reference nothing outside newbound_core. .gitignore is the platform repo tree tracked file and is not ours to grow for overlay convenience (same reasoning that got the default.nix commit rejected 2026-08-13). Added to tools/overlay.sh 2026-08-13; idempotent, verified from a dirty checkout and on a second run.",
+    "tags": "overlay git workflow local-state",
+    "confidence": "high",
+    "time": 1786626215639
   }
 ]
