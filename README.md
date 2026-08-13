@@ -19,41 +19,99 @@ The agent is a plugin, optional by design. This repo is the durable home
 of the harness; the platform lives in the newbound repo and knows nothing
 about this one.
 
-## Setup (symlink overlay)
+## Setup — one command
 
-Check this repo out (github.com/mraiser/newbound-agent) next to a newbound checkout, then:
+Check this repo out (github.com/mraiser/newbound-agent) next to a
+newbound checkout, then:
 
 ```bash
-cd path/to/newbound
-path/to/newbound-agent/tools/overlay.sh path/to/newbound-agent
+path/to/newbound-agent/tools/setup.sh    # finds the sibling checkout;
+                                         #   or pass its path explicitly
 ```
 
-The script symlinks `data/agent`, `data/kb`, `data/scratch`, `agent/`,
+Idempotent: on a fresh clone it is the complete first-time sequence
+(symlink overlay → `cmd/` scaffold if absent → host build →
+`newbound rebuild` → host build with the FFI blocks → the three dylibs
+→ agent-app staging), finishing with the git hygiene below and the
+overlay probe as proof. On an already-set-up checkout every step
+short-circuits and the whole run takes seconds. Afterwards
+`./target/release/newbound` serves the web UI (the agent app at
+`/agent/index.html`, port per `config.properties`) and
+`./target/release/newbound mcp` serves the store to a coding harness.
+
+The app staging is the piece of the platform's `install_lib` step the
+overlay doesn't cover: the server serves only apps listed in
+`config.properties`, and the app shell must exist under `runtime/agent`.
+Setup copies `data/agent/_APPS/agent` there, excludes it via the
+per-clone `.git/info/exclude` (the platform's tracked `.gitignore`
+doesn't know the agent), and ensures `agent` is in the `apps` list —
+creating `config.properties` from the example when absent, appending to
+the list when present. A bare `newbound mcp` run auto-creates the file
+with `http_port=0` (no HTTP listener) — never a choice anyone made, so
+setup normalizes exactly that value to `8080`; any other key, and any
+deliberately chosen port, is left alone.
+
+The overlay symlinks `data/agent`, `data/kb`, `data/scratch`, `agent/`,
 `kb/`, `scratch/` into the checkout and marks the tracked scratch
 skeleton files skip-worktree in this repo. Library discovery follows
 symlinks (`read_dir` + `Path::is_dir()` — verified), so the platform,
 `flowb`, the hot-reload watcher, and `newbound mcp` see ordinary
 directories.
 
-Then build. On a checkout whose generated initializer doesn't yet know
-these FFI crates (upstream master — it has no agent blocks and no
-hot-reload watcher until regenerated), the first build is a three-step:
+The git hygiene handles the two kinds of builder-written local state so
+neither can land in an accidental commit:
+
+- **newbound repo**: `newbound rebuild` rewrites `Cargo.toml` (the
+  workspace exclude), `src/generated_initializer.rs`, and
+  `newbound_core/src/api.rs`. Never committed there — the agent is
+  optional by design — so setup marks them skip-worktree
+  (undo: `git update-index --no-skip-worktree <file>`).
+- **this repo**: the rebuild regenerates each FFI crate's `src/api.rs`
+  against the libraries present in *that* checkout, deleting stubs for
+  libraries installed elsewhere (`camera`, `hollis`, …). Setup reverts
+  that environment-induced churn unless the file already carried edits
+  before it ran; intentional regeneration gets committed together with
+  its `data/` changes as usual.
+
+### MCP attachment and the fallback driver
+
+The checkout's `.mcp.json` attaches `./target/release/newbound mcp` to
+the coding harness natively — but only if the binary exists when the
+session starts; a session that begins on an unbuilt container loses the
+native attachment for its lifetime even after building.
+
+Setup ends with an **attachment sense**: it can't read the client's
+tool surface, but a live `newbound mcp` process means some client is
+attached, and no process means none is — in which case it says why
+(a binary built by that very run could not have been spawned by an
+already-running client) and prints the fix for the environment it's in:
+restart/reconnect for Claude Code CLI/IDE, the environment setup script
+for web sessions, and for **Claude Desktop** — which doesn't read
+`.mcp.json` at all — a paste-ready server entry for its config
+(Settings → Developer → Edit Config) with the checkout's absolute path
+baked in, wrapped in `sh -c 'cd … && exec …'` because the server
+operates on its cwd's store.
+
+Getting the binary built *before* session start: the reliable way on
+Claude Code on the web is the **environment's setup script** — point it
+at `newbound-agent/tools/setup.sh` (it self-locates from any cwd). This
+repo also carries a SessionStart hook
+(`.claude/hooks/session-start.sh`), but repo-level hooks only load when
+this repo is the session's project directory: in a two-repo session
+(newbound + newbound-agent side by side — the normal layout) the
+project directory is their parent and the hook does **not** fire
+(verified 2026-08-12). Build artifacts don't persist across sessions
+either — consecutive test sessions each cold-started — so without the
+environment setup script, native attachment never happens in this
+layout and `nb-call.py` is the norm.
+
+For a session where attachment already failed, `tools/nb-call.py`
+drives the same tool surface over stdin JSON-RPC:
 
 ```bash
-tools/gen-cmd-crate.py .                       # only if cmd/ is absent
-cargo build --release --features=serde_support # host, once
-./target/release/newbound rebuild              # regenerate initializer
-                                               #   (now sees agent/kb/scratch)
-cargo build --release --features=serde_support # host again, with FFI blocks
-(cd agent && cargo build --release --features=serde_support,python_runtime)
-(cd kb && cargo build --release)               # dylibs hot-load from here on;
-(cd scratch && cargo build --release)          #   no restart needed
+tools/nb-call.py --list dev-code-              # discover
+tools/nb-call.py dev-code-search_commands '{"lib":"","ctl":"","query":"memory"}'
 ```
-
-Do not commit the regenerated initializer to the newbound repo — the
-agent is optional there by design; the regeneration is local state, like
-the build itself. On a checkout that already carries the FFI blocks (the
-old mirror), the plain host + dylib builds suffice.
 
 ## The scratch pattern
 

@@ -1,18 +1,24 @@
 #!/usr/bin/env python3
 """Probe `newbound mcp` on the symlink-overlaid checkout.
 
+Usage: overlay-probe.py [path-to-newbound-checkout]   (default: cwd)
+
 Checks: initialize; tools/list contains dev-code-*, agent-*, kb tools
 (libraries discovered through symlinks); a real read call
 (dev-code-search_commands) answers; a dylib-dispatched call
 (agent-plugin-list_tools) answers — proving FFI crates load through the
 overlay.
 """
-import json, subprocess, sys
+import json, os, subprocess, sys, tempfile
 
-DIR = "/workspace/newbound"
+DIR = os.path.abspath(sys.argv[1] if len(sys.argv) > 1 else ".")
+if not os.path.isfile(os.path.join(DIR, "target/release/newbound")):
+    sys.exit("error: no target/release/newbound under %s — build first (tools/setup.sh)" % DIR)
+ERRLOG = tempfile.NamedTemporaryFile(prefix="overlay-probe-", suffix=".log",
+                                     delete=False, mode="w")
 p = subprocess.Popen(["./target/release/newbound", "mcp"], cwd=DIR,
                      stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                     stderr=open("/tmp/claude-0/-home-user/e00f775b-f4a8-5557-9d14-f90f183a9dc3/scratchpad/probe_err.log","w"), text=True, bufsize=1)
+                     stderr=ERRLOG, text=True, bufsize=1)
 _id = 0
 def rpc(method, params):
     global _id
@@ -23,7 +29,7 @@ def rpc(method, params):
     while True:
         line = p.stdout.readline()
         if not line:
-            err = open("/tmp/claude-0/-home-user/e00f775b-f4a8-5557-9d14-f90f183a9dc3/scratchpad/probe_err.log").read()
+            err = open(ERRLOG.name).read()
             raise RuntimeError("server exited: " + err[-2000:])
         line = line.strip()
         if line.startswith("{"):
