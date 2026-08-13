@@ -358,5 +358,14 @@
     "tags": "newbound,cargo,workspace-exclude,overlay,commit-hygiene",
     "confidence": "high",
     "time": 1786490242515
+  },
+  {
+    "claim": "The api.rs contamination mechanic and its guards (owner directive 2026-08-12): every rebuild regenerates each crate src/api.rs typed API to reference ALL libraries the local checkout carries, so an overlaid checkout writes agent/kb/camera modules into newbound_core/src/api.rs - state the platform repo must never carry. Master was scrubbed once (newbound 4608307) and stays clean; the guards are (1) **/src/api.rs gitignored on master (newbound 600e7b0) so no untracked copy can ever be added, and (2) overlay.sh sets skip-worktree on newbound_core/src/api.rs and src/generated_initializer.rs per-clone (newbound-agent 25957ad) because gitignore cannot silence tracked files and untracking api.rs would break fresh builds (lib.rs declares mod api). Cargo.toml stays visible - its builder-written exclude line is also never-commit (hollis doctrine) but the manifest carries real changes too, so it cannot be skip-worktree hidden; check it by eye before any newbound commit. The owner intends a longer-term newbound-idiomatic generation fix.",
+    "tags": "doctrine,api-rs,contamination,skip-worktree,gitignore,overlay",
+    "source": {
+      "doc": "owner directive + newbound 600e7b0 + newbound-agent 25957ad, 2026-08-12"
+    },
+    "confidence": "high",
+    "time": 1786547612338
   }
 ]

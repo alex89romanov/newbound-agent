@@ -544,9 +544,9 @@ pub mod camera {
             ::flowlang::rustcmd::RustCmd::new("lpxgsi18439f44808s89").execute(d).expect("Rust command execution failed").get_string("a")
         }
 
-        pub fn keyframe(timestamp: i64) -> String {
+        pub fn keyframe(timestamp: String) -> String {
             let mut d = DataObject::new();
-            d.put_int("timestamp", timestamp);
+            d.put_string("timestamp", &timestamp);
             ::flowlang::rustcmd::RustCmd::new("uypumz184f29704cbs39").execute(d).expect("Rust command execution failed").get_string("a")
         }
 
@@ -586,13 +586,13 @@ pub mod camera {
             ::flowlang::rustcmd::RustCmd::new("mgyrou18447eaa6c2l78e").execute(d).expect("Rust command execution failed").get_object("a")
         }
 
-        pub fn snapshot(device: String, format: String, width: i64, height: i64, rot: i64) -> String {
+        pub fn snapshot(device: String, format: String, width: String, height: String, rot: String) -> String {
             let mut d = DataObject::new();
             d.put_string("device", &device);
             d.put_string("format", &format);
-            d.put_int("width", width);
-            d.put_int("height", height);
-            d.put_int("rot", rot);
+            d.put_string("width", &width);
+            d.put_string("height", &height);
+            d.put_string("rot", &rot);
             ::flowlang::rustcmd::RustCmd::new("suqirv184446104d3x55").execute(d).expect("Rust command execution failed").get_string("a")
         }
 
@@ -614,6 +614,13 @@ pub mod camera {
         pub fn live() -> DataBytes {
             let d = DataObject::new();
             ::flowlang::rustcmd::RustCmd::new("sgmxup1869485c680qaa").execute(d).expect("Rust command execution failed").get_bytes("a")
+        }
+
+        pub fn events_page(since: String, limit: String) -> DataArray {
+            let mut d = DataObject::new();
+            d.put_string("since", &since);
+            d.put_string("limit", &limit);
+            ::flowlang::rustcmd::RustCmd::new("xuxzml19ff1f4faeau1").execute(d).expect("Rust command execution failed").get_array("a")
         }
 
     }
@@ -1644,6 +1651,37 @@ pub mod scratch {
         use ::ndata::data::Data;
 
     }
+    pub mod test {
+        use ::ndata::dataobject::DataObject;
+        use ::ndata::dataarray::DataArray;
+        use ::ndata::databytes::DataBytes;
+        use ::ndata::data::Data;
+
+        pub fn seed_run(storage: String, cmdlib: String, cmdctl: String, cmdname: String, args: String, extra: String) -> DataObject {
+            let mut d = DataObject::new();
+            d.put_string("storage", &storage);
+            d.put_string("cmdlib", &cmdlib);
+            d.put_string("cmdctl", &cmdctl);
+            d.put_string("cmdname", &cmdname);
+            d.put_string("args", &args);
+            d.put_string("extra", &extra);
+            ::flowlang::rustcmd::RustCmd::new("jlxvht19ff1bfc7f5v1").execute(d).expect("Rust command execution failed").get_object("a")
+        }
+
+        pub fn live_probe(storage: String, outfile: String) -> DataObject {
+            let mut d = DataObject::new();
+            d.put_string("storage", &storage);
+            d.put_string("outfile", &outfile);
+            ::flowlang::rustcmd::RustCmd::new("yzwxyj19ff1da2828j1").execute(d).expect("Rust command execution failed").get_object("a")
+        }
+
+        pub fn motion_probe(storage: String) -> DataObject {
+            let mut d = DataObject::new();
+            d.put_string("storage", &storage);
+            ::flowlang::rustcmd::RustCmd::new("iutigz19ff1ef0e97r1").execute(d).expect("Rust command execution failed").get_object("a")
+        }
+
+    }
 }
 
 pub mod security {
@@ -1775,6 +1813,7 @@ pub struct old_peer_reboot {}
 pub struct old_peer_service {}
 pub struct old_peer_peer_select {}
 pub struct old_scratch_scratch {}
+pub struct old_scratch_test {}
 pub struct old_security_security {}
 pub struct old_agent {
     pub agent: old_agent_agent,
@@ -1869,6 +1908,7 @@ pub struct old_peer {
 }
 pub struct old_scratch {
     pub scratch: old_scratch_scratch,
+    pub test: old_scratch_test,
 }
 pub struct old_security {
     pub security: old_security_security,
@@ -1979,6 +2019,7 @@ pub const fn new() -> api {
         },
         scratch: old_scratch {
             scratch: old_scratch_scratch {},
+            test: old_scratch_test {},
         },
         security: old_security {
             security: old_security_security {},
@@ -2166,7 +2207,7 @@ impl old_camera_camera {
         self::camera::camera::init()
     }
     #[deprecated(note = "use api::camera::camera::keyframe instead")]
-    pub fn keyframe(&self, timestamp: i64) -> String {
+    pub fn keyframe(&self, timestamp: String) -> String {
         self::camera::camera::keyframe(timestamp)
     }
     #[deprecated(note = "use api::camera::camera::keyframes instead")]
@@ -2194,7 +2235,7 @@ impl old_camera_camera {
         self::camera::camera::settings(settings)
     }
     #[deprecated(note = "use api::camera::camera::snapshot instead")]
-    pub fn snapshot(&self, device: String, format: String, width: i64, height: i64, rot: i64) -> String {
+    pub fn snapshot(&self, device: String, format: String, width: String, height: String, rot: String) -> String {
         self::camera::camera::snapshot(device, format, width, height, rot)
     }
     #[deprecated(note = "use api::camera::camera::start_recording instead")]
@@ -2212,6 +2253,10 @@ impl old_camera_camera {
     #[deprecated(note = "use api::camera::camera::live instead")]
     pub fn live(&self) -> DataBytes {
         self::camera::camera::live()
+    }
+    #[deprecated(note = "use api::camera::camera::events_page instead")]
+    pub fn events_page(&self, since: String, limit: String) -> DataArray {
+        self::camera::camera::events_page(since, limit)
     }
 }
 impl old_dev_dev {
@@ -2588,6 +2633,20 @@ impl old_peer_service {
     #[deprecated(note = "use api::peer::service::udp_connect instead")]
     pub fn udp_connect(&self, ipaddr: String, port: i64) -> DataObject {
         self::peer::service::udp_connect(ipaddr, port)
+    }
+}
+impl old_scratch_test {
+    #[deprecated(note = "use api::scratch::test::seed_run instead")]
+    pub fn seed_run(&self, storage: String, cmdlib: String, cmdctl: String, cmdname: String, args: String, extra: String) -> DataObject {
+        self::scratch::test::seed_run(storage, cmdlib, cmdctl, cmdname, args, extra)
+    }
+    #[deprecated(note = "use api::scratch::test::live_probe instead")]
+    pub fn live_probe(&self, storage: String, outfile: String) -> DataObject {
+        self::scratch::test::live_probe(storage, outfile)
+    }
+    #[deprecated(note = "use api::scratch::test::motion_probe instead")]
+    pub fn motion_probe(&self, storage: String) -> DataObject {
+        self::scratch::test::motion_probe(storage)
     }
 }
 impl old_security_security {
