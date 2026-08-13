@@ -57,5 +57,19 @@
     "tags": "frontend,bench-collapse",
     "confidence": "high",
     "time": 1786411232343
+  },
+  {
+    "claim": "position:fixed always creates a stacking context in Blink, even at z-index:auto - a modal appended from inside a fixed wrapper has its z-index trapped and loses to any body-level backdrop.",
+    "detail": "Symptom: dialog paints under the .greyedout veil (backdrop z-index:5 beats dialog z-index:15) and the veil eats all clicks. Fix: when a fixed wrapper already sits inside an ancestor that pins the same rectangle, use position:absolute with top/left/right/bottom 0 instead. Two production instances fixed 2026-08-13: camera shell #dvrgoeshere (.cammain pins the rect) and peer #headsupdisplay.",
+    "tags": "css stacking-context blink modal popup",
+    "confidence": "high",
+    "time": 1786625163215
+  },
+  {
+    "claim": "The app ui popup kit measures the dialog width while it is briefly position:absolute inside the HOST element, so percent max-widths mis-measure in narrow hosts - size popups in vw units, and give .dialog-header position:relative so the .upper-right close X (which vertically centers against the nearest positioned ancestor) anchors to the header, not the whole dialog.",
+    "detail": "Also from the same kit: a .switch-label span must be EMPTY - the switch track is drawn by ::before/::after, and any text inside the span paints on top of the track. Fixed 2026-08-13 in camera live (.settings-popup max-width 90% -> 90vw, .dialog-header position:relative) and dvr_settings (emptied the two switch-label spans).",
+    "tags": "css popup app-ui switch upper-right",
+    "confidence": "high",
+    "time": 1786625163352
   }
 ]

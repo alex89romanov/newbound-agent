@@ -178,5 +178,12 @@
     },
     "confidence": "high",
     "time": 1786538629042
+  },
+  {
+    "claim": "The 2026-08-13 settings-dialog layering round fixed five CSS/HTML bugs: #dvrgoeshere fixed->absolute (camera shell css), .dialog-header position:relative and max-width 90vw (live css), emptied switch-label spans (dvr_settings html), and #headsupdisplay fixed->absolute (peer control css, newbound repo).",
+    "detail": "Camera-side fixes are commit 10d433e on claude/camera-app-architecture-owco72 (mraiser/camera); the peer css fix is commit 6ea78b9 on claude/peer-stream-bytes-bodies (mraiser/newbound), riding the streaming branch. Verified with Playwright in both the standalone camera app and the peer HUD tile: dialog above the veil, close X clickable at the header corner, backdrop count 0 after close and 1 on reopen, remote stream alive throughout. Root causes are the two kb.frontend claims deposited the same day (Blink fixed-position stacking contexts; popup kit measurement quirks).",
+    "tags": "css settings dialog layering hud",
+    "confidence": "high",
+    "time": 1786625257136
   }
 ]
