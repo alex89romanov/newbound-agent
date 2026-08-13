@@ -229,5 +229,14 @@
     },
     "confidence": "high",
     "time": 1786541458855
+  },
+  {
+    "claim": "Branch retirement is owner-side only: the CCR git proxy refuses deletion pushes (--delete and :refs/heads/ forms both no-op) and the GitHub MCP has no branch-delete tool - delete the local branch, then the owner trashes the remote ref in the GitHub branches UI; the commit dies with the ref. Applied to newbound 671ae8c (default.nix, rejected with the rule: Newbound does not track external library requirements - they belong in the app repo README or its own default.nix). Separately, container rollback struck a second time mid-session (2026-08-14): local repos silently rewound days while origins kept everything, including a peer-streaming commit (newbound 226cce3) made PAST the surviving context horizon - the tell is local history/branches disagreeing with ls-remote, and the reflex must be: on ANY repo-state confusion, diff local vs origin refs FIRST, before debugging phantom code problems. Recovery is always fetch + reset to origin; only unpushed work can die.",
+    "tags": "workflow,branch-deletion,container-rollback,recovery,push-early",
+    "source": {
+      "doc": "second rollback forensics + owner commit comment on 671ae8c, 2026-08-14"
+    },
+    "confidence": "high",
+    "time": 1786621265455
   }
 ]
