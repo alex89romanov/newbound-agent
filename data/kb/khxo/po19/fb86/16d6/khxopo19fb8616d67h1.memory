@@ -238,5 +238,77 @@
     },
     "confidence": "high",
     "time": 1786621265455
+  },
+  {
+    "claim": "Session setup is ONE idempotent command as of 2026-08-12: newbound-agent tools/setup.sh (finds the sibling newbound checkout, or takes its path; --no-probe to skip verification). It chains overlay.sh, the cmd scaffold when absent, the three-step first build (skipped when the generated initializer already carries the Initialize-crate markers for agent/kb/scratch), the agent(+python_runtime)/kb/scratch dylib builds, then the git hygiene both repos need, and finishes with overlay-probe as proof (132 tools, dev-code-*, FFI dispatch). A fully built checkout passes through in seconds. The committed SessionStart hook (.claude/hooks/session-start.sh, CLAUDE_CODE_REMOTE-gated, synchronous, 900s timeout) runs it automatically at web-container start.",
+    "tags": "workflow,setup,overlay,build,session-start-hook,ccr",
+    "source": {
+      "doc": "newbound-agent tools/setup.sh, branch claude/newbound-library-prep-5v5nj0, fresh-clone + idempotent tests 2026-08-12"
+    },
+    "confidence": "high",
+    "time": 1786623808868
+  },
+  {
+    "claim": "The coding harness attaches .mcp.json servers only at session start: on a fresh CCR container where target/release/newbound does not exist yet, the newbound MCP attachment fails PERMANENTLY for that session, even after the binary is built (proven 2026-08-12 - ToolSearch finds no newbound tools post-build). Fallback: tools/nb-call.py drives the identical tool surface over stdin JSON-RPC (nb-call.py [-C checkout] <tool> <json> | --list <prefix>). The durable fix is a binary that exists BEFORE session start: the SessionStart hook builds it and the container state is cached for subsequent sessions, and a CCR environment setup script running tools/setup.sh covers even the first session.",
+    "tags": "workflow,mcp,ccr,session-start,nb-call,fallback",
+    "source": {
+      "doc": "session forensics + nb-call.py, branch claude/newbound-library-prep-5v5nj0, 2026-08-12"
+    },
+    "confidence": "high",
+    "time": 1786623808931
+  },
+  {
+    "claim": "newbound rebuild regenerates EVERY FFI crate's src/api.rs against the libraries present in THAT checkout: a checkout without camera/hollis deletes their cross-library stubs from agent/ and kb/ api.rs (414 lines of pure deletions observed 2026-08-12). That is environment-induced churn, not authored work - committing it standalone would ping-pong against the owner's fuller environment. setup.sh auto-reverts it when the file was clean before setup ran; intentional regeneration (authoring that touches the crate) still commits together with its data/ changes per the drift-guard rule. The three builder-written newbound-repo files (Cargo.toml workspace exclude, src/generated_initializer.rs, newbound_core/src/api.rs) get skip-worktree instead, since reverting them would break the next host rebuild.",
+    "tags": "workflow,rebuild,api.rs,churn,skip-worktree,git-hygiene",
+    "source": {
+      "doc": "rebuild forensics + tools/setup.sh hygiene steps, 2026-08-12"
+    },
+    "confidence": "high",
+    "time": 1786623808988
+  },
+  {
+    "claim": "CORRECTION to the setup claim of 2026-08-12 (patch p26): repo-level .claude/settings.json SessionStart hooks do NOT fire in a two-repo CCR session - the project directory is the PARENT of the side-by-side checkouts and per-repo hooks are not loaded from source repos. Verified in a clean-session test: fresh container, hook present on the checked-out branch, binary still unbuilt when the session started; only user-level ~/.claude hooks ran. The hook stays for single-repo sessions; the reliable pre-session build is the CCR environment setup script pointing at tools/setup.sh. A first session on an unbuilt environment therefore still drives the store via tools/nb-call.py.",
+    "tags": "workflow,ccr,session-start-hook,correction,mcp",
+    "source": {
+      "doc": "clean-session test on claude/newbound-agent-startup-7wy2n0, reported 2026-08-12"
+    },
+    "confidence": "high",
+    "time": 1786623809085
+  },
+  {
+    "claim": "Serving the agent APP requires the install_lib staging the overlay never runs: the server serves only apps named in config.properties apps=, and the app shell must exist at runtime/agent. tools/setup.sh now stages it - copies data/agent/_APPS/agent to runtime/agent, adds /runtime/agent to the newbound clone .git/info/exclude (per-clone: the platform .gitignore must not know the agent), and ensures agent is in apps=, creating config.properties from the example (http_port=8080) when absent or appending when present. Caveat: a bare newbound-mcp run auto-creates config.properties with http_port=0 and no agent app - setup appends agent and flags the port but deliberately leaves other keys alone. Verified 2026-08-12 in a disposable: fresh clone -> setup.sh -> server boot -> /agent/index.html answers 200 -> both git trees still clean.",
+    "tags": "workflow,setup,install_lib,runtime-staging,config.properties,agent-app",
+    "source": {
+      "doc": "tools/setup.sh staging step + disposable server-boot test, 2026-08-12"
+    },
+    "confidence": "high",
+    "time": 1786623809200
+  },
+  {
+    "claim": "Addendum to the app-staging claim (p30): setup.sh now NORMALIZES http_port=0 to 8080 in config.properties instead of only flagging it - a second clean-session test showed the flag-only design still cost the session a manual edit, and http_port=0 in a dev checkout is never intent, only the residue of a bare newbound-mcp run auto-creating the file. Exactly the value 0 is rewritten; any other port and all other keys stay untouched.",
+    "tags": "workflow,setup,config.properties,http_port,correction",
+    "source": {
+      "doc": "second clean-session test + tools/setup.sh, 2026-08-12"
+    },
+    "confidence": "high",
+    "time": 1786623809321
+  },
+  {
+    "claim": "Second confirmation plus a sharper consequence for the MCP-attachment claim (p27/p29): a second clean session built the binary mid-session (14:37) and ToolSearch still found no lib-control-command tools afterward - attachment hydrates once, at session start, full stop. And build artifacts do NOT persist across sessions (consecutive test sessions each cold-started), so in the two-repo web layout - where the repo-level SessionStart hook cannot fire - native attachment NEVER happens organically. The single lever is the CCR environment setup script running newbound-agent/tools/setup.sh (self-locating from any cwd); until it is configured, nb-call.py is the norm, proven functionally complete across two sessions.",
+    "tags": "workflow,mcp,ccr,environment-setup-script,nb-call,confirmation",
+    "source": {
+      "doc": "second clean-session Q&A (ToolSearch empty post-build), 2026-08-12"
+    },
+    "confidence": "high",
+    "time": 1786623809430
+  },
+  {
+    "claim": "kb memory facets conflicting across FORKS are resolved the same way as across sessions, but through the platform: take the canonical side's store files wholesale in the merge (never hand-merge data/* - the _patches ids and record counts cannot be reconciled by text), then REPLAY the dropped claims through agent-archivist-remember against the merged store so the journal continues cleanly from the canonical sequence. Proven resolving PR #2's kb.workflow conflict (upstream +1 entry vs fork +7, zero duplicates), 2026-08-13.",
+    "tags": "workflow,kb,merge-conflict,fork,replay,remember",
+    "source": {
+      "doc": "mraiser/newbound-agent PR #2 conflict resolution, 2026-08-13"
+    },
+    "confidence": "high",
+    "time": 1786623809551
   }
 ]
