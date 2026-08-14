@@ -85,5 +85,12 @@
     "tags": "workbench command create facetPresent cmd gap",
     "confidence": "high",
     "time": 1786706981218
+  },
+  {
+    "claim": "FIXED (2026-08-14, workbench p99-p100, superseding the dead-end claim of the same day): the commands tab now renders its pane in patch mode even with zero commands - setFacet gained a cmd branch ahead of the absent gate (facet === \"cmd\" && (facetPresent(\"cmd\") || patchMode)), and the shadowed later cmd branch was dropped. The first command on a fresh control is creatable through the new-command form again.",
+    "detail": "Verified on a disposable with Playwright against scratch.scratch (zero commands): commands tab shows the form, the form creates first_cmd (rust, String, a: String), the pane auto-opens with the signature editor loaded, and the row renders on back. Read-only mode with zero commands still falls to the absent note.",
+    "tags": "workbench command create facetPresent cmd fixed",
+    "confidence": "high",
+    "time": 1786707227825
   }
 ]
