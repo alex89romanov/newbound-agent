@@ -1,0 +1,15 @@
+[
+  {
+    "claim": "Every LLM provider behind agent.llm's resolver accepts exactly ONE system message, and it must be at index 0.",
+    "detail": "vLLM's chat template answers a system message at any later index — including index 1, ahead of every user turn — with a hard 400: BadRequestError \"System message must be at the beginning.\" So client-side context injection (recall layer 4's mode pack) must be APPENDED to the existing system message, never inserted beside it. Appending rather than prepending is also the cache-friendly choice: the curriculum stays a stable prefix, so server-side prefix caching still hits. agent.agentloop's chatTurn does this in convo(), which builds a merged COPY — the venue's own messages array is never mutated.",
+    "tags": "llm,agent,platform-api,wire",
+    "source": {
+      "lib": "agent",
+      "ctl": "agentloop",
+      "facet": "js",
+      "hash": "6569fbeed2ace744"
+    },
+    "confidence": "high",
+    "time": 1785964641067
+  }
+]
