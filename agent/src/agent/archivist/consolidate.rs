@@ -81,25 +81,47 @@ if !sp.has("prompt") || sp.get_string("prompt").trim().is_empty() {
 }
 let extraction = sp.get_string("prompt");
 
-// What is already known: the kb index plus every existing claim, so the
-// LLM can skip restatements.
+// What is already known: the federated index plus existing claims, so the
+// LLM can skip restatements. Per-domain cap (most recent entries win): a
+// continuously ticking consumer must not read an unbounded store-wide pack.
+let known_cap: usize = 40;
 let mut known = String::new();
-if store.exists("kb", "controls") {
-    let list = store.get_data("kb", "controls").get_object("data").get_array("list");
-    for i in 0..list.len() {
-        let item = list.get_object(i);
-        let name = item.get_string("name");
-        let id = item.get_string("id");
-        let dd = store.get_data("kb", &id).get_object("data");
-        let desc = if dd.has("desc") { dd.get_string("desc") } else { String::new() };
-        known.push_str(&format!("\nDOMAIN kb.{} - {}\n", name, desc));
-        if dd.has("memory") {
-            if let Ok(w) = DataObject::try_from_string(&format!("{{\"a\":{}}}", dd.get_string("memory"))) {
-                if let Ok(a) = w.try_get_array("a") {
-                    for j in 0..a.len() {
-                        if let Ok(e) = a.try_get_object(j) {
-                            if e.has("claim") {
-                                known.push_str(&format!("- {}\n", e.get_string("claim")));
+{
+    let mut libs: Vec<String> = Vec::new();
+    if let Ok(rd) = std::fs::read_dir(&store.root) {
+        for e in rd.flatten() {
+            if e.path().is_dir() {
+                if let Ok(n) = e.file_name().into_string() { libs.push(n); }
+            }
+        }
+    }
+    libs.sort();
+    for lib in libs {
+        if !store.exists(&lib, "controls") { continue; }
+        let list = store.get_data(&lib, "controls").get_object("data").get_array("list");
+        let is_brain = lib == "kb";
+        for i in 0..list.len() {
+            let item = list.get_object(i);
+            if !item.has("name") || !item.has("id") { continue; }
+            let name = item.get_string("name");
+            let id = item.get_string("id");
+            if !store.exists(&lib, &id) { continue; }
+            let dd = store.get_data(&lib, &id).get_object("data");
+            if !dd.has("memory") && !is_brain { continue; }
+            let desc = if dd.has("desc") { dd.get_string("desc") } else { String::new() };
+            known.push_str(&format!("\nDOMAIN {}.{} - {}\n", lib, name, desc));
+            if dd.has("memory") {
+                if let Ok(w) = DataObject::try_from_string(&format!("{{\"a\":{}}}", dd.get_string("memory"))) {
+                    if let Ok(a) = w.try_get_array("a") {
+                        let start = if a.len() > known_cap { a.len() - known_cap } else { 0 };
+                        if start > 0 {
+                            known.push_str(&format!("  ({} earlier claims omitted)\n", start));
+                        }
+                        for j in start..a.len() {
+                            if let Ok(e) = a.try_get_object(j) {
+                                if e.has("claim") {
+                                    known.push_str(&format!("- {}\n", e.get_string("claim")));
+                                }
                             }
                         }
                     }
@@ -111,7 +133,7 @@ if store.exists("kb", "controls") {
 
 let turns_json = turns.to_string();
 let user = format!(
-    "EXISTING MEMORY (do not re-file anything here, restated or rephrased):\n{}\n\nRECENT TURNS:\n{}\n\nReply with ONLY a JSON array (at most 5 items; [] is the correct answer for most sweeps) of {{\"domain\": \"<existing kb domain, or a month bucket like m2026-08>\", \"entry\": {{\"claim\": \"...\", \"detail\": \"...\", \"tags\": \"a,b\", \"confidence\": \"high|medium|low\"}}}}.",
+    "EXISTING MEMORY (do not re-file anything here, restated or rephrased):\n{}\n\nRECENT TURNS:\n{}\n\nReply with ONLY a JSON array (at most 5 items; [] is the correct answer for most sweeps) of {{\"domain\": \"<existing domain as lib.ctl (e.g. kb.workflow, dev.code), or a kb month bucket like m2026-08>\", \"entry\": {{\"claim\": \"...\", \"detail\": \"...\", \"tags\": \"a,b\", \"confidence\": \"high|medium|low\"}}}}.",
     known, turns_json);
 let resp = ask_llm(user, Data::DString(extraction));
 
@@ -139,7 +161,10 @@ if let (Some(i0), Some(i1)) = (resp.find('['), resp.rfind(']')) {
     if i1 > i0 {
         if let Ok(w) = DataObject::try_from_string(&format!("{{\"a\":{}}}", &resp[i0..=i1])) {
             if let Ok(items) = w.try_get_array("a") {
-                let cmd = Command::lookup("dev", "code", "remember");
+                // The archivist's own write path - dev.code has no remember command, so
+                // the old lookup("dev","code","remember") panicked and killed every
+                // sweep that had anything to file.
+                let cmd = Command::lookup("agent", "archivist", "remember");
                 for i in 0..items.len() {
                     if filed >= 5 {
                         skipped += (items.len() - i) as i64;
@@ -162,9 +187,16 @@ if let (Some(i0), Some(i1)) = (resp.find('['), resp.rfind(']')) {
                                  else { format!("{},unreviewed", tags) };
                         entry.put_string("tags", &nt);
                     }
+                    // lib.ctl addressing: file onto the claim's subject
+                    // library; a bare name (month buckets included) is kb.
+                    let dspec = it.get_string("domain");
+                    let (tlib, tdomain) = match dspec.find('.') {
+                        Some(p) => (dspec[..p].to_string(), dspec[p + 1..].to_string()),
+                        None => ("kb".to_string(), dspec.clone()),
+                    };
                     let mut args = DataObject::new();
-                    args.put_string("lib", "kb");
-                    args.put_string("domain", &it.get_string("domain"));
+                    args.put_string("lib", &tlib);
+                    args.put_string("domain", &tdomain);
                     args.put_object("entry", entry);
                     args.put_string("author", "archivist");
                     match cmd.execute(args) {

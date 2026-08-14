@@ -134,21 +134,37 @@ Use this to build multi-step pipelines, perform map-reduce tasks, or spin up sub
 "#;
   core + shell
 };
-// MEMORY INDEX (docs/memory.md): the kb library pushed at loop start -
-// the model knows what it knows; entries are one read away. One-shot
-// loop, so no staleness machinery: the curriculum says to verify source
-// hashes on read.
+// MEMORY INDEX (docs/memory.md, federated per docs/one-memory-cycle.md A1):
+// every library's controls, any control carrying a memory facet is a domain,
+// labeled lib.ctl - the control's manual, one read away. kb's controls are
+// domains by definition and always listed. One-shot loop, so no staleness
+// machinery: the curriculum says to verify source hashes on read.
 let mut sys_prompt = sys_prompt;
 {
   let mstore = DataStore::new();
-  if mstore.exists("kb", "controls") {
-    let list = mstore.get_data("kb", "controls").get_object("data").get_array("list");
-    let mut idx = String::from("\n\nMEMORY INDEX (recall with dev-code-read_control_facet lib:\"kb\" ctl:<domain> facet:\"memory\"):\n");
+  let mut idx = String::from("\n\nMEMORY INDEX (recall with dev-code-read_control_facet lib:<lib> ctl:<ctl> facet:\"memory\"):\n");
+  let mut any = false;
+  let mut libs: Vec<String> = Vec::new();
+  if let Ok(rd) = std::fs::read_dir(&mstore.root) {
+    for e in rd.flatten() {
+      if e.path().is_dir() {
+        if let Ok(n) = e.file_name().into_string() { libs.push(n); }
+      }
+    }
+  }
+  libs.sort();
+  for lib in libs {
+    if !mstore.exists(&lib, "controls") { continue; }
+    let list = mstore.get_data(&lib, "controls").get_object("data").get_array("list");
+    let is_brain = lib == "kb";
     for i in 0..list.len() {
       let item = list.get_object(i);
+      if !item.has("name") || !item.has("id") { continue; }
       let name = item.get_string("name");
       let id = item.get_string("id");
-      let dd = mstore.get_data("kb", &id).get_object("data");
+      if !mstore.exists(&lib, &id) { continue; }
+      let dd = mstore.get_data(&lib, &id).get_object("data");
+      if !dd.has("memory") && !is_brain { continue; }
       let desc = if dd.has("desc") { dd.get_string("desc") } else { String::new() };
       let tags = if dd.has("tags") { dd.get_string("tags") } else { String::new() };
       let n: i64 = if dd.has("memory") {
@@ -159,10 +175,11 @@ let mut sys_prompt = sys_prompt;
       } else { 0 };
       let count = if n >= 0 { format!(" ({})", n) } else { String::new() };
       let tagpart = if tags.is_empty() { String::new() } else { format!(" [{}]", tags) };
-      idx.push_str(&format!("- kb.{}{}{} - {}\n", name, count, tagpart, desc));
+      idx.push_str(&format!("- {}.{}{}{} - {}\n", lib, name, count, tagpart, desc));
+      any = true;
     }
-    sys_prompt.push_str(&idx);
   }
+  if any { sys_prompt.push_str(&idx); }
 }
 
 // Build the OpenAI-format tools array from the MCP descriptors
