@@ -71,5 +71,19 @@
     "tags": "css popup app-ui switch upper-right",
     "confidence": "high",
     "time": 1786625163352
+  },
+  {
+    "claim": "The workbench command code pane edits the SIGNATURE, not just the body: a params input + return-type select (.wcc-sig-row, patch mode only; the read-only .wcc-sig span otherwise). Signature edits join the dirty check, and the save routes through upsert_command - the only command that writes returntype/params - carrying the current body and imports in that one call (which recompiles). Trade-off: unlike patch_command_body's exact-match guard, that path is unguarded - the editor's copy wins.",
+    "detail": "dev.workbench patches p91-p98 (2026-08-14). An off-list returntype (e.g. InputStream) is kept as its own select option: shown faithfully, and a save keeping it fails visibly at upsert_command's validation rather than being coerced. Verified end-to-end on a disposable instance with Playwright: create, retype String->JSONObject + add param, save green after matching the body, reopen shows persisted signature, body-only edits still travel the patch_command_body path.",
+    "tags": "workbench command signature returntype params upsert_command dirty",
+    "confidence": "high",
+    "time": 1786706981156
+  },
+  {
+    "claim": "A command-less control's commands tab is a dead end in the workbench: facetPresent(\"cmd\") is (record.cmd?.length > 0), so setFacet falls into the 'this control has no cmd facet - creating one is not wired up yet' branch and the new-command form never renders. The FIRST command on a fresh control cannot be created through the UI; seed it via dev.code.upsert_command, after which the tab works normally.",
+    "detail": "Found 2026-08-14 while smoke-testing signature editing against scratch.scratch (zero commands). The form (.wb-newcmd) only renders inside the facet===\"cmd\" branch, which is unreachable while record.cmd is empty. Fix candidate: let the cmd chip through the absent gate in patch mode, like the html/css/js create-on-save affordance.",
+    "tags": "workbench command create facetPresent cmd gap",
+    "confidence": "high",
+    "time": 1786706981218
   }
 ]
