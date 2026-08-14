@@ -48,6 +48,14 @@ link scratch      scratch
   | xargs -0 -r git update-index --skip-worktree \
   && echo "  skip-worktree set on the scratch skeleton")
 
+# The brain is instance-owned (docs/one-memory-cycle.md A4): kb's tracked
+# files are frozen at their A4 state and .gitignore hides everything new.
+# Skip-worktree completes the freeze per-clone - live deposits mutate the
+# tracked records and facets, and none of it may ever ride a commit.
+(cd "$AGENT_DIR" && git ls-files -z data/kb \
+  | xargs -0 -r git update-index --skip-worktree \
+  && echo "  skip-worktree set on the kb freeze (the brain is instance-owned)")
+
 # The platform checkout's generated files absorb overlay knowledge on
 # every rebuild (api.rs grows agent/kb/... modules; the initializer
 # learns the FFI crates). They are tracked upstream but their overlay

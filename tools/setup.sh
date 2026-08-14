@@ -147,7 +147,21 @@ echo "== skip-worktree set on the builder-written newbound files (undo: git upda
    esac
  done)
 
-# 9. Prove it.
+# 9. Top up the brain from the primer (docs/one-memory-cycle.md A4).
+#    Idempotent (exact-claim dedupe) and best-effort: a fresh clone's brain
+#    starts from the frozen kb snapshot, and the primer carries whatever
+#    doctrine/process material was curated after the freeze.
+if [ -f "$AGENT_DIR/docs/kb-seed.json" ]; then
+  if "$AGENT_DIR/tools/nb-call.py" -C "$NB" agent-archivist-bootstrap \
+       "{\"path\": \"$AGENT_DIR/docs/kb-seed.json\"}" >/dev/null 2>&1; then
+    echo "== brain topped up from docs/kb-seed.json (idempotent)"
+  else
+    echo "== brain top-up skipped (bootstrap unavailable — run it once the binary serves mcp):"
+    echo "==   tools/nb-call.py agent-archivist-bootstrap '{\"path\": \"$AGENT_DIR/docs/kb-seed.json\"}'"
+  fi
+fi
+
+# 10. Prove it.
 if [ "$PROBE" = yes ]; then
   "$AGENT_DIR/tools/overlay-probe.py" "$NB"
 fi
@@ -155,7 +169,7 @@ fi
 echo "== setup complete: $NB serves the store via ./target/release/newbound mcp,"
 echo "==   or run ./target/release/newbound for the web UI (agent app at /agent/index.html)"
 
-# 10. Attachment sense. The server side is proven (the probe), but whether a
+# 11. Attachment sense. The server side is proven (the probe), but whether a
 #     CLIENT holds the native attachment can't be read from here — harnesses
 #     spawn .mcp.json servers only at their own startup. Infer what we can:
 #     a live server process means some client is attached; none means none is.

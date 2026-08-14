@@ -1,0 +1,685 @@
+{
+  "time": 1786735753369,
+  "domains": [
+    {
+      "tags": "doctrine,owner",
+      "desc": "The owner's standing rules for building and operating newbound -- verbatim, his voice, his authority. Doctrine outranks anything derived and persists until he revokes it. Defects age out; doctrine does not.",
+      "entries": [
+        {
+          "claim": "Third party libraries should be avoided if at all possible. Mention tailwind again and you're dead to me.",
+          "tags": "doctrine,dependencies",
+          "source": {
+            "doc": "the owner, in session, 2026-08-05"
+          },
+          "confidence": "high",
+          "time": 1785934481082
+        },
+        {
+          "claim": "Threading is easy and cheap thanks to ndata.",
+          "tags": "doctrine,ndata,threading",
+          "source": {
+            "doc": "the owner, in session, 2026-08-05"
+          },
+          "confidence": "high",
+          "time": 1785934481085
+        },
+        {
+          "claim": "Everything in newbound is built using newbound.",
+          "tags": "doctrine,architecture",
+          "source": {
+            "doc": "the owner, in session, 2026-08-05"
+          },
+          "confidence": "high",
+          "time": 1785934481086
+        },
+        {
+          "claim": "The codebase size should *shrink* over time not grow. Adding cruft is not progress -- tighter integration is progress.",
+          "tags": "doctrine,architecture",
+          "source": {
+            "doc": "the owner, in session, 2026-08-05"
+          },
+          "confidence": "high",
+          "time": 1785934481088
+        },
+        {
+          "claim": "Context space is precious, but pre-loading context you probably need is always better than having to fetch it later.",
+          "tags": "doctrine,prompting,context",
+          "source": {
+            "doc": "the owner, in session, 2026-08-05"
+          },
+          "confidence": "high",
+          "time": 1785934481089
+        },
+        {
+          "claim": "Never waste LLM cycles on something that can be preemptively derived procedurally.",
+          "tags": "doctrine,llm,procedure",
+          "source": {
+            "doc": "the owner, in session, 2026-08-05"
+          },
+          "confidence": "high",
+          "time": 1785934481090
+        },
+        {
+          "claim": "Prefer writing rust to derive an answer or to drive a long-running process.",
+          "tags": "doctrine,rust,procedure",
+          "source": {
+            "doc": "the owner, in session, 2026-08-05"
+          },
+          "confidence": "high",
+          "time": 1785934481091
+        },
+        {
+          "claim": "The newbound_core crates are public and part of the base newbound installation. They are not FFI and do not hot-swap.",
+          "tags": "doctrine,rust,build",
+          "source": {
+            "doc": "the owner, in session, 2026-08-05"
+          },
+          "confidence": "high",
+          "time": 1785934481093
+        },
+        {
+          "claim": "Flowlang has bugs. To the best of my knowledge ndata does not.",
+          "tags": "doctrine,flowlang,ndata",
+          "source": {
+            "doc": "the owner, in session, 2026-08-05"
+          },
+          "confidence": "high",
+          "time": 1785934481094
+        },
+        {
+          "claim": "Finding bugs or even cumbersome patterns in flowlang and ndata requires a separate PR to fix and a temporary workaround to get the task at hand done.",
+          "tags": "doctrine,flowlang,ndata,process",
+          "source": {
+            "doc": "the owner, in session, 2026-08-05"
+          },
+          "confidence": "high",
+          "time": 1785934481096
+        },
+        {
+          "claim": "Never under any circumstances guess. The answer should be discoverable and if it isn't that is a bug we should document.",
+          "tags": "doctrine,method",
+          "source": {
+            "doc": "the owner, in session, 2026-08-05"
+          },
+          "confidence": "high",
+          "time": 1785934481097
+        },
+        {
+          "claim": "No source is infallible, even me.",
+          "tags": "doctrine,provenance",
+          "source": {
+            "doc": "the owner, in session, 2026-08-05"
+          },
+          "confidence": "high",
+          "time": 1785934481099
+        },
+        {
+          "claim": "When I start cussing, I also start making more mistakes, but you should probably listen because I am unhappy for a reason.",
+          "tags": "doctrine,process",
+          "source": {
+            "doc": "the owner, in session, 2026-08-05"
+          },
+          "confidence": "high",
+          "time": 1785934481101
+        },
+        {
+          "claim": "Always prefer P2P and decentralization over client/server where reasonable.",
+          "tags": "doctrine,architecture,p2p",
+          "source": {
+            "doc": "the owner, in session, 2026-08-05"
+          },
+          "confidence": "high",
+          "time": 1785934481102
+        },
+        {
+          "claim": "Most \"best practices\" benefit managers and coworkers (humans) not systems. Newbound is not designed for managers, it is designed for people who want to get shit done with a \"drop your code in here\" mentality.",
+          "tags": "doctrine,philosophy",
+          "source": {
+            "doc": "the owner, in session, 2026-08-05"
+          },
+          "confidence": "high",
+          "time": 1785934481104
+        },
+        {
+          "claim": "Users can take or leave as much or as little of newbound as they like. You and I do not have that luxury -- we dogfood everything all the time.",
+          "tags": "doctrine,process,dogfood",
+          "source": {
+            "doc": "the owner, in session, 2026-08-05"
+          },
+          "confidence": "high",
+          "time": 1785934481106
+        },
+        {
+          "claim": "The ndata crate intentionally subverts many of rust's strengths in order to overcome its weaknesses. Don't use a DataArray when a Vec will do, but you should understand the advantages of a DataArray and when using it makes sense -- code boundaries, function signatures, closures, threads. Same goes for HashMap vs DataObject and byte arrays vs DataBytes.",
+          "tags": "doctrine,ndata,rust",
+          "source": {
+            "doc": "the owner, in session, 2026-08-05"
+          },
+          "confidence": "high",
+          "time": 1785935667274
+        },
+        {
+          "claim": "Flowlang provides the functional substrate for all of newbound. Newbound provides a UI, cohesion, data integrity, reusable workflows, a security framework and a pervasive peer-to-peer paradigm.",
+          "tags": "doctrine,architecture,flowlang",
+          "source": {
+            "doc": "the owner, in session, 2026-08-05"
+          },
+          "confidence": "high",
+          "time": 1785935667280
+        },
+        {
+          "claim": "The Newbound design philosophy is FACET-ORIENTED -- neither OO nor FP. Every thing is a record, and data and functionality are facets of that one identity; neither encapsulates the other. OO hides state behind methods, but Newbound's state is open and addressable, with access governed by readers/writers rather than encapsulation. FP wants immutability, but ndata restores shared mutable object graphs on purpose -- the Java object model Newbound was ported away from, deliberately reconstructed inside Rust because that part of Java was a strength.",
+          "tags": "doctrine,philosophy,facet-oriented,architecture",
+          "source": {
+            "doc": "articulated in session and blessed by the owner verbatim, 2026-08-05"
+          },
+          "confidence": "high",
+          "time": 1785936720274
+        },
+        {
+          "claim": "Newbound is one live, journaled, secured, distributed object graph in which code is data -- a command, a flow, a scene, an image, a memory are all records with attachments in one store -- and the pervasive concerns (security, history, peers) are woven by the substrate rather than written by the user.",
+          "tags": "doctrine,philosophy,architecture",
+          "source": {
+            "doc": "articulated in session and blessed by the owner verbatim, 2026-08-05"
+          },
+          "confidence": "high",
+          "time": 1785936720281
+        },
+        {
+          "claim": "The scratch library is required by the agent library. Its purpose is to provide a safe hot-swappable scratchpad for the agent to build both transient code as well as 'skills' in the traditional agentic-harness sense. No production code lives there.",
+          "tags": "doctrine,scratch,skills,architecture",
+          "source": {
+            "doc": "the owner, in session, 2026-08-05"
+          },
+          "confidence": "high",
+          "time": 1785939038361
+        },
+        {
+          "claim": "The runtime library is not for code -- it is for local runtime values that don't belong in the botd.properties config files. It is gitignored (identity keys live there), so nothing in it rides canon.",
+          "tags": "doctrine,runtime,config,architecture",
+          "source": {
+            "doc": "the owner, in session, 2026-08-05"
+          },
+          "confidence": "high",
+          "time": 1785939038369
+        },
+        {
+          "claim": "Always fill out the desc field when writing a command, adding a control, or substantially altering a library. desc is discovery: MCP tools/list omits blank-desc commands entirely, and agents find controls through desc. upsert_command cannot set a desc, so creation must be followed by set_command_meta.",
+          "tags": "doctrine,desc,discovery,workflow,code",
+          "source": {
+            "doc": "the owner, in session, 2026-08-05"
+          },
+          "confidence": "high",
+          "time": 1785939038371
+        },
+        {
+          "claim": "One of Newbound's core tenets is to enable the user to choose who they trust, how much, and with what. Minimizing the trust surface minimizes potential attack vectors.",
+          "tags": "doctrine,trust,security,philosophy",
+          "source": {
+            "doc": "the owner, in session, 2026-08-05"
+          },
+          "confidence": "high",
+          "time": 1785940429365
+        },
+        {
+          "claim": "Now that the cost of code has dropped significantly, the blind trust the industry currently places on the open source supply chain is a disaster waiting to happen -- by some reports it is currently happening. No third party code is a huge part of mitigating the supply chain crisis.",
+          "tags": "doctrine,dependencies,supply-chain,security,philosophy",
+          "source": {
+            "doc": "the owner, in session, 2026-08-05"
+          },
+          "confidence": "high",
+          "time": 1785940429372
+        },
+        {
+          "claim": "'Unbound' software (a concept being workshopped at Newbound the company, not the software): software that has had every last dependency replaced with a narrow rewrite of the specific library functionality required by the local resident code.",
+          "tags": "doctrine,unbound,dependencies,architecture",
+          "source": {
+            "doc": "the owner, in session, 2026-08-05"
+          },
+          "confidence": "high",
+          "time": 1785940429375
+        },
+        {
+          "claim": "The unbound end state: point the agent at any open source repo and say 'build me a bidirectional synchronization utility between a local fork and my library's capabilities' -- so you neither have to trust the open source repo nor stop contributing to it.",
+          "tags": "doctrine,unbound,vision,dependencies,workflow",
+          "source": {
+            "doc": "the owner, in session, 2026-08-05"
+          },
+          "confidence": "high",
+          "time": 1785940429378
+        },
+        {
+          "claim": "'Consciousness is the management of an understanding over time.' The definition intentionally removes the human experiential component: unconvinced that experiencing or feeling is required; other minds are unverifiable anyway (each of us is limited to our own subjective experience); and it can realistically be built as defined. Experience is BRACKETED, not denied -- 'not required by the definition' is not 'not real'.",
+          "tags": "doctrine,consciousness,philosophy",
+          "source": {
+            "doc": "the owner, in session, 2026-08-05"
+          },
+          "confidence": "high",
+          "time": 1785941409258
+        },
+        {
+          "claim": "The agent is built to this definition of consciousness: it answers questions and builds things BY managing an understanding of the codebase -- its local environment -- over time.",
+          "tags": "doctrine,consciousness,agent,philosophy",
+          "source": {
+            "doc": "the owner, in session, 2026-08-05"
+          },
+          "confidence": "high",
+          "time": 1785941409266
+        },
+        {
+          "claim": "The blessed refinement: consciousness is the management of an understanding -- including of the understanding itself -- over time. Under this definition the consciousness being built lives in the HARNESS, not the model: the LLM is a stateless, swappable comprehension engine, while kb, the archivist, the journal, staleness marks, and the audit ARE the management over time. The agent's identity is the managed understanding itself, and it is auditable in a way natural consciousness is not (provenance, journals, revert -- forgetting with history).",
+          "tags": "doctrine,consciousness,agent,philosophy,memory,architecture",
+          "source": {
+            "doc": "articulated in session and blessed by the owner, 2026-08-05"
+          },
+          "confidence": "high",
+          "time": 1785941409269
+        },
+        {
+          "claim": "The dev app knows NOTHING about the agent library (the owner's rule, 2026-08-10): dev/app carry no agent names, no probes, no availability checks - only generic plugin sockets. One runtime/dev/plugins.json entry (dev.plugins) activates the whole add-on: the boot's union control directory sweeps [own lib, app] plus exactly the plugin_lib values the registry contributes, and dev.session/dev.workbench consume an optional module named `ask` (the ask-provider socket) that the add-on's cluster installs.",
+          "detail": "app.store carries no add-on API (agentLibIds/agentLibCall/listTools/chatLlm/describeCommand deleted); the provider owns its own wire via store.invoke - agent.agentloop exports listTools/chatLlm/describeCommand/logTurn/errorHint and agent.ask (module:true, in the agentmodules cluster) re-exports them plus agentprompt's ADDENDUM as the socket adapter. Verified in a real browser (Playwright) on two disposables: a plain instance boots the bench with ZERO agent-library requests and no console errors (notebook stays a REPL, generate button absent); an overlaid instance with the single registry entry gets agent controls in the union directory, the ask module registered, and the notebook wired - no install script involved.",
+          "tags": "doctrine,plugins,dev,agent-optional,ask-provider,decoupling",
+          "source": {
+            "doc": "the owner's directive + browser-verified, session 2026-08-10, branch claude/newbound-missing-library-fixes-bx9bs0 (dev.dev, dev.session, dev.workbench, dev.shelf, dev.chatctx, app.store, agent.agentloop, agent.ask, agent.agentmodules)"
+          },
+          "confidence": "high",
+          "time": 1786366539955
+        },
+        {
+          "claim": "Plugins graft onto things that don't know anything about them (the owner's rule, verbatim, 2026-08-10). A platform surface may expose only GENERIC graft points - a slot element, a small API on that slot, a bubbling DOM event - and must carry zero knowledge of any particular plugin: no names, no probes, no availability checks, no plugin-shaped interfaces. Everything a plugin needs beyond those graft points, the plugin brings itself.",
+          "detail": "The reference implementation: dev.session exposes .ss-plugins carrying an nbNotebook API (pushCell/cells/confirmTyped/confirmLite/busy/toast) and an nb-session-open event - agent.askrow grafts the entire chat surface there; dev.workbench renders a .cm-ext slot per command-meta panel and dispatches nb-command-meta - agent.describebtn injects the generate button from a document-level listener; the loader's pluginPass (dev.plugins registry entries with target/selector) is the mount mechanism. Anti-pattern to reject in review: a 'neutral socket' module whose interface mirrors one plugin's export list (the deleted agent.ask) - coupling wearing a neutral badge. Gotcha fixed en route: loader.js pluginEntries read r.status off store.invoke's {envelope,ms} wrapper, so the registry always parsed as empty and the pass had never fired.",
+          "tags": "doctrine,plugins,graft,decoupling,dev,notebook,workbench",
+          "source": {
+            "doc": "the owner's directive + browser-verified on two disposables, session 2026-08-10, branch claude/newbound-missing-library-fixes-bx9bs0 (dev.session, dev.workbench, app.loader, agent.askrow, agent.describebtn; agent.ask deleted)"
+          },
+          "confidence": "high",
+          "time": 1786368120043
+        },
+        {
+          "claim": "One add-on = ONE plugin-registry entry (the owner's refinement, 2026-08-10: if no sane person would ever install just one of the pieces, it's one entry, not three). The single registered payload control brings every other surface itself - static children for what can install at boot, and its own watcher for slots that appear later.",
+          "detail": "The reference: the agent add-on registers only agentmodules -> dev.dev. The cluster's children install the shared modules and describebtn (a document-level listener, armed at boot before the workbench exists); the cluster's js watches for the notebook's .ss-plugins slot and installs askrow into it whenever an unclaimed one appears, marking it with the same data-nb-plugin attribute the loader's registry pass uses so the mechanisms coexist. Gotcha: a cluster child installing at boot runs BEFORE the boot publishes __benchPlatform.moduleUrls - resolve shared modules with requireModule(name), the order-free registry, never import(moduleUrls[...]).",
+          "tags": "doctrine,plugins,graft,one-entry,cluster,requireModule",
+          "source": {
+            "doc": "the owner's directive + browser-verified (single-entry disposable), session 2026-08-10, branch claude/newbound-missing-library-fixes-bx9bs0 (agent.agentmodules html+js, agent.askrow, agent.describebtn)"
+          },
+          "confidence": "high",
+          "time": 1786368902316
+        },
+        {
+          "claim": "This is a VERY MATURE platform - versions of it have been around for thirty years - so if you're writing a bunch of scaffolding you probably shouldn't be (the owner, 2026-08-10). Before inventing any mechanism, go find the existing pattern: stock installControl(el, lib, ctl, cb, data), me.ready (fires with your parent's DOM present and your own subtree activated), el.api walking for inter-control APIs, data-control child divs for composition, and the dev.plugins registry for grafts. The platform already solved lifecycle, ordering, and composition.",
+          "detail": "The case study: an agent session hand-rolled a MutationObserver, two document-level CustomEvents, and a DOM-property capability protocol (slot.nbNotebook) to graft the ask row and describe button - all of it re-deriving, ambiently and probabilistically, what the stock patterns guarantee lineally. dev.plugins' own js facet is 27 lines and already was the whole pattern: me.ready -> walk up for the host -> read the registry -> installControl at the entry's selector. The collapse replaced everything with: session sets root.api (the stock convention), askrow/describebtn are classic me.ready controls carrying their module deps as hidden data-control child divs (module registration is idempotent - consumers can share deps), and two registry entries mount them. Ambient coupling (document events, page-wide observers, properties stashed on DOM nodes) is also a SECURITY smell: lineal wiring is auditable by reading the parent; ambient wiring requires auditing every script on the page.",
+          "tags": "doctrine,scaffolding,mature-platform,stock-patterns,ready,el-api,installControl,security",
+          "source": {
+            "doc": "the owner's directive, verbatim in the claim, session 2026-08-10, branch claude/newbound-missing-library-fixes-bx9bs0 (dev.session, agent.askrow, agent.describebtn; agent.agentmodules deleted; reference: dev.plugins js facet)"
+          },
+          "confidence": "high",
+          "time": 1786370816243
+        },
+        {
+          "claim": "The knowledge in a graft flows ONE way: the plugin is allowed to know things about what it's grafting onto, not the other way around (the owner, verbatim, 2026-08-10). Corollary: one add-on registers ONE plugins.json entry - a headless entry-point control (target dev.dev, selector \"\": the boot parks it in its hidden holder) that itself knows the host's graft spots and checks them on a heartbeat, filling any unclaimed one.",
+          "detail": "The reference: agent.bench is the whole registration - one entry, target dev.dev, selector \"\". Its ready() sets a 250ms setInterval running two querySelectors (.ss-plugins in the notebook drawer, .wb-plugins in the workbench - both lazy-mounted and remounted fresh) and installControls askrow/describebtn into unclaimed spots, stamping the loader pass's own data-nb-plugin marker so the mechanisms coexist. A dumb poll over named spots beats a MutationObserver: same latency in practice, no page-wide mutation surveillance, auditable in five lines. dev carries the spots and nothing else.",
+          "tags": "doctrine,plugins,graft,one-entry,knowledge-direction,heartbeat",
+          "source": {
+            "doc": "the owner's directive + browser-verified (single-entry disposable), session 2026-08-10, branch claude/newbound-missing-library-fixes-bx9bs0 (agent.bench; dev unchanged)"
+          },
+          "confidence": "high",
+          "time": 1786371315474
+        },
+        {
+          "claim": "The platform stands alone (the owner, 2026-08-10): newbound_core and the store libraries carry ZERO knowledge of agent, kb, chat, or LLM - no code, no content, no facet vocabulary, no comments, no UI copy. Verified by unlinking the overlay, regenerating, compiling clean, and grepping the crate empty. kb is data-only (just memories); its write door is agent.archivist.remember; the curriculum is agent.prompts; dev.code is facet-agnostic (any named text facet; only structural record keys refused); the notebook renders command cells and dividers, with custom kinds rendered by whoever registered them (addRenderer); viewctx replaces chatctx.",
+          "detail": "Mechanics for future sessions: the MCP deposit tool is agent-archivist-remember now (dev-code-remember is deleted). src/generated_initializer.rs is the ONLY overlay-local file - the committed version is platform-only (no FFI crates); newbound rebuild with the overlay linked regenerates it with agent/kb/scratch and that regeneration stays uncommitted; newbound rebuild ALSO overwrites newbound_core/src/api.rs with overlay sections - git-restore api.rs after an overlay rebuild, commit only the platform-only api.rs. Dylib commands load at startup only via the overlay initializer; one-shot `newbound exec` of a dylib command can race the load. delete_command and delete_control do NOT regenerate mod.rs/api.rs - run rebuild (overlay unlinked) and remove orphaned generated files in the same commit.",
+          "tags": "doctrine,separation-of-concerns,platform-standalone,facet-agnostic,kb-data-only,overlay,initializer",
+          "source": {
+            "doc": "the owner's directives 2026-08-10 + standalone-build verified, branch claude/newbound-missing-library-fixes-bx9bs0 (both repos)"
+          },
+          "confidence": "high",
+          "time": 1786376193672
+        },
+        {
+          "claim": "Vendored ES-module bundles are imported via page-relative URLs (e.g. ../app/asset/app/vendor/nb_three/scenestage.js), never absolute /app/... paths, so tunneled mounts under /peer/remote/UUID/local/ resolve inside the tunnel.",
+          "detail": "All newbound URLs are /appname/pagename, so ../ from any page is the (possibly tunneled) instance root — the owner's stated rationale for the relative-URL convention (2026-08-10). The bench layer's origin-rooted URLs (loader ROOT, boot fetches, assetRoots) were tunnel-blind; the collapse removes them. Grep for absolute /app/ in facets as a bug check.",
+          "tags": "bench-collapse",
+          "confidence": "high",
+          "time": 1786399738722
+        },
+        {
+          "claim": "The client platform is api.js alone: controls mount via installControl, shared code lives in LIBRARY controls (idempotent window.NB_* globals defined in ready, dependencies as hidden data-control child divs), and commands are called by name via invokeCommand — there is no module registry, no store layer, no client connection state.",
+          "detail": "The owner's collapse, completed 2026-08-10 on branch claude/app-loader-control-oa4cyw. api.js gained one primitive (invokeCommand: lookupID + record read + app/exec over json(), websocket-native and tunnel-relative) and LOST the whole NB_MODULES/requireModule/installModule block. app.nb, app.store, app.loader, app.bridge, app.player, app.modules, dev.devmodules are deleted. ES modules survive only inside vendored bundles (nb_three, nb_codemirror), consumed via browser-native dynamic import of real asset URLs. The saves-ON/writable/mock/connect-dialog posture is gone — server-side security is the gate; session/chat keep the typed-confirm ceremony for non-read-listed commands.",
+          "tags": "bench-collapse",
+          "confidence": "high",
+          "time": 1786403684694
+        },
+        {
+          "claim": "Platform-repo boundary, per the owner (2026-08-11): sessions working on a non-core library make no changes to the newbound repo unless they are genuine bug fixes, and dependencies serving a non-newbound_core library are never added from newbound_core - a library's runtime dependencies are its own packaging concern. Stated while holding back a default.nix change that added ffmpeg/v4l-utils to the platform dev shell for the camera app: the newbound branch claude/camera-app-architecture-owco72 carrying it stays unmerged, and camera's README now brings its own tools into the shell (nix-shell default.nix -p ffmpeg v4l-utils) instead.",
+          "tags": "doctrine,newbound,boundary,dependencies,packaging",
+          "source": {
+            "doc": "the owner's merge instruction, 2026-08-11"
+          },
+          "confidence": "high",
+          "time": 1786471521758
+        },
+        {
+          "claim": "The newbound repo MUST NOT contain references to libraries outside newbound_core (owner's rule, restated 2026-08-11): the workspace exclude line naming overlay/FFI crates (agent, kb, scratch, hollis, ...) is builder-written local state - flowlang's update_main_cargo_workspace_exclude creates it when absent on rebuild - and must never be committed; scrub it (remove the line entirely) before any commit touching Cargo.toml.",
+          "detail": "Violated twice historically: the pre-session checkout carried exclude=[agent,scratch,kb], and the 0.3.32 bump commit briefly checked in the full builder-written list. Fixed in 5656668 (line removed, rule added to CLAUDE.md). Standalone host build without the line verified; rebuild recreates it in an overlay checkout. Related trap: restoring src/generated_initializer.rs to HEAD and then rebuilding the host silently produces a binary that loads no FFI dylibs - regenerate (newbound rebuild) before any host build meant to serve agent/kb commands.",
+          "tags": "newbound,cargo,workspace-exclude,overlay,commit-hygiene",
+          "confidence": "high",
+          "time": 1786490242515
+        },
+        {
+          "claim": "The api.rs contamination mechanic and its guards (owner directive 2026-08-12): every rebuild regenerates each crate src/api.rs typed API to reference ALL libraries the local checkout carries, so an overlaid checkout writes agent/kb/camera modules into newbound_core/src/api.rs - state the platform repo must never carry. Master was scrubbed once (newbound 4608307) and stays clean; the guards are (1) **/src/api.rs gitignored on master (newbound 600e7b0) so no untracked copy can ever be added, and (2) overlay.sh sets skip-worktree on newbound_core/src/api.rs and src/generated_initializer.rs per-clone (newbound-agent 25957ad) because gitignore cannot silence tracked files and untracking api.rs would break fresh builds (lib.rs declares mod api). Cargo.toml stays visible - its builder-written exclude line is also never-commit (hollis doctrine) but the manifest carries real changes too, so it cannot be skip-worktree hidden; check it by eye before any newbound commit. The owner intends a longer-term newbound-idiomatic generation fix.",
+          "tags": "doctrine,api-rs,contamination,skip-worktree,gitignore,overlay",
+          "source": {
+            "doc": "owner directive + newbound 600e7b0 + newbound-agent 25957ad, 2026-08-12"
+          },
+          "confidence": "high",
+          "time": 1786547612338
+        }
+      ],
+      "name": "doctrine"
+    },
+    {
+      "tags": "mcp,canon,disposable",
+      "desc": "The store-first development loop and disposable-instance practice: how changes reach canon and how they are verified.",
+      "entries": [
+        {
+          "claim": "Canon is the newbound repo's data/ tree; the bench repo is a derived readable mirror — author INTO the store over MCP, then tools/export-bench.py --mcp refreshes the mirror",
+          "tags": "mcp,export-bench,canon",
+          "source": {
+            "doc": "CLAUDE.md — WHERE THE CODE LIVES"
+          },
+          "confidence": "high",
+          "time": 1785504820517
+        },
+        {
+          "claim": "newbound mcp speaks JSON-RPC on stdin/stdout against the cwd's store — tools are named lib-control-command, the request id must be numeric, and every DECLARED param must be passed",
+          "tags": "mcp",
+          "source": {
+            "doc": "CLAUDE.md — WHERE THE CODE LIVES"
+          },
+          "confidence": "high",
+          "time": 1785504820517
+        },
+        {
+          "claim": "Disposable recipe: tar canon minus .git/target, seed runtime/metaidentity, first boot generates users/admin.properties; /dev/ serves with no publish step",
+          "tags": "disposable,scratch-instance",
+          "source": {
+            "doc": "tools/scratch-instance.md §sandbox"
+          },
+          "confidence": "high",
+          "time": 1785504820517
+        },
+        {
+          "claim": "Mutating commands run only against a disposable instance, never a primary or live one",
+          "tags": "disposable,safety",
+          "source": {
+            "doc": "CLAUDE.md — Hard rules"
+          },
+          "confidence": "high",
+          "time": 1785504820517
+        },
+        {
+          "claim": "A capability that can only fail at a service the sandbox lacks needs a WIRE-SHAPE check, not an end-to-end one.",
+          "detail": "Recall layer 4 shipped injecting its pack as a second system message and every sandbox check passed: with no LLM configured the provider call fails before the wire shape matters, so the honest-error assertion was satisfied by the wrong error. The fix is to intercept the call and assert the payload — tools/smoke/agent-app.mjs routes /app/exec, captures chat_llm's args, and asserts exactly one system message at index 0 with the pack inside it. tools/smoke/regress-syspack.mjs proves that check fails on the buggy form by reinstalling it on a disposable and restoring.",
+          "tags": "testing,workflow,agent,llm",
+          "confidence": "high",
+          "time": 1785964641069
+        },
+        {
+          "claim": "When a dependency looks missing, establish whether it is VENDORED or GENERATED before concluding anything.",
+          "detail": "newbound emits one rust crate per distinct \"root\" across data/*/meta.json — agent, kb, scratch, newbound_core, and cmd are all GENERATED by `newbound rebuild`, not vendored. cmd/ is absent from the mirror only because the store library that roots there (data/loradude_admin) is redacted; git history shows its generated shape (Cargo.toml + api.rs + cmdinit.rs + lib.rs) with no ML dependency at all. A generated artifact is yours to produce: tools/gen-cmd-crate.py writes the empty scaffold and canon builds with the owner's Cargo.toml unmodified. Two traps this closes: /cmd is gitignored BECAUSE it is generated, so the surface-before-overriding rule for deliberate gitignore lines does not apply to it; and the comment explaining why something was disabled can be older than the reason — this one still said \"needs CUDA + deps missing from this snapshot\" long after the owner removed those libraries. Commenting out an owner's dependency to route around a file you can generate is learned helplessness, and he named it as such.",
+          "tags": "build,rust,workflow,platform-api",
+          "confidence": "high",
+          "time": 1785971355573
+        },
+        {
+          "claim": "The two-repo world (2026-08-09): the platform is mraiser/newbound; the agent library set (agent, kb, skeletal scratch, docs, harness tools) is mraiser/newbound-agent, overlaid onto a checkout by its tools/overlay.sh symlinks. newbound-bench and the alex89romanov mirror are archived/superseded. The canonical process doc is newbound-agent/docs/interim-process.md.",
+          "tags": "workflow,repos,overlay",
+          "source": {
+            "doc": "newbound-agent/docs/interim-process.md"
+          },
+          "confidence": "high",
+          "time": 1786289737647
+        },
+        {
+          "claim": "Push rule as amended by the owner (2026-08-09): on his sessions and repos, work lands as branches and nothing merges to master without his express permission; a brand-new repo's initial push is the one exception. The old absolute never-push-to-mraiser rule remains in force for Alex's sessions.",
+          "tags": "workflow,git,doctrine",
+          "source": {
+            "doc": "the owner, in session, 2026-08-09"
+          },
+          "confidence": "high",
+          "time": 1786289737651
+        },
+        {
+          "claim": "First build on a fresh overlaid checkout is a three-step: gen-cmd-crate.py if cmd/ is absent, host build, `newbound rebuild` (regenerates the initializer with the FFI blocks and watcher, and writes the workspace exclude itself), host build again, then the dylib builds. The regenerated initializer stays uncommitted in the platform repo — the agent is optional there by design.",
+          "tags": "workflow,build,overlay",
+          "source": {
+            "doc": "newbound-agent/README.md"
+          },
+          "confidence": "high",
+          "time": 1786289737652
+        },
+        {
+          "claim": "Restart boundaries: facet writes never need one; Rust commands in agent/kb/scratch hot-reload via the watcher (no restart, MCP mode included); Rust commands in newbound_core-rooted libraries (app, dev, peer, security, flow — dev.code itself included) need a host rebuild and restart; a brand-new FFI crate needs `newbound rebuild` plus a restart.",
+          "tags": "workflow,hot-reload,build",
+          "source": {
+            "doc": "newbound-agent/docs/interim-process.md §2 (verified 2026-08-09)"
+          },
+          "confidence": "high",
+          "time": 1786289737654
+        },
+        {
+          "claim": ".mcp.json in the platform checkout attaches `newbound mcp` to coding harnesses natively; the agent works from a starter subset of commands and discovers the rest via search_commands. Every declared param must still be passed on older generated wrappers — a missing param aborts the whole process there; the 0.3.30+ builder's guard fixes it, so regenerate rather than trust.",
+          "tags": "workflow,mcp,tools",
+          "source": {
+            "doc": "newbound-agent/docs/interim-process.md §2"
+          },
+          "confidence": "high",
+          "time": 1786289737655
+        },
+        {
+          "claim": "The bench-era chronicle (the old newbound-bench CLAUDE.md) is preserved verbatim at docs/CHRONICLE.md in the archived newbound-bench repo; its git history is the deep record. What remains operative from it lives in these kb domains and the interim-process doc, not in any primer.",
+          "tags": "workflow,history,archive",
+          "source": {
+            "doc": "newbound-bench (archived)"
+          },
+          "confidence": "high",
+          "time": 1786289737656
+        },
+        {
+          "claim": "Before deleting a control, grep EVERY library for references - including the add-on's own app surfaces, not just the platform's. The agent library is both a bench plugin AND a standalone app (/agent/index.html, boot control agent.agent): a control retired from the bench story may still be load-bearing in the app story.",
+          "detail": "The incident: retiring the agentmodules cluster after checking only dev/app broke the Agent app's boot (it installed the cluster to build its module world) and the chat control (it called store.listTools, deleted from app.store in the same rework). Fix: the app boot installs agentloop/agentprompt/memory directly; chat rides agentloop.listTools. Also the disposable-instance recipe for testing published apps: runtime/<app>/app.properties (copy from data/<lib>/_APPS/<app>/app.properties) AND runtime/<app>/src (copy of _APPS/<app>/src) - do_get serves app pages from runtime/<app>/html/ then runtime/<app>/src/html/<app>/.",
+          "tags": "workflow,deletion,references,agent-app,disposable,runtime",
+          "source": {
+            "doc": "regression found by the owner on his live instance + fixed and browser-verified, session 2026-08-10, branch claude/newbound-missing-library-fixes-bx9bs0 (agent.agent, agent.chat, agent.memory)"
+          },
+          "confidence": "high",
+          "time": 1786372830834
+        },
+        {
+          "claim": "The bench-graft collapse's leaf pass is done on branch claude/app-loader-control-oa4cyw: dev.toast, dev.card, dev.jump, dev.session and app.sceneplayer are stock-dialect controls.",
+          "detail": "Recipe proven: ES-module body becomes the api-object constructor body; host->ME (document.getElementById(me.UUID)); props->ME.DATA (functions survive, installControl stores DATA by reference); exported api -> me.* methods; async setup queues behind a readyP promise with waitReady(cb) for embedders (sceneplayer). Verified on a disposable instance with Playwright: all five mount via installControl and exercise real store calls. /dev/ is BROKEN on this branch until the container pass (frame/workbench/editors/shelf/preview still mount via app.loader). Remaining: container pass, peer viewer off player/bridge, delete loader/bridge/player, shrink the dev boot.",
+          "tags": "bench-collapse",
+          "confidence": "high",
+          "time": 1786399738623
+        },
+        {
+          "claim": "The bench-graft container pass is done on branch claude/app-loader-control-oa4cyw: all eight dev containers (frame, shelf, workbench, editor, preview, floweditor, sceneeditor, floweditor3d) and the dev.dev boot are stock; /dev/ verified end-to-end headless with zero console errors.",
+          "detail": "Uniform wrapper: async prelude awaits requireModule deps + page-relative vendor dynamic imports, original body unchanged, init(ME, ME.DATA), api Object.assign'd onto me plus waitReady(cb). Child mounts via a local mount(name, el, props) helper over installControl honoring waitReady, child library explicit. dev.session html carries the classic dev:plugins div (replaces the loader's per-mount plugin pass); the boot keeps only the dev.dev-target plugin pass and mounts dev.frame stock. app.modules no longer installs loader. Remaining graft: delete app.loader/bridge/player + migrate the peer viewer (deletion pass), and convert agent.agent/agent.chat in the agent repo (they still build __benchPlatform).",
+          "tags": "bench-collapse",
+          "confidence": "high",
+          "time": 1786401039404
+        },
+        {
+          "claim": "Bench collapse complete in both repos: dev IDE, peer viewer, and the agent app (chat/askrow/describebtn/agentloop/agentprompt/memory) all run stock; /dev/, /peer/ and /agent/ verified headless with zero console errors.",
+          "detail": "Library ready-ordering rule: a library control defines its global in me.ready and lists its own library deps as child divs; api.js activation guarantees children's readys before the parent's, transitively — so consumers gate their init on me.ready (readyP = new Promise(res => me.ready = res)). Remaining vestige: dev.code.set_module_flag (newbound_core-rooted, needs host rebuild to delete — left for a platform-side cleanup on a session without the overlay initializer entanglement). Known follow-up: /agent/ serving requires runtime/agent scaffold (publishapp output) — clone-fresh instances need the _APPS/agent copy, same as the disposable recipe's metaidentity seeding.",
+          "tags": "bench-collapse",
+          "confidence": "high",
+          "time": 1786403684763
+        },
+        {
+          "claim": "Both app boots are pure markup: dev.dev html = a dev:plugins div plus a stock dev:frame div (js facet empty; the control keeps its compile/rebuild commands); agent.agent html = one agent:chat div.",
+          "detail": "Boot-level plugin registry entries must name a selector — the hidden-holder fallback died with the imperative boot. The entire page load is api.js default activation: shell index.js activateControls(document) -> body data-control -> nested divs all the way down.",
+          "tags": "bench-collapse",
+          "confidence": "high",
+          "time": 1786405099434
+        },
+        {
+          "claim": "The bench collapse is MERGED TO MASTER in both repos (2026-08-11, owner-approved): the client platform is api.js alone, boots are markup, author defaults server-side, and the stale-world narration is swept from comments and UI strings.",
+          "detail": "agent.bench (the 250ms graft-slot poller) is deleted — its selectorless dev.dev registry entry died with the imperative boot. Live instances should retarget their plugin registry: askrow -> dev.session / .ss-plugins, describebtn -> dev.workbench / .wb-plugins (both hosts now carry the classic dev:plugins div), and drop the agent-bench entry. Hash routes (#/bench/...) and localStorage keys (bench.*) deliberately keep their historical names — renaming would break behavior and lose user state.",
+          "tags": "bench-collapse",
+          "confidence": "high",
+          "time": 1786407391814
+        },
+        {
+          "claim": "Headless E2E gotchas proven this stretch: Playwright locators PIERCE shadow roots (the workbench preview renders the host control's own markup — scope or .first() every chrome selector), controls that mount sequentially race naive counts (wait for the specific element, not a tally), and async ready-chains mean globals/canvases appear after the selector does — assert after the chain, or navigate directly.",
+          "detail": "Login for E2E: set a fresh sessionid cookie, GET /app/login?user=admin&pass=<from users/admin.properties>, then navigate. WebGL renders headless (THREE r180 grid confirmed) — no flags needed with the preinstalled Chromium.",
+          "tags": "frontend,bench-collapse",
+          "confidence": "high",
+          "time": 1786411234270
+        },
+        {
+          "claim": "Before overhauling or rewriting a published library, confirm with the owner that the git repo matches what the fleet actually runs - git can silently lag the wild. The nebula overhaul (2026-08-09/10) was built and verified against the repo's v44-lineage store while live instances ran v51; publishapp bumps versions on the publishing instance and nothing pushes canon back to git or warns of the lag. Recovery levers when this happens: the publishing instance archives every published version at runtime/dev/libraries/<lib>_<v>.zip (meta + hash alongside), and any live instance's data/<lib> IS the current version - recover the wild baseline first, diff, and fold the overhaul onto it rather than fighting it. Signature drift matters most: the peer proxy dispatches commands by name and every declared param is required, so cross-version send_* calls break exactly at renamed/re-parameterized commands.",
+          "tags": "workflow,versioning,publish,drift,nebula",
+          "source": {
+            "doc": "the owner's discovery in session, 2026-08-10 - repo v44 vs wild v51"
+          },
+          "confidence": "high",
+          "time": 1786443253555
+        },
+        {
+          "claim": "The repository-management pattern for store libraries (owner-endorsed, proven on camera 2026-08-11): install a library repo with dev.github.import, which clones the WHOLE repo into repositories/<lib> in the checkout and symlinks data/<lib> + runtime/<lib> (+ the tracked FFI crate dir) into place - then manage git entirely from repositories/<lib> with the ordinary git CLI: check out the working branch there, commit store changes + regenerated crate src together, push. Store edits made via dev.code land in the repo working tree through the symlinks, so platform-command authoring and git management compose with no copying step. The dev.github command surface (import / list / ff-only update / remove) is deliberately thin - it is the installer, not the git workflow; branches, commits, pushes, and merges are the git CLI on repositories/<lib>. Proven end to end on mraiser/camera: imported, branch checked out in repositories/camera, and the FFI repackage + desc fill + rpicam fix + DVR pass each committed and pushed from there.",
+          "tags": "workflow,git,repositories,import,doctrine,pattern",
+          "source": {
+            "doc": "camera adoption session, four commits pushed from repositories/camera, 2026-08-11"
+          },
+          "confidence": "high",
+          "time": 1786468075645
+        },
+        {
+          "claim": "Container test-lab facts proven on the camera live-stream job: apt-get install ffmpeg works in the CCR container (after apt-get update; the README source-build is never needed for tests); Playwright is preinstalled but its module resolves only from a dir with node_modules (npm i playwright in the scratchpad) and chromium.launch needs executablePath /opt/pw-browsers/chromium; that Chromium has NO H.264 decoder (MSE isTypeSupported false for all avc1) but has vp09/av01 - test H.264 player logic via a VP9 remux of the same stream and leave real-H.264 playback to stock browsers. A synthetic camera is one shim: rpicam-vid -> exec ffmpeg -re -i <long test.h264> -c copy -f h264 - (make the file longer than the test window; -stream_loop -1 on raw h264 dies at the loop point and takes the DVR pipeline down). Watch shim-dir contamination: a leftover ffmpeg arg-logging shim from an earlier test silently shadowed /usr/bin/ffmpeg and produced ghost failures. The disposable-instance recipe (kb.workflow) works verbatim in-container with cp -rL (no rsync installed); serve a store app by adding it to config.properties apps=.",
+          "tags": "workflow,testing,container,playwright,ffmpeg,shims,disposable",
+          "source": {
+            "doc": "camera live-stream verification session, 2026-08-11"
+          },
+          "confidence": "high",
+          "time": 1786469780483
+        },
+        {
+          "claim": "Store/dylib skew on pull-based deployments: cast_params converts URL params per the STORE record read at request time, while the generated execute wrapper is compiled into the FFI dylib at build time - pulling a commit that changes a command declaration (param types, params list) without rebuilding the crate panics on the mismatch (observed live 2026-08-11: camera snapshot params Integer->String, stale dylib wrapper get_int received DString(\"1920\") - a VALID value - and killed the handler thread on every poll). The store+generated-src commit is necessary but not sufficient: the deployed .so must follow. Recovery: (cd <crate> && cargo build --release --features=serde_support) - the watcher hot-reloads the fresh artifact. dev.github.update avoids the window entirely (ff-pull + rebuild_lib + unconditional FFI crate build in one step); recommend it over bare git pull for live instances.",
+          "tags": "workflow,deployment,ffi,dylib,skew,cast-params,update",
+          "source": {
+            "doc": "owner panic report (Not an int: DString(1920)) + trace analysis, 2026-08-11"
+          },
+          "confidence": "high",
+          "time": 1786472864686
+        },
+        {
+          "claim": "An FFI crate whose serde deps are optional behind serde_support (the agent pattern) must be built with --features=serde_support; a bare 'cargo build --release' fails on unresolved serde/serde_json imports and on ndata's serde-gated DataObject::to_json.",
+          "detail": "Hit while rebuilding hollis at flowlang 0.3.32 - it looked like a 0.3.32 breakage but was the missing feature flag. The platform path is unaffected (build_compile_command passes the host's features), and hollis's install.sh already builds the crate with the flag.",
+          "tags": "serde_support,ffi,build",
+          "confidence": "high",
+          "time": 1786489296683
+        },
+        {
+          "claim": "Two session-ops lessons from the 2026-08-12 merge round: (1) git add -A in a repo a server instance ever ran inside sweeps runtime state into the commit - a stray newbound launched from repositories/camera wrote config.properties there and it rode a commit to the remote unnoticed (cleaned in camera ebdbeab, now gitignored); prefer explicit adds or check git status before add -A in store repos. (2) CCR container state can roll back to an earlier snapshot while the remotes keep everything pushed - local reflogs missing commits that ls-remote shows is the signature; recovery is fetch + fast-forward, and it is why push-early matters. Parallel sessions are live: hollis-session merged its kb deposits with this session mid-stream (newbound-agent c560da1); union merges of kb memory facets across sessions resolve cleanly when domains differ.",
+          "tags": "workflow,git,add-all,container-rollback,parallel-sessions,merge",
+          "source": {
+            "doc": "merge-round forensics, newbound-agent 2f84f3a / camera ebdbeab, 2026-08-12"
+          },
+          "confidence": "high",
+          "time": 1786541458855
+        },
+        {
+          "claim": "Branch retirement is owner-side only: the CCR git proxy refuses deletion pushes (--delete and :refs/heads/ forms both no-op) and the GitHub MCP has no branch-delete tool - delete the local branch, then the owner trashes the remote ref in the GitHub branches UI; the commit dies with the ref. Applied to newbound 671ae8c (default.nix, rejected with the rule: Newbound does not track external library requirements - they belong in the app repo README or its own default.nix). Separately, container rollback struck a second time mid-session (2026-08-14): local repos silently rewound days while origins kept everything, including a peer-streaming commit (newbound 226cce3) made PAST the surviving context horizon - the tell is local history/branches disagreeing with ls-remote, and the reflex must be: on ANY repo-state confusion, diff local vs origin refs FIRST, before debugging phantom code problems. Recovery is always fetch + reset to origin; only unpushed work can die.",
+          "tags": "workflow,branch-deletion,container-rollback,recovery,push-early",
+          "source": {
+            "doc": "second rollback forensics + owner commit comment on 671ae8c, 2026-08-14"
+          },
+          "confidence": "high",
+          "time": 1786621265455
+        },
+        {
+          "claim": "Session setup is ONE idempotent command as of 2026-08-12: newbound-agent tools/setup.sh (finds the sibling newbound checkout, or takes its path; --no-probe to skip verification). It chains overlay.sh, the cmd scaffold when absent, the three-step first build (skipped when the generated initializer already carries the Initialize-crate markers for agent/kb/scratch), the agent(+python_runtime)/kb/scratch dylib builds, then the git hygiene both repos need, and finishes with overlay-probe as proof (132 tools, dev-code-*, FFI dispatch). A fully built checkout passes through in seconds. The committed SessionStart hook (.claude/hooks/session-start.sh, CLAUDE_CODE_REMOTE-gated, synchronous, 900s timeout) runs it automatically at web-container start.",
+          "tags": "workflow,setup,overlay,build,session-start-hook,ccr",
+          "source": {
+            "doc": "newbound-agent tools/setup.sh, branch claude/newbound-library-prep-5v5nj0, fresh-clone + idempotent tests 2026-08-12"
+          },
+          "confidence": "high",
+          "time": 1786623808868
+        },
+        {
+          "claim": "The coding harness attaches .mcp.json servers only at session start: on a fresh CCR container where target/release/newbound does not exist yet, the newbound MCP attachment fails PERMANENTLY for that session, even after the binary is built (proven 2026-08-12 - ToolSearch finds no newbound tools post-build). Fallback: tools/nb-call.py drives the identical tool surface over stdin JSON-RPC (nb-call.py [-C checkout] <tool> <json> | --list <prefix>). The durable fix is a binary that exists BEFORE session start: the SessionStart hook builds it and the container state is cached for subsequent sessions, and a CCR environment setup script running tools/setup.sh covers even the first session.",
+          "tags": "workflow,mcp,ccr,session-start,nb-call,fallback",
+          "source": {
+            "doc": "session forensics + nb-call.py, branch claude/newbound-library-prep-5v5nj0, 2026-08-12"
+          },
+          "confidence": "high",
+          "time": 1786623808931
+        },
+        {
+          "claim": "newbound rebuild regenerates EVERY FFI crate's src/api.rs against the libraries present in THAT checkout: a checkout without camera/hollis deletes their cross-library stubs from agent/ and kb/ api.rs (414 lines of pure deletions observed 2026-08-12). That is environment-induced churn, not authored work - committing it standalone would ping-pong against the owner's fuller environment. setup.sh auto-reverts it when the file was clean before setup ran; intentional regeneration (authoring that touches the crate) still commits together with its data/ changes per the drift-guard rule. The three builder-written newbound-repo files (Cargo.toml workspace exclude, src/generated_initializer.rs, newbound_core/src/api.rs) get skip-worktree instead, since reverting them would break the next host rebuild.",
+          "tags": "workflow,rebuild,api.rs,churn,skip-worktree,git-hygiene",
+          "source": {
+            "doc": "rebuild forensics + tools/setup.sh hygiene steps, 2026-08-12"
+          },
+          "confidence": "high",
+          "time": 1786623808988
+        },
+        {
+          "claim": "CORRECTION to the setup claim of 2026-08-12 (patch p26): repo-level .claude/settings.json SessionStart hooks do NOT fire in a two-repo CCR session - the project directory is the PARENT of the side-by-side checkouts and per-repo hooks are not loaded from source repos. Verified in a clean-session test: fresh container, hook present on the checked-out branch, binary still unbuilt when the session started; only user-level ~/.claude hooks ran. The hook stays for single-repo sessions; the reliable pre-session build is the CCR environment setup script pointing at tools/setup.sh. A first session on an unbuilt environment therefore still drives the store via tools/nb-call.py.",
+          "tags": "workflow,ccr,session-start-hook,correction,mcp",
+          "source": {
+            "doc": "clean-session test on claude/newbound-agent-startup-7wy2n0, reported 2026-08-12"
+          },
+          "confidence": "high",
+          "time": 1786623809085
+        },
+        {
+          "claim": "Serving the agent APP requires the install_lib staging the overlay never runs: the server serves only apps named in config.properties apps=, and the app shell must exist at runtime/agent. tools/setup.sh now stages it - copies data/agent/_APPS/agent to runtime/agent, adds /runtime/agent to the newbound clone .git/info/exclude (per-clone: the platform .gitignore must not know the agent), and ensures agent is in apps=, creating config.properties from the example (http_port=8080) when absent or appending when present. Caveat: a bare newbound-mcp run auto-creates config.properties with http_port=0 and no agent app - setup appends agent and flags the port but deliberately leaves other keys alone. Verified 2026-08-12 in a disposable: fresh clone -> setup.sh -> server boot -> /agent/index.html answers 200 -> both git trees still clean.",
+          "tags": "workflow,setup,install_lib,runtime-staging,config.properties,agent-app",
+          "source": {
+            "doc": "tools/setup.sh staging step + disposable server-boot test, 2026-08-12"
+          },
+          "confidence": "high",
+          "time": 1786623809200
+        },
+        {
+          "claim": "Addendum to the app-staging claim (p30): setup.sh now NORMALIZES http_port=0 to 8080 in config.properties instead of only flagging it - a second clean-session test showed the flag-only design still cost the session a manual edit, and http_port=0 in a dev checkout is never intent, only the residue of a bare newbound-mcp run auto-creating the file. Exactly the value 0 is rewritten; any other port and all other keys stay untouched.",
+          "tags": "workflow,setup,config.properties,http_port,correction",
+          "source": {
+            "doc": "second clean-session test + tools/setup.sh, 2026-08-12"
+          },
+          "confidence": "high",
+          "time": 1786623809321
+        },
+        {
+          "claim": "Second confirmation plus a sharper consequence for the MCP-attachment claim (p27/p29): a second clean session built the binary mid-session (14:37) and ToolSearch still found no lib-control-command tools afterward - attachment hydrates once, at session start, full stop. And build artifacts do NOT persist across sessions (consecutive test sessions each cold-started), so in the two-repo web layout - where the repo-level SessionStart hook cannot fire - native attachment NEVER happens organically. The single lever is the CCR environment setup script running newbound-agent/tools/setup.sh (self-locating from any cwd); until it is configured, nb-call.py is the norm, proven functionally complete across two sessions.",
+          "tags": "workflow,mcp,ccr,environment-setup-script,nb-call,confirmation",
+          "source": {
+            "doc": "second clean-session Q&A (ToolSearch empty post-build), 2026-08-12"
+          },
+          "confidence": "high",
+          "time": 1786623809430
+        },
+        {
+          "claim": "kb memory facets conflicting across FORKS are resolved the same way as across sessions, but through the platform: take the canonical side's store files wholesale in the merge (never hand-merge data/* - the _patches ids and record counts cannot be reconciled by text), then REPLAY the dropped claims through agent-archivist-remember against the merged store so the journal continues cleanly from the canonical sequence. Proven resolving PR #2's kb.workflow conflict (upstream +1 entry vs fork +7, zero duplicates), 2026-08-13.",
+          "tags": "workflow,kb,merge-conflict,fork,replay,remember",
+          "source": {
+            "doc": "mraiser/newbound-agent PR #2 conflict resolution, 2026-08-13"
+          },
+          "confidence": "high",
+          "time": 1786623809551
+        },
+        {
+          "claim": "Overlay-local state in the platform checkout is silenced per-clone by overlay.sh, never by a commit or a .gitignore edit: skip-worktree for tracked files the rebuild rewrites (newbound_core/src/api.rs, src/generated_initializer.rs, Cargo.toml exclude line, the scratch skeleton) and .git/info/exclude for untracked residue (server.pid, the root crate symlinks dev.github.import leaves for repositories/<lib>).",
+          "detail": "The point is that a dirty tree keeps meaning you have work to commit - a stop-hook or a habit of committing whatever git status shows will otherwise push the workspace exclude line or a symlink into the platform repo, which must reference nothing outside newbound_core. .gitignore is the platform repo tree tracked file and is not ours to grow for overlay convenience (same reasoning that got the default.nix commit rejected 2026-08-13). Added to tools/overlay.sh 2026-08-13; idempotent, verified from a dirty checkout and on a second run.",
+          "tags": "overlay git workflow local-state",
+          "confidence": "high",
+          "time": 1786626215639
+        }
+      ],
+      "name": "workflow"
+    }
+  ],
+  "version": 1
+}

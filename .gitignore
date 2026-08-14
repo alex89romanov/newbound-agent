@@ -12,5 +12,15 @@ scratch/Cargo.lock
 /data/scratch/
 /scratch/
 
+# The brain is instance-owned (docs/one-memory-cycle.md A4): kb's tracked
+# files are FROZEN at the A4 state — never committed again — and every new
+# file (deposits, journals, new domains, month buckets) is ignored
+# wholesale. tools/overlay.sh marks the tracked files skip-worktree per
+# clone, so live deposits never dirty the tree. The living, reviewable
+# channels are docs/kb-seed.json (the primer, refreshed only by a
+# deliberate seed_export) and the subject libraries' shipped manuals
+# (via agent-archivist-promote).
+/data/kb/
+
 # Local runtime values never ride the repo
 /runtime/

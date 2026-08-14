@@ -20,6 +20,13 @@ a `mraiser/newbound` checkout via symlinks. The full process is
 - **No production code in `scratch`**, and nothing under `data/scratch/`,
   `scratch/`, or `runtime/` is ever committed (skeleton excepted,
   already handled by overlay.sh's skip-worktree).
+- **The brain is instance-owned: nothing under `data/kb/` is ever
+  committed** (docs/one-memory-cycle.md A4 — tracked files are frozen,
+  overlay.sh skip-worktrees them, .gitignore hides the rest). Memory
+  reaches git only through the two curated channels: the subject
+  libraries' shipped manuals (`agent-archivist-promote`) and the primer
+  (`docs/kb-seed.json`, refreshed only by a deliberate
+  `agent-archivist-seed_export`).
 
 ## Session start
 
@@ -32,19 +39,31 @@ a `mraiser/newbound` checkout via symlinks. The full process is
    store command is a native tool, named `lib-control-command`. If the
    binary didn't exist when the session started, that attachment is
    lost for the session — `tools/nb-call.py` drives the same surface.
-3. Orient from the store, not from chronicles: the kb library's memory
-   facets carry doctrine (`kb.doctrine`), the working process
-   (`kb.workflow`), and platform facts (`kb.platform-api`) — read them
-   early; they are claims with provenance and staleness hashes.
+3. Orient from the store, not from chronicles: memory is federated
+   (docs/one-memory-cycle.md). The brain (`kb`) carries doctrine
+   (`kb.doctrine`) and the working process (`kb.workflow`); every
+   library's controls carry their own manuals as memory facets, listed
+   lib.ctl in the memory index. On a fresh clone the brain starts from
+   the frozen snapshot — top it up with
+   `agent-archivist-bootstrap path:docs/kb-seed.json` (idempotent;
+   setup.sh does this when it can).
 4. Work from the starter command subset; discover the rest with
    `dev-code-search_commands`. `desc` is discovery — fill it on
    everything you author.
 
 ## Session end
 
-- Deposit what you learned: `agent-archivist-remember` for durable claims
-  (domain = the kb control it belongs to). A lesson left only in chat is
-  a lesson lost.
-- Commit `data/` changes and regenerated crate src **together**, on a
-  branch, and push. The `_patches` journals inside `data/` are the
-  authoring history and travel with the commit.
+- Deposit what you learned: `agent-archivist-remember` for durable
+  claims. Library-subject claims go straight onto the subject control
+  (`lib:<subject>`), or into the brain with a `subject` extra
+  (e.g. `"subject": "dev.code"`) for later promotion. A lesson left
+  only in chat is a lesson lost.
+- **Promote before you push**: `agent-archivist-promote lib:<lib>` moves
+  the brain's subject-bearing claims onto the shipped manuals —
+  publishing warns about anything you leave behind, but never promotes
+  on its own.
+- Commit **manuals + regenerated crate src together**, on a branch, and
+  push — in whichever repos the touched libraries live. The brain
+  (`data/kb/`) never rides a commit; refresh `docs/kb-seed.json` via
+  `seed_export` only when doctrine/process-grade material changed, and
+  review that diff like a docs change.
