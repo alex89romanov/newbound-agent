@@ -210,12 +210,23 @@ claim → promote → shipped facet gains it, re-promote is a no-op
 `data/kb` → bootstrap → doctrine present, brain functional.
 
 **A4 — Cut kb loose.** Gitignore `data/kb` wholesale, skip-worktree the
-skeleton, commit the first primer (single JSON under `docs/`), update
-CLAUDE.md's session ritual. One-time: the repo's tracked kb content is
-removed from tracking in the same commit that lands the primer, so
-nothing is ever only-in-history. *Verify:* fresh clone + overlay +
-bootstrap on a disposable → working brain, zero kb entries in
-`git status` after arbitrary deposits.
+tracked kb files (overlay.sh, per clone), commit the first primer
+(`docs/kb-seed.json`), update CLAUDE.md's session ritual and setup.sh
+(idempotent brain top-up from the primer). *Verify:* fresh clone →
+frozen brain snapshot present, new deposits invisible to `git status`;
+bootstrap idempotence proven at A3.
+
+*Executed 2026-08-14 with one deliberate deviation: freeze, don't
+delete.* The tracked kb files stay tracked at their A4 state forever
+instead of being removed from tracking — a committed deletion would
+delete (or modify/delete-conflict) every existing clone's live brain on
+pull. Freezing changes nothing on pull, hands fresh clones a working
+snapshot, and the ignore + skip-worktree pair still guarantees no
+deposit ever rides a commit. The snapshot ages harmlessly: the primer
+and the manuals are the living channels, and bootstrap tops a stale
+snapshot up. One known cost: git checkout across branches whose frozen
+kb states differ refuses while the live brain has drifted — use a
+worktree for cross-branch work in this repo.
 
 ### Track B — the executive and the contract
 
