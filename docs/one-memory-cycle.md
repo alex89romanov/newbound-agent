@@ -55,7 +55,14 @@ making the next one cheaper.
    pattern — with the three-tier shape of §2: brain / primer / manuals.
 5. **The perception contract ships with agent** (this repo's docs now;
    eventually it is simply part of the agent library's own manual).
-   Sensors (hollis, camera) implement it from outside.
+   The **first sensor is built in**: the resident codebase (store
+   journals, then filesystem/builds/peers — the agent's first
+   experience is itself). **Hollis is the first official plugin**
+   (ears, the reference plugin), camera close behind (eyes). The
+   paradigm must be exceptional at code first and expand to all
+   non-code environmental input — situational awareness is bounded by
+   the sensor contract, not the codebase. (Owner's clarification,
+   2026-08-15; contract clauses in `understandingloop.md` commitment 2.)
 
 Why these travel together: continuous executive deposits make kb-in-git
 untenable (machine-cadence appends cannot ride branches-always review,
@@ -77,7 +84,7 @@ another sentence is future amputation.
 |---|---|
 | **hollis** (external plugin) | Perceive acoustically: emit typed perceptions; own its sensor state (voiceprints, calibration, geometry). |
 | **camera** (external plugin, later) | Perceive visually: same contract. |
-| **agent** (this repo) | Cognition and executive function: LLM access, the archivist (remember / consolidate / promote), recall packs, and the OODA loop as `agent.executive` — claims in, claims out, acts only through platform commands. |
+| **agent** (this repo) | Cognition and executive function: LLM access, the archivist (remember / consolidate / promote), recall packs, the OODA loop as `agent.executive` — claims in, claims out, acts only through platform commands — and the built-in codebase sensor family (store journals first). |
 | **kb** (this repo, instance-owned) | The one memory: claims with provenance, confidence, staleness. |
 | **flowlang** (platform crate) | The manual surface: memory facets as first-class control documentation, indexed and MCP-exposed. |
 | **nanochat** (artifacts, never committed) | Embody the memory: the salience tier, trained from adjudicated claims, gated by held-out QA. |
@@ -231,21 +238,36 @@ worktree for cross-branch work in this repo.
 ### Track B — the executive and the contract
 
 **B1 — Perception contract doc** (`docs/perception-contract.md`, shipped
-with agent). The typed perception schema: `text_input`, `store_change`,
-`file_change`, `peer_event`, and — widened from the donor repo's
-`{millis, sink}` STT shape — `acoustic_event` carrying hollis's
-annotations (speaker entity, location, ambience/state deltas). Hollis's
-`EventKind` enum is ~80% of this already; its dead variants are the
-contract waiting for a counterparty. Camera reviews against the same
-doc later.
+with agent). The typed perception schema: a modality-agnostic envelope
+`{kind, timestamp, sensor, payload, touched-claims}` with `text_input`,
+`store_change`, `file_change`, `peer_event` as built-in kinds and —
+widened from the donor repo's `{millis, sink}` STT shape —
+`acoustic_event` carrying hollis's annotations (speaker entity,
+location, ambience/state deltas), `visual_event` reserved for camera.
+Two acceptance criteria (owner's sensor clarification): the
+**zero-executive-change test** (a new modality is a payload kind plus a
+binding function, nothing else) and **per-sensor binding** (perceptions
+arrive attached to the claims they touch: staleness-hash join for code,
+voiceprint resolution for hollis). The built-in codebase sensor's
+journal tailer is the reference implementation; hollis is the reference
+plugin — its `EventKind` enum is ~80% of the contract already; its dead
+variants are the contract waiting for a counterparty.
 
 **B2 — `agent.executive` control is born.** The donor repo's Phase-0
 hygiene applied on entry: no synchronous bootstrap-training anywhere
 near init, killable loop, explicit start, current-phase observable in
 state. Heavy-tail discipline: query-time embeddings (no fastembed in
 the hot path), model artifacts fetched-at-install and gitignored like
-hollis's models. A LoRA trained on brain claims inherits the brain's
-privacy class — training outputs never ride a repo push.
+hollis's models. Training architecture is the amended
+`understandingloop.md` commitment 5 (owner's correction, 2026-08-15):
+the **base grows** — a resident online-learning service trains it
+continuously (replay-buffered mixed batches: fresh curated tokens +
+reservoir + standard nanochat data), serving double-buffered with split
+pointers (salience live, user-facing gated) and a gate-behind eval
+harness with auto-rollback — while **personality/chat skill is a LoRA**
+re-derived over the moving base when its regression probe slips. A
+model trained on brain/world data inherits the brain's privacy class in
+its entirety — training outputs never ride a repo push.
 *Verify:* overlay + build on a clean disposable; the executive starts
 on command, idles, stops on command; no new heavy deps in the default
 build; `agent.llm`/`agent.archivist` behavior untouched.
