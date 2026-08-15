@@ -38,7 +38,8 @@ if !sp.has("prompt") || sp.get_string("prompt").trim().is_empty() {
 let extraction = sp.get_string("prompt");
 
 // What is already known: the federated index plus existing claims, so the
-// LLM can skip restatements. Per-domain cap (most recent entries win): a
+// LLM can skip restatements (and adjudicate corroborates the ones it
+// re-derives anyway - restatement is evidence now). Per-domain cap (most recent entries win): a
 // continuously ticking consumer must not read an unbounded store-wide pack.
 let known_cap: usize = 40;
 let mut known = String::new();
@@ -120,7 +121,7 @@ if let (Some(i0), Some(i1)) = (resp.find('['), resp.rfind(']')) {
                 // The archivist's own write path - dev.code has no remember command, so
                 // the old lookup("dev","code","remember") panicked and killed every
                 // sweep that had anything to file.
-                let cmd = Command::lookup("agent", "archivist", "remember");
+                let cmd = Command::lookup("agent", "archivist", "adjudicate");
                 for i in 0..items.len() {
                     if filed >= 5 {
                         skipped += (items.len() - i) as i64;

@@ -1,5 +1,6 @@
 // This file is auto-generated and managed by the flowlang build script.
 use flowlang::rustcmd::Transform;
+pub mod adjudicate;
 pub mod recall;
 pub mod bootstrap;
 pub mod seed_export;
@@ -17,4 +18,5 @@ pub fn cmdinit(cmds: &mut Vec<(String, Transform, String)>) {
     cmds.push(("wjrzko1a001b4c938j3".to_string(), seed_export::execute, "".to_string()));
     cmds.push(("qxinhl1a001b4d45ei5".to_string(), bootstrap::execute, "".to_string()));
     cmds.push(("jwluwr1a0063833d7g1".to_string(), recall::execute, "".to_string()));
+    cmds.push(("ytjnql1a006791e27h1".to_string(), adjudicate::execute, "".to_string()));
 }

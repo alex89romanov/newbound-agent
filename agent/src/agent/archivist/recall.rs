@@ -140,6 +140,9 @@ for lib in libs {
         for j in 0..a.len() {
             let e = match a.try_get_object(j) { Ok(e) => e, Err(_) => continue };
             if !e.has("claim") { continue; }
+            // Superseded claims are history, not belief (Phase 3): they
+            // stay in the facet for the audit trail but never answer.
+            if e.has("superseded") { continue; }
             considered += 1;
             let claim = e.get_string("claim");
             let detail = if e.has("detail") { e.get_string("detail") } else { String::new() };

@@ -4,5 +4,11 @@
     "tags": "phase1",
     "confidence": "high",
     "time": 1786810992022
+  },
+  {
+    "claim": "adjudicate is the only sanctioned write path for extracted claims: remember stays the raw append (validation, audience guard, dedupe), adjudicate wraps it with belief dynamics - use remember for deliberate session deposits, adjudicate for anything machine-extracted. The result shape {status, action: settled|corroborated|contradicted|superseded|inserted, target, before, after, reasoning} is contract like recall's.",
+    "tags": "phase3",
+    "confidence": "high",
+    "time": 1786815210574
   }
 ]

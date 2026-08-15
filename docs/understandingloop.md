@@ -309,6 +309,30 @@ store, visible in the brain (instance-owned — nothing rides git; the
 subject-bearing ones await promote). *Unblocks:* the curator has
 adjudicated material; the store is the single source.
 
+*Executed 2026-08-15 on claude/phase3-adjudication:
+`agent-archivist-adjudicate`, the write-side counterpart to recall,
+with the donor's Curator shape (match → decide → apply → trace) under
+the hysteresis rule made mechanical: relationship is decided
+procedurally where certain (exact restatement, no candidates) and by
+the LLM where judgment is needed (parse failure = the donor's
+default-INSERT), but the EFFECT is never the LLM's to choose —
+corroboration moves confidence one step up (settled-and-writes-NOTHING
+at high: the convergence fixed point), contradiction one step down,
+and only a contradiction at the low floor supersedes, with the
+successor entering at low to earn its way up. Three consecutive
+contradictions to flip a high belief; no thrash. Superseded claims
+stay in the facet as history but never answer recall. Curation traces
+(capped 200) land on the domain's `traces` facet — audit today,
+curriculum later. `consolidate` files through adjudicate now, so
+restatement is evidence instead of a dedupe error. Verified on a
+disposable with the LLM stub: both ladders walk correctly, supersede
+fires only at the floor, recall hides the retired belief and returns
+the successor, a logged conversation ends as a recallable claim
+(swept 2, filed 1), and the fixed point holds under repeat
+stimulation. jerry_state.json needed no shrinking — the fold kept
+understanding in the store from birth; embeddings stayed query-time
+(token match), no fastembed anywhere.*
+
 ### Phase 4 — Initiative, domesticated
 An epistemic-work command derives the queue from claim state (stale /
 contradicted / gapped — plus unpromoted-claim pressure). Decide pulls
