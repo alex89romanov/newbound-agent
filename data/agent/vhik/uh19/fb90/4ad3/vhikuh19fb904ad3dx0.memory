@@ -10,5 +10,11 @@
     "tags": "phase3",
     "confidence": "high",
     "time": 1786815210574
+  },
+  {
+    "claim": "The audience guard was removed 2026-08-15 (owner's reversal): remember refuses nothing based on tags or readers lists. Local instances are sovereign - curation happens at the credentialed exits (repo push rights, crates.io tokens, branch-diff review of promote/seed/package changes), never by policing local writes. Earlier manual claims describing the guard are historical.",
+    "tags": "correction",
+    "confidence": "high",
+    "time": 1786821663861
   }
 ]

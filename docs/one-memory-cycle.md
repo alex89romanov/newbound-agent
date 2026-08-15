@@ -199,6 +199,17 @@ audience guard + consolidate's caps. *Verify (disposable):* seed a
 memory facet on a platform control via `remember lib:"dev"`; the index
 lists `dev.<ctl>`; consolidate files a dev-subject claim onto dev; a
 doctrine-tagged deposit aimed at dev is refused. kb behavior unchanged
+
+*[REVERSED 2026-08-15 (owner): the audience guard is removed —
+claude/sovereign-instances. Local instances are sovereign: anyone can
+edit their copy's code, so anyone can edit their copy's beliefs,
+doctrine tags included, and publish their fork to their own peers.
+Gating local writes on the instance's readers ACL policed the wrong
+layer ("are we the local instance police? No thank you"). Curation
+happens at the credentialed exits — repo push rights, crates.io
+tokens, the owner's branch-diff review of promote/seed/package
+changes — never at the local store. The tags remain as classification
+for those reviews; nothing refuses them at write time.]*
 throughout.
 
 **A2 — Migration.** Disperse the brain's library-subject claims onto

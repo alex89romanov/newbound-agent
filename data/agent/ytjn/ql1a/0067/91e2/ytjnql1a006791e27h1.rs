@@ -13,8 +13,8 @@
 //     supersedes - three consecutive contradictions to flip a high
 //     belief, no thrash. The superseding draft enters at LOW and earns
 //     its way up like everything else.
-//   novel: files through remember (validation, audience guard, source
-//     stamping, dedupe - the whole write path, unchanged).
+//   novel: files through remember (validation, source stamping,
+//     dedupe - the whole write path, unchanged).
 // Every adjudication that writes also appends a curation trace to the
 // domain's `traces` facet (capped at 200) - provenance for the owner's
 // audit today, curriculum material for the flywheel later.
@@ -390,9 +390,9 @@ if wrote_facet {
     patch_id = journal(&store, &lib, &ctlid, "memory", &old_source, &new_source, &author,
         &format!("adjudicate: {} {}", action, claim));
 } else {
-    // novel: remember does the whole validated write (audience guard,
-    // source stamping, dedupe, its own journal entry); the trace follows
-    // in its own facet write.
+    // novel: remember does the whole validated write (source stamping,
+    // dedupe, its own journal entry); the trace follows in its own
+    // facet write.
     let cmd = Command::lookup("agent", "archivist", "remember");
     let mut args = DataObject::new();
     args.put_string("lib", &lib);

@@ -177,32 +177,12 @@ if !store.exists(&lib, &ctlid) {
     return err(format!("Domain control '{}' not found in library '{}'", domain, lib));
 }
 
-// ── audience guard (docs/one-memory-cycle.md; owner's call: hard refuse) ──
-// A library's readers list is the claim's audience. Private-class claims
-// (doctrine / owner-voice) never land on a library anyone but the owner can
-// read - an autonomous depositor should hit walls, not advisories.
-{
-    let private_class = {
-        let t = if entry.has("tags") { entry.get_string("tags") } else { String::new() };
-        t.split(',').any(|x| {
-            let x = x.trim().to_lowercase();
-            x == "doctrine" || x == "owner-voice" || x == "private"
-        })
-    };
-    if private_class {
-        let meta_path = store.root.join(&lib).join("meta.json");
-        if let Ok(s) = std::fs::read_to_string(&meta_path) {
-            if let Ok(m) = ndata::dataobject::DataObject::try_from_string(&s) {
-                let readable = m.has("readers") && m.get_array("readers").len() > 0;
-                if readable {
-                    return err(format!(
-                        "audience guard: private-class claim (doctrine/owner-voice/private tag) refused - library '{}' has a non-empty readers list; file it in kb",
-                        lib));
-                }
-            }
-        }
-    }
-}
+// No audience guard (owner's reversal, 2026-08-15): local instances are
+// SOVEREIGN. Anyone can edit their copy's code, so anyone can edit their
+// copy's beliefs - doctrine tags included - and publish their fork to
+// their own peers. Curation happens at the credentialed exits (repo push
+// rights, crates.io tokens, the owner's branch-diff review), never by
+// policing local writes.
 let mut record = store.get_data(&lib, &ctlid);
 let mut data_obj = record.get_object("data");
 let old_source = if data_obj.has("memory") {
