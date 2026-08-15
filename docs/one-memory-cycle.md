@@ -253,6 +253,12 @@ journal tailer is the reference implementation; hollis is the reference
 plugin — its `EventKind` enum is ~80% of the contract already; its dead
 variants are the contract waiting for a counterparty.
 
+*Executed 2026-08-15:* `docs/perception-contract.md` v1 — envelope,
+per-sensor binding, delivery/coalescing rules, the kind registry
+(four built-in kinds, `acoustic_event` with the full hollis
+`EventKind` mapping, `visual_event` reserved), reference
+implementations, and the three acceptance criteria.
+
 **B2 — `agent.executive` control is born.** The donor repo's Phase-0
 hygiene applied on entry: no synchronous bootstrap-training anywhere
 near init, killable loop, explicit start, current-phase observable in
@@ -271,6 +277,14 @@ its entirety — training outputs never ride a repo push.
 *Verify:* overlay + build on a clean disposable; the executive starts
 on command, idles, stops on command; no new heavy deps in the default
 build; `agent.llm`/`agent.archivist` behavior untouched.
+
+*Executed 2026-08-15* (claude/one-memory-b2-executive): the
+`agent.executive` control with start (explicit, killable, never
+autostarts) / stop / status (phase, queue depth, counters) / perceive
+(the contract's sink - loud on shape, tolerant on vocabulary).
+Skeleton only: drains and accounts the queue; no LLM, no acts, no new
+deps. 14/14 on a disposable. The donor's machinery migrates into this
+control phase by phase from here.
 
 ### Sequencing rationale
 
