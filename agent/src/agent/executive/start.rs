@@ -108,6 +108,20 @@ std::thread::spawn(move || {
                 let mut ctx = DataObject::new();
                 ctx.put_string("query", &qs);
                 ctx.put_int("matched", 0);
+                // Sensor-bound claims (perception-contract section 3) ride
+                // the envelope; surface the precise join next to recall's
+                // fuzzy one.
+                if p.has("claims") {
+                    if let Ok(bc) = p.try_get_array("claims") {
+                        ctx.put_int("bound", bc.len() as i64);
+                        if bc.len() > 0 {
+                            if let Ok(b0) = bc.try_get_object(0) {
+                                if b0.has("claim") { ctx.put_string("bound_top", &b0.get_string("claim")); }
+                                if b0.has("stale") { ctx.put_boolean("bound_top_stale", b0.get_boolean("stale")); }
+                            }
+                        }
+                    }
+                }
                 let looked = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                     let cmd = Command::lookup("agent", "archivist", "recall");
                     let mut args = DataObject::new();

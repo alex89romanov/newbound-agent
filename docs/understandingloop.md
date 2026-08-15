@@ -284,6 +284,18 @@ the perception appear in the input queue with the right claims
 attached. *Unblocks:* the executive subscribes to reality, starting
 with itself.
 
+*Executed 2026-08-15 on claude/phase2-sensor: `agent.sensor`, the
+journal tailer — mtime-gated sweep every ~2s, one `store_change`
+envelope per new journal entry, claims bound by source pointer with
+staleness by hash compare, delivered through `perceive` like any
+external sensor. Verified on a disposable: a `dev.code` facet patch
+arrived in `status.last_context` with the source-pointed claim bound
+and stale within one sweep — and the self-model held: a `remember`
+deposit (a journaled act) returned through the sensor as the next
+perception. Cursor is runtime state (resets to now on start, no
+history replay); the persisted cursor arrives with sensor-state
+records later.*
+
 ### Phase 3 — Narrative engine deposits into kb
 Fact extraction produces claims (provenance, confidence) instead of
 private graph nodes; adjudication updates/supersedes claims under the

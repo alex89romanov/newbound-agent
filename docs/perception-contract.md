@@ -3,8 +3,10 @@
 **Status: design of record, v1 — 2026-08-15** (one-memory cycle Track
 B1). This contract ships with the agent library and is consumed by
 `agent.executive` (Track B2). Providers implement it from outside: the
-built-in codebase sensor family is the reference *implementation*,
-hollis is the reference *plugin*, camera follows. Governing intent
+built-in codebase sensor family is the reference *implementation*
+(landed 2026-08-15: `agent.sensor`, the journal tailer of §5, on
+claude/phase2-sensor), hollis is the reference *plugin*, camera
+follows. Governing intent
 (owner, 2026-08-15): the paradigm must be **exceptional at code first**
 and expand to all non-code environmental input — situational awareness
 is bounded by this contract, not by the codebase.

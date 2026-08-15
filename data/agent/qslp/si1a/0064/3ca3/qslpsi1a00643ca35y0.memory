@@ -1,0 +1,8 @@
+[
+  {
+    "claim": "The store sensor cursor is runtime state: it resets to now on start, so restarts never replay journal history. Sensor-bound claims ride the perception envelope (claims: [{lib, ctl, claim, stale}]) and surface in executive status.last_context as bound/bound_top next to recall's fuzzy matched count - the precise join is the primary signal for store_change perceptions.",
+    "tags": "phase2",
+    "confidence": "high",
+    "time": 1786811602356
+  }
+]
