@@ -278,6 +278,14 @@ its entirety — training outputs never ride a repo push.
 on command, idles, stops on command; no new heavy deps in the default
 build; `agent.llm`/`agent.archivist` behavior untouched.
 
+*Executed 2026-08-15* (claude/one-memory-b2-executive): the
+`agent.executive` control with start (explicit, killable, never
+autostarts) / stop / status (phase, queue depth, counters) / perceive
+(the contract's sink - loud on shape, tolerant on vocabulary).
+Skeleton only: drains and accounts the queue; no LLM, no acts, no new
+deps. 14/14 on a disposable. The donor's machinery migrates into this
+control phase by phase from here.
+
 ### Sequencing rationale
 
 A1 before A2 (migration needs the addressing); A2 before A4 (nothing
