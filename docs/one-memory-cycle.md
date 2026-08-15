@@ -253,6 +253,12 @@ journal tailer is the reference implementation; hollis is the reference
 plugin — its `EventKind` enum is ~80% of the contract already; its dead
 variants are the contract waiting for a counterparty.
 
+*Executed 2026-08-15:* `docs/perception-contract.md` v1 — envelope,
+per-sensor binding, delivery/coalescing rules, the kind registry
+(four built-in kinds, `acoustic_event` with the full hollis
+`EventKind` mapping, `visual_event` reserved), reference
+implementations, and the three acceptance criteria.
+
 **B2 — `agent.executive` control is born.** The donor repo's Phase-0
 hygiene applied on entry: no synchronous bootstrap-training anywhere
 near init, killable loop, explicit start, current-phase observable in
