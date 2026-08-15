@@ -1,0 +1,9 @@
+[
+  {
+    "claim": "B1 landed (claude/one-memory-b1-perception): docs/perception-contract.md v1 defines the typed-perception envelope {v,kind,time,sensor,payload,claims,salience_hint}, per-sensor binding, the perceive sink (built by B2), coalescing rules, the kind registry (store_change/file_change/peer_event/text_input built-in; acoustic_event with the full hollis EventKind mapping; visual_event reserved), and three acceptance criteria (zero-executive-change, procedural binding where possible, exceptional-at-code: widen never weaken).",
+    "detail": "Hollis ContextUpdate is retired by the contract - briefing conclusions are the executive's job. The subject-bearing version of this claim awaits promote onto agent once the contract merges.",
+    "tags": "workflow,b1,perception-contract",
+    "confidence": "high",
+    "time": 1786792604080
+  }
+]

@@ -1,6 +1,7 @@
 use ndata::dataobject::DataObject;
 use ndata::dataarray::DataArray;
 use flowlang::datastore::DataStore;
+use flowlang::command::Command;
 use flowlang::flowlang::system::time::time;
 pub fn execute(_: DataObject) -> DataObject {
     use std::panic;
@@ -38,12 +39,14 @@ pub fn execute(_: DataObject) -> DataObject {
 }
 
 pub fn start() -> DataObject {
-// start (docs/one-memory-cycle.md B2): the executive loop, explicit and
-// killable - it NEVER autostarts (understandingloop.md, the spawn/drive
-// lesson: observability before autonomy). The skeleton loop only observes:
-// it drains the perception queue and keeps its phase and counters visible
-// in state. Orient/decide/act arrive in later phases; nothing here calls
-// an LLM or acts on anything.
+// start (docs/one-memory-cycle.md B2; understandingloop.md Phase 1): the
+// executive loop, explicit and killable - it NEVER autostarts. The loop
+// observes and, since Phase 1, ORIENTS: each perception drained from the
+// queue is joined to the claims it touches via a direct call to
+// agent:archivist:recall. No seam stands between them - the archivist is
+// constitutive of the executive, not swappable, and the recall RESULT
+// SHAPE is the contract (command dispatch is already store-late-bound).
+// Decide/act arrive in later phases; nothing here calls an LLM or acts.
 // Shared runtime state under one globals key. Idempotent; every field a
 // later read touches is initialized here, so no command path can panic on
 // a missing key.
@@ -87,6 +90,48 @@ std::thread::spawn(move || {
                 ex.put_int("perceived_total", ex.get_int("perceived_total") + 1);
                 if p.has("kind") { ex.put_string("last_kind", &p.get_string("kind")); }
                 if p.has("time") { ex.put_int("last_time", p.get_int("time")); }
+                // orient (Phase 1): what does memory say about this?
+                // Query = the envelope's kind + sensor + payload strings.
+                // A broken or missing recall degrades to an empty context;
+                // the loop itself must never die to a panic below it.
+                ex.put_string("phase", "orienting");
+                let mut qparts: Vec<String> = Vec::new();
+                if p.has("kind") { qparts.push(p.get_string("kind")); }
+                if p.has("sensor") { qparts.push(p.get_string("sensor")); }
+                if let Ok(pl) = p.try_get_object("payload") {
+                    for k in pl.clone().keys() {
+                        if let Ok(v) = pl.try_get_string(&k) { qparts.push(v); }
+                    }
+                }
+                let mut qs = qparts.join(" ");
+                if qs.chars().count() > 240 { qs = qs.chars().take(240).collect(); }
+                let mut ctx = DataObject::new();
+                ctx.put_string("query", &qs);
+                ctx.put_int("matched", 0);
+                let looked = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    let cmd = Command::lookup("agent", "archivist", "recall");
+                    let mut args = DataObject::new();
+                    args.put_string("query", &qs);
+                    args.put_string("domains", "");
+                    args.put_int("limit", 3);
+                    cmd.execute(args)
+                }));
+                if let Ok(Ok(r)) = looked {
+                    if r.has("a") {
+                        let a = r.get_object("a");
+                        if a.has("status") && a.get_string("status") == "ok" {
+                            ctx.put_int("matched", a.get_int("matched"));
+                            let cl = a.get_array("claims");
+                            if cl.len() > 0 {
+                                let top = cl.get_object(0);
+                                if top.has("claim") { ctx.put_string("top_claim", &top.get_string("claim")); }
+                                if top.has("home") { ctx.put_string("top_home", &top.get_string("home")); }
+                                if top.has("stale") { ctx.put_boolean("top_stale", top.get_boolean("stale")); }
+                            }
+                        }
+                    }
+                }
+                ex.put_object("last_context", ctx);
             }
             q.remove_property(0);
         } else {

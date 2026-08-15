@@ -1,0 +1,9 @@
+[
+  {
+    "claim": "B2 landed (claude/one-memory-b2-executive): agent.executive exists with start/stop/status/perceive - explicit-start killable loop, observable phase and counters in globals under AGENT_EXECUTIVE, and the perception-contract sink (loud on envelope shape, tolerant on unknown kinds). Skeleton only: drains and accounts the queue; orient/decide/act are later phases; the donor repo's machinery migrates in from here.",
+    "detail": "14/14 disposable battery incl. queue-while-stopped, vocabulary tolerance, idempotent double-start, stop-exits-loop, restart, archivist untouched. Cross-command state via ndata globals is the proven pattern (hollis RUNPARAM precedent).",
+    "tags": "workflow,b2,executive",
+    "confidence": "high",
+    "time": 1786793059197
+  }
+]

@@ -205,8 +205,12 @@ uses that context.
   confidence and staleness; flag contradiction ("input disagrees with a
   high-confidence belief" is the most salient signal there is). Same
   assembly as `chat_llm`'s recall pack and the coding session's brief —
-  one brain, third mouth. Orient calls kb's query surface through a
-  `CONTEXT_CTL` seam; the executive does not own retrieval.
+  one brain, third mouth. Orient calls `agent:archivist:recall`
+  directly — no seam (owner's call, 2026-08-15: it's all agent now;
+  seams are reserved for boundaries where the filler crosses an
+  ownership or delivery line, and command dispatch is already
+  store-late-bound). The executive still does not own retrieval: the
+  recall RESULT SHAPE is the contract it depends on.
 - **Decide** — rank against goals *plus* the epistemic work queue.
   Existing goal fields (priority, focus, boredom threshold) survive;
   drive modulates the pull rate.
@@ -240,17 +244,31 @@ Applied on entry as the executive migrates into `agent.executive`
 *Verify:* boot test — same clean boot, warning count collapses, loop
 stops on command. *Unblocks:* safe iteration on everything below.
 
-### Phase 1 — Orient reads claims (`CONTEXT_CTL`)
-Add a kb query command (claims by topic/relevance + staleness state)
-if the recall layer doesn't already expose one; point
-`orient_situation` at it through a `CONTEXT_CTL` runtime-meta seam
-(default: the kb/archivist recall command). The decide prompt now
-carries claims with confidence/staleness annotations.
-*Verify:* disposable boot; feed a `hear` input that touches a seeded
-claim; the briefing (dashboard `get_contextual_briefing`) shows the
-claim. *Unblocks:* everything — once orientation reads claims, sane
+### Phase 1 — Orient reads claims **[AMENDED: seam squashed]**
+`agent-archivist-recall`: claims by topic across the whole federation
+(the brain and every library's manuals through one door), scored by
+match, with staleness computed from the source hashes `remember`
+stamps — stale means the referent facet drifted or vanished, not
+merely aged. The executive's loop orients each drained perception
+through a direct call to it (owner's call, 2026-08-15: no
+`CONTEXT_CTL` — it's all agent now, and command dispatch is already
+store-late-bound); the recall RESULT SHAPE ({claim, detail, tags,
+confidence, home, time, age_days, stale, stale_checked, promoted,
+score}) is the contract, and a broken or missing recall degrades to an
+empty context rather than killing the loop. The orientation lands in
+`status.last_context` — observability first, prompts later.
+*Verify:* disposable; seed a claim with a facet-pointer source; recall
+ranks it first fresh, then stale after the referent is patched;
+perceive an envelope touching it and `status.last_context` names it.
+*Unblocks:* everything — once orientation reads claims, sane
 initiative, the salience tier, and the curriculum have a place to
 stand.
+
+*Executed 2026-08-15 on claude/phase1-recall: recall + the orient step
+in the executive loop, verified end-to-end on a disposable (153 claims
+federated; conversational query ranks the seeded claim first with 7
+matched after stopword filtering; staleness flips on referent drift;
+perceive→orient→status round-trip under 2s).*
 
 ### Phase 2 — First sensor: the resident codebase **[AMENDED]**
 The built-in sensor family, journal tailer first: a task emits

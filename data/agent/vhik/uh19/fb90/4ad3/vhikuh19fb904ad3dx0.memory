@@ -1,0 +1,8 @@
+[
+  {
+    "claim": "The recall result shape is the orient contract: {claim, detail, tags, confidence, home, time, age_days, stale, stale_checked, promoted, score}. Callers (the executive first) depend only on this shape; recall internals are free to change behind it. No CONTEXT_CTL seam exists - seams are reserved for fillers that cross ownership or delivery lines (owner call 2026-08-15).",
+    "tags": "phase1",
+    "confidence": "high",
+    "time": 1786810992022
+  }
+]

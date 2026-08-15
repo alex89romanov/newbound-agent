@@ -1,6 +1,7 @@
 use ndata::dataobject::DataObject;
 use ndata::dataarray::DataArray;
 use flowlang::datastore::DataStore;
+use flowlang::command::Command;
 use flowlang::flowlang::system::time::time;
 pub fn execute(_: DataObject) -> DataObject {
     use std::panic;
@@ -39,7 +40,8 @@ pub fn execute(_: DataObject) -> DataObject {
 
 pub fn status() -> DataObject {
 // status: the observable half of observability-before-autonomy - current
-// phase, queue depth, counters, and the last perception seen.
+// phase, queue depth, counters, the last perception seen, and (Phase 1)
+// the last orientation context: what memory said about it.
 // Shared runtime state under one globals key. Idempotent; every field a
 // later read touches is initialized here, so no command path can panic on
 // a missing key.
@@ -69,6 +71,9 @@ o.put_int("perceived_total", ex.get_int("perceived_total"));
 o.put_string("last_kind", &ex.get_string("last_kind"));
 o.put_int("last_time", ex.get_int("last_time"));
 o.put_int("started", ex.get_int("started"));
+if ex.has("last_context") {
+    o.put_object("last_context", ex.get_object("last_context"));
+}
 o
 
 }
