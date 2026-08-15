@@ -180,10 +180,17 @@ uses that context.
      fresh brain; the model seed bootstraps a fresh mind; both diverge
      under their instance's own experience thereafter. The seed ships
      fetched-at-install (the hollis models pattern), with the mix-ratio
-     recipe, never in-repo. Until a fresh install's first checkpoint
-     passes its gates, `SALIENCE_CTL` points at the frontier — the
-     local model is an optimization the instance grows into, never a
-     dependency of day one.
+     recipe, never in-repo. **A fresh install treats seed data and
+     standard nanochat data identically** — one ingest, one sampler,
+     one mix; no install-time state machine and no grace-period
+     mechanism (owner's correction, 2026-08-15). `SALIENCE_CTL` points
+     at the frontier by default, indefinitely; moving any workload onto
+     the local model is a deliberate decision made someday, when it is
+     demonstrably good enough — informed by the continuously-running
+     eval suites and the syspack-shrinkage metric, which measure
+     readiness without ever deciding it. The local model is an
+     optimization every instance grows into, never a dependency of any
+     day.
    - **The metric survives unchanged** and finally becomes reachable:
      how much of the recall pack can be deleted because nanochat knows
      it cold. Shrink the prompt, keep the accuracy. Scale note:
@@ -340,8 +347,9 @@ meet the branches-always rule).
   all. The publishable artifact is the class-filtered curriculum — the
   **model seed** — from which a fresh install derives its own model
   (commitment 5's privacy clause has the full mechanism: class-at-
-  birth, single-class samples, curriculum_export, audit + canaries,
-  frontier-first grace period).
+  birth, single-class samples, curriculum_export, audit + canaries;
+  seed and standard data are one undifferentiated mix at install, and
+  the frontier drives indefinitely until the owner decides otherwise).
 - **Replay ratio and gate thresholds** (new): the sampler's
   fresh/reservoir/standard mix and the three suites' pass bars are
   dials that need first values; proposals will come with Phase 6's
