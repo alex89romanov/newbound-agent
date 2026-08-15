@@ -130,7 +130,7 @@ if grep -q '^http_port=0$' config.properties; then
 fi
 
 # 7. Git hygiene, newbound side: builder-written local state stays invisible.
-for f in Cargo.toml src/generated_initializer.rs newbound_core/src/api.rs; do
+for f in Cargo.toml src/generated_initializer.rs newbound_core/src/api.rs newbound_core/Cargo.toml; do
   git update-index --skip-worktree "$f" 2>/dev/null || true
 done
 echo "== skip-worktree set on the builder-written newbound files (undo: git update-index --no-skip-worktree <file>)"
