@@ -162,11 +162,28 @@ uses that context.
      fraction of "not salient" verdicts gets frontier review anyway —
      the training signal is otherwise one-sided (false-negatives never
      escalate, so they would never be labeled).
-   - **Privacy**: model artifacts never ride a repo, and a base that
-     has trained on brain/world data *is* private-class in its
-     entirety — the model inherits the strictest class in its
-     curriculum. Whether to maintain a second, manuals-only-curriculum
-     base for shareability is an open owner call (§ Open calls).
+   - **Privacy** (owner's call, 2026-08-15 — the claims precedent at
+     the data layer): model artifacts never ride a repo, and a base
+     that has trained on brain/world data *is* private-class in its
+     entirety — weights mix irreversibly, so there is no "promote" for
+     parameters and **no public weights, ever**. Instead, every
+     curriculum sample is **class-stamped at birth** from its
+     provenance (a sample inherits the strictest class of any source;
+     the narrator never blends classes in one sample — non-homogeneous
+     provenance means private, no judgment calls). The public artifact
+     is the **model seed**: `curriculum_export` filters the append-only
+     class-tagged training log to public, emits a versioned dataset
+     (audited before release: frontier-sampled slice review, string
+     scans, and canary tokens planted in private data that the export
+     must never contain), and a fresh install trains its OWN model from
+     stock nanochat on standard data + the seed. kb-seed bootstraps a
+     fresh brain; the model seed bootstraps a fresh mind; both diverge
+     under their instance's own experience thereafter. The seed ships
+     fetched-at-install (the hollis models pattern), with the mix-ratio
+     recipe, never in-repo. Until a fresh install's first checkpoint
+     passes its gates, `SALIENCE_CTL` points at the frontier — the
+     local model is an optimization the instance grows into, never a
+     dependency of day one.
    - **The metric survives unchanged** and finally becomes reachable:
      how much of the recall pack can be deleted because nanochat knows
      it cold. Shrink the prompt, keep the accuracy. Scale note:
@@ -318,9 +335,13 @@ meet the branches-always rule).
 - ~~hollis timing~~ **Answered**: ears arrive any time via `STT_CTL`,
   widened to the `acoustic_event` perception kind so hollis's
   annotations survive the boundary.
-- **Privacy classes for the base** (new, decide before the first CPT
-  batch): a single private-class model (simplest — it is your local
-  model), or a second manuals-only-curriculum base kept shareable?
+- ~~Privacy classes for the base~~ **Answered** (owner, 2026-08-15):
+  single private live model, everything mixed; no public weights at
+  all. The publishable artifact is the class-filtered curriculum — the
+  **model seed** — from which a fresh install derives its own model
+  (commitment 5's privacy clause has the full mechanism: class-at-
+  birth, single-class samples, curriculum_export, audit + canaries,
+  frontier-first grace period).
 - **Replay ratio and gate thresholds** (new): the sampler's
   fresh/reservoir/standard mix and the three suites' pass bars are
   dials that need first values; proposals will come with Phase 6's
