@@ -1,5 +1,5 @@
 {
-  "time": 1786735753369,
+  "time": 1786818880374,
   "domains": [
     {
       "tags": "doctrine,owner",
@@ -373,6 +373,27 @@
           },
           "confidence": "high",
           "time": 1786547612338
+        },
+        {
+          "claim": "The training architecture (owner, 2026-08-15, understandingloop.md commitment 5): the nanochat base GROWS via continuous background CPT (replay-buffered mixed batches - fresh curated tokens + reservoir + standard nanochat data; never arrival-order per-token), personality/chat skill is a LoRA re-derived over the moving base on a metric-driven trigger, serving is double-buffered with split pointers (salience live, user-facing gated-behind with auto-rollback), and a base trained on brain/world data is private-class in its entirety. The frozen-base-plus-knowledge-LoRA design is superseded - knowledge lives in weights, style lives in the adapter.",
+          "detail": "Companion clarification: the first sensor ships with agent and watches the resident codebase (store journals first); hollis is the first official plugin, camera next; the perception contract must pass the zero-executive-change test so exceptional-at-code expands to all environmental input. Design of record: docs/understandingloop.md + docs/one-memory-cycle.md at 66c0f70.",
+          "tags": "doctrine,training,flywheel,sensors",
+          "confidence": "high",
+          "time": 1786790824588
+        },
+        {
+          "claim": "No public weights, ever (owner, 2026-08-15): the live model trains on everything mixed; curriculum samples are class-stamped at birth from provenance (single-class samples); curriculum_export filters the training log to public and emits the MODEL SEED - a versioned, audited dataset (canary tokens planted in private data must never appear in it). A fresh install derives its own model from stock nanochat + standard data + the seed, then diverges - the kb-seed pattern at the weights layer. Until the first local checkpoint gates in, SALIENCE_CTL points at the frontier.",
+          "detail": "Resolves the privacy-classes open call. Design of record: docs/understandingloop.md commitment 5 at 6d2011c on claude/one-memory-cycle.",
+          "tags": "doctrine,training,privacy,model-seed",
+          "confidence": "high",
+          "time": 1786791926912
+        },
+        {
+          "claim": "CORRECTION (owner, 2026-08-15) to the model-seed claim: there is NO install-time grace period or gate-in event. A fresh install treats seed data and standard nanochat data as one undifferentiated training mix; SALIENCE_CTL points at the frontier by default indefinitely; adopting the local model for any workload is a deliberate someday-decision informed by the eval suites and syspack-shrinkage metric, never triggered by them.",
+          "detail": "Supersedes the frontier-until-first-gate phrasing in the earlier deposit. Design of record updated on claude/one-memory-cycle.",
+          "tags": "doctrine,training,model-seed,correction",
+          "confidence": "high",
+          "time": 1786792327149
         }
       ],
       "name": "doctrine"
@@ -676,6 +697,112 @@
           "tags": "overlay git workflow local-state",
           "confidence": "high",
           "time": 1786626215639
+        },
+        {
+          "claim": "A4 freeze verification: this deposit must never appear in git status.",
+          "tags": "a4-verify",
+          "confidence": "low",
+          "time": 1786735843414
+        },
+        {
+          "claim": "The one-memory cycle Track A is fully landed (A1 a036c96, A2 4-repo batch, A3 promote/seed/bootstrap + publish warning, A4 freeze commit on claude/one-memory-a4-cut-loose): kb is instance-owned - tracked files frozen + skip-worktree via overlay.sh, /data/kb/ gitignored, primer at docs/kb-seed.json, setup.sh tops up via bootstrap. A4 deviated deliberately from the doc: freeze-not-delete, because committed deletions would destroy live brains on pull.",
+          "detail": "Session ritual is now deposit -> promote -> commit manuals; the brain never rides a commit. This claim itself is the first post-freeze deposit that will never touch git - working as designed.",
+          "tags": "workflow,one-memory,a4,freeze",
+          "confidence": "high",
+          "time": 1786735892567
+        },
+        {
+          "claim": "B1 landed (claude/one-memory-b1-perception): docs/perception-contract.md v1 defines the typed-perception envelope {v,kind,time,sensor,payload,claims,salience_hint}, per-sensor binding, the perceive sink (built by B2), coalescing rules, the kind registry (store_change/file_change/peer_event/text_input built-in; acoustic_event with the full hollis EventKind mapping; visual_event reserved), and three acceptance criteria (zero-executive-change, procedural binding where possible, exceptional-at-code: widen never weaken).",
+          "detail": "Hollis ContextUpdate is retired by the contract - briefing conclusions are the executive's job. The subject-bearing version of this claim awaits promote onto agent once the contract merges.",
+          "tags": "workflow,b1,perception-contract",
+          "confidence": "high",
+          "time": 1786792604080,
+          "promoted": 1786810995840,
+          "subject": "agent"
+        },
+        {
+          "claim": "B2 landed (claude/one-memory-b2-executive): agent.executive exists with start/stop/status/perceive - explicit-start killable loop, observable phase and counters in globals under AGENT_EXECUTIVE, and the perception-contract sink (loud on envelope shape, tolerant on unknown kinds). Skeleton only: drains and accounts the queue; orient/decide/act are later phases; the donor repo's machinery migrates in from here.",
+          "detail": "14/14 disposable battery incl. queue-while-stopped, vocabulary tolerance, idempotent double-start, stop-exits-loop, restart, archivist untouched. Cross-command state via ndata globals is the proven pattern (hollis RUNPARAM precedent).",
+          "tags": "workflow,b2,executive",
+          "confidence": "high",
+          "time": 1786793059197,
+          "promoted": 1786810995841,
+          "subject": "agent.executive"
+        },
+        {
+          "claim": "Core-pair sync (flowlang builder, branch claude/core-pair-sync, unmerged): newbound rebuild now rewrites every builder-managed manifest (any lib whose root is not \".\") to exact-match pins (=X.Y.Z) on the flowlang/ndata pair resolved from the root Cargo.lock (fallback: root Cargo.toml, then flowlang's own version). Works in both directions, so rolling the root back pulls children down too. The root manifest is owner-managed and never rewritten; flowlang/ndata keys in meta.json cargo configs are ignored with a NOTE. Once published and adopted, a version bump touches ONLY the root Cargo.toml — no child-manifest or meta.json bump dance.",
+          "time": 1786799044859
+        },
+        {
+          "claim": "Phase 1 landed (claude/phase1-recall): agent-archivist-recall federates claim retrieval (topic match + stopwords, staleness = source-hash drift) and the executive loop orients each perception through a direct recall call into status.last_context. Verified on a disposable: seeded claim ranks first, staleness flips on referent patch, perceive-to-status round trip under 2s.",
+          "tags": "phase1",
+          "confidence": "high",
+          "time": 1786810991780
+        },
+        {
+          "claim": "The recall result shape is the orient contract: {claim, detail, tags, confidence, home, time, age_days, stale, stale_checked, promoted, score}. Callers (the executive first) depend only on this shape; recall internals are free to change behind it. No CONTEXT_CTL seam exists - seams are reserved for fillers that cross ownership or delivery lines (owner call 2026-08-15).",
+          "tags": "phase1",
+          "confidence": "high",
+          "time": 1786810992022,
+          "promoted": 1786810995841,
+          "subject": "agent.archivist"
+        },
+        {
+          "claim": "Phase 2 landed (claude/phase2-sensor): agent.sensor tails every _patches journal (mtime-gated 2s sweeps), emits one store_change envelope per new entry with claims bound by source pointer (stale by hash compare), delivered through agent-executive-perceive. Verified on a disposable including the self-model: a remember deposit returned through the sensor as the next perception.",
+          "tags": "phase2",
+          "confidence": "high",
+          "time": 1786811602084
+        },
+        {
+          "claim": "The store sensor cursor is runtime state: it resets to now on start, so restarts never replay journal history. Sensor-bound claims ride the perception envelope (claims: [{lib, ctl, claim, stale}]) and surface in executive status.last_context as bound/bound_top next to recall's fuzzy matched count - the precise join is the primary signal for store_change perceptions.",
+          "tags": "phase2",
+          "confidence": "high",
+          "time": 1786811602356,
+          "promoted": 1786811602629,
+          "subject": "agent.sensor"
+        },
+        {
+          "claim": "Phase 3 landed (claude/phase3-adjudication): agent-archivist-adjudicate applies the hysteresis rule mechanically - confidence moves one step per adjudication, settled-at-high writes nothing (the convergence fixed point), supersede only at the low floor with the successor entering at low. consolidate files through adjudicate; recall hides superseded claims; curation traces cap at 200 on the domain traces facet.",
+          "tags": "phase3",
+          "confidence": "high",
+          "time": 1786815200724
+        },
+        {
+          "claim": "Dylib-authoring gotcha: a command upserted mid-session is invisible to the ALREADY-RUNNING process that authored it - Command::lookup resolves against the dylib loaded at startup, so calling a just-authored command requires a fresh process. Author first, then start the process that exercises it.",
+          "tags": "phase3,gotcha",
+          "confidence": "high",
+          "time": 1786815200799,
+          "subject": "dev.code"
+        },
+        {
+          "claim": "adjudicate is the only sanctioned write path for extracted claims: remember stays the raw append (validation, audience guard, dedupe), adjudicate wraps it with belief dynamics - use remember for deliberate session deposits, adjudicate for anything machine-extracted. The result shape {status, action: settled|corroborated|contradicted|superseded|inserted, target, before, after, reasoning} is contract like recall's.",
+          "tags": "phase3",
+          "confidence": "high",
+          "time": 1786815210574,
+          "promoted": 1786815210654,
+          "subject": "agent.archivist"
+        },
+        {
+          "claim": "Phase 4 landed (claude/phase4-initiative): initiative is epistemic-work-driven and convergent - epistemic_work derives the queue from claim state (stale/review/unpromoted, no LLM or randomness), the executive decides at the set_drive budget when the perception queue is idle, and decay is the only autonomous write: one hysteresis step per distinct drift state, acknowledged by hash, no-op on repeat. Attribution lives in status.last_act before anything else happens.",
+          "tags": "phase4",
+          "confidence": "high",
+          "time": 1786816272947,
+          "promoted": 1786816273166,
+          "subject": "agent.executive"
+        },
+        {
+          "claim": "Phase 5a landed (claude/phase5a-salience): SALIENCE_CTL is the salience seam (runtime meta lib:ctl:cmd, unset = off) - the executive records a {salient, reasoning} verdict per perception in last_context without acting on it. Band 0.35-0.65 escalates to the frontier, deterministic 5% epsilon-audit samples confident verdicts, disagreements (delta > 0.25) log to the runtime salience_log (capped 1000, unjournaled - invisible to the store sensor), one frontier call per 5s max. The zero-executive-change test is 5b acceptance: swapping the stub for the resident nanochat pointer must change nothing upstream.",
+          "tags": "phase5",
+          "confidence": "high",
+          "time": 1786817584351,
+          "promoted": 1786817584440,
+          "subject": "agent.executive"
+        },
+        {
+          "claim": "Core-pair sync is merged to flow master (aad422b, 2026-08-15) along with the flowlang manual and FACETS.md; it reaches the fleet on the next flowlang crates.io publish, which the owner does by hand.",
+          "tags": "update",
+          "confidence": "high",
+          "time": 1786818879587
         }
       ],
       "name": "workflow"
