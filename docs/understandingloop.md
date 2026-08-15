@@ -344,6 +344,28 @@ in one unit.
 acts on it unprompted, and the dashboard says why. *Unblocks:* an agent
 that does things on its own without becoming undebuggable.
 
+*Executed 2026-08-15 on claude/phase4-initiative:
+`agent-archivist-epistemic_work` derives the queue from claim state —
+stale (source hash drifted, unacknowledged), review (confidence at the
+low floor, or drift acknowledged), unpromoted (subject-bearing brain
+claims; promotion pressure surfaced, never auto-promoted — that
+channel stays curated). No LLM, no randomness; the donor spawner's
+random injection was deleted for good by never being built. The
+executive's idle branch decides at the drive budget's pace
+(`set_drive`, acts/hour, 0 = off; perceptions always preempt) and the
+ONLY autonomous write is `decay`: an evidence-based confidence step
+down the same hysteresis ladder, at most one step per distinct drift
+state (the observed referent hash is recorded; repeats are no-ops, the
+floor writes only its acknowledgment, once) — initiative is convergent
+by construction, closing the loop-gain question. Attribution ships in
+`status.last_act` (kind, claim, home, why, action, before/after).
+Verified on a disposable: the queue found real pre-existing work in
+the copied brain unprompted; a staged drift decayed high→medium within
+one budget tick with the dashboard saying why; the same drift never
+decayed twice; a second drift walked the claim to low; perceptions
+preempted; drive 0 froze acts; stop stopped. "Gapped" detection needs
+semantic judgment and waits for the salience tier.*
+
 ### Phase 5 — The salience tier **[AMENDED: serving]**
 Orient's "does this matter?" judgment goes to nanochat behind its own
 seam (`SALIENCE_CTL`, same pattern), served from the resident

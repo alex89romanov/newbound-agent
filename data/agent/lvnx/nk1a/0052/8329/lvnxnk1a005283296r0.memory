@@ -5,5 +5,11 @@
     "tags": "workflow,b2,executive",
     "confidence": "high",
     "time": 1786793059197
+  },
+  {
+    "claim": "Phase 4 landed (claude/phase4-initiative): initiative is epistemic-work-driven and convergent - epistemic_work derives the queue from claim state (stale/review/unpromoted, no LLM or randomness), the executive decides at the set_drive budget when the perception queue is idle, and decay is the only autonomous write: one hysteresis step per distinct drift state, acknowledged by hash, no-op on repeat. Attribution lives in status.last_act before anything else happens.",
+    "tags": "phase4",
+    "confidence": "high",
+    "time": 1786816272947
   }
 ]

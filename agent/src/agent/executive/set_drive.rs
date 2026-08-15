@@ -3,10 +3,21 @@ use ndata::dataarray::DataArray;
 use flowlang::datastore::DataStore;
 use flowlang::command::Command;
 use flowlang::flowlang::system::time::time;
-pub fn execute(_: DataObject) -> DataObject {
+pub fn execute(o: DataObject) -> DataObject {
     use std::panic;
+    for p in ["acts_per_hour"] {
+        if !o.has(p) {
+            let mut e = DataObject::new();
+            e.put_string("status", "err");
+            e.put_string("msg", &format!("missing required parameter: {}", p));
+            let mut result_obj = DataObject::new();
+            result_obj.put_object("a", e);
+            return result_obj;
+        }
+    }
     let ax = panic::catch_unwind(panic::AssertUnwindSafe(|| {
-        status()
+        let arg_0: i64 = o.get_int("acts_per_hour");
+        set_drive(arg_0)
     }));
     match ax {
         Ok(ax) => {
@@ -38,12 +49,11 @@ pub fn execute(_: DataObject) -> DataObject {
     }
 }
 
-pub fn status() -> DataObject {
-// status: the observable half of observability-before-autonomy - phase,
-// queue depth, counters, the last perception's orientation, and (Phase
-// 4) the initiative picture: drive budget, epistemic work depth, act
-// count, time to the next allowed act, and the last act WITH its
-// attribution (kind, claim, home, why, action, before/after).
+pub fn set_drive(acts_per_hour: i64) -> DataObject {
+// set_drive: the budget dial (understandingloop.md Phase 4). Acts per
+// hour; 0 turns initiative off entirely - the loop still observes and
+// orients, it just never decides. Takes effect immediately (the next
+// idle tick may act). Clamped to 0..=3600.
 // Shared runtime state under one globals key. Idempotent; every field a
 // later read touches is initialized here, so no command path can panic on
 // a missing key.
@@ -67,28 +77,13 @@ fn ensure_exec_state(g: &mut DataObject) -> DataObject {
 }
 
 let mut g = DataStore::globals();
-let ex = ensure_exec_state(&mut g);
+let mut ex = ensure_exec_state(&mut g);
+let d = if acts_per_hour < 0 { 0 } else if acts_per_hour > 3600 { 3600 } else { acts_per_hour };
+ex.put_int("drive", d);
+ex.put_int("next_act_time", 0);
 let mut o = DataObject::new();
 o.put_string("status", "ok");
-o.put_boolean("running", ex.get_boolean("running"));
-o.put_string("phase", &ex.get_string("phase"));
-o.put_int("queue_depth", ex.get_array("queue").len() as i64);
-o.put_int("perceived_total", ex.get_int("perceived_total"));
-o.put_string("last_kind", &ex.get_string("last_kind"));
-o.put_int("last_time", ex.get_int("last_time"));
-o.put_int("started", ex.get_int("started"));
-if ex.has("last_context") {
-    o.put_object("last_context", ex.get_object("last_context"));
-}
-o.put_int("drive", if ex.has("drive") { ex.get_int("drive") } else { 4 });
-o.put_int("acts_total", if ex.has("acts_total") { ex.get_int("acts_total") } else { 0 });
-o.put_int("work_depth", if ex.has("work_depth") { ex.get_int("work_depth") } else { 0 });
-let next_at = if ex.has("next_act_time") { ex.get_int("next_act_time") } else { 0 };
-let now = time();
-o.put_int("next_act_in_ms", if next_at > now { next_at - now } else { 0 });
-if ex.has("last_act") {
-    o.put_object("last_act", ex.get_object("last_act"));
-}
+o.put_int("drive", d);
 o
 
 }
