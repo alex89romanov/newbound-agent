@@ -377,6 +377,33 @@ escalation log fills with (input, nanochat-call, frontier-call) rows.
 *Unblocks:* the loop runs hot without cost explosion; the curriculum
 writes itself.
 
+*Executed (5a, the architecture half) 2026-08-15 on
+claude/phase5a-salience. `SALIENCE_CTL` is a REAL seam under the
+squashed-seam doctrine — its filler crosses a delivery boundary (a
+stub today, the frontier if the owner points it there, the resident
+nanochat live pointer when the serving half lands) and swapping
+fillers must change nothing in the executive: the zero-executive-
+change test is the 5b acceptance criterion. The orient step asks the
+seam for a verdict {salient: 0.0-1.0, reasoning} per perception and
+RECORDS it in last_context — verdicts are not yet acted on
+(observability before autonomy, the Phase 4 move repeated).
+Owner-blessed defaults: uncertainty band 0.35..=0.65 escalates to the
+frontier (via ask_llm, a direct in-library call); a deterministic 5%
+epsilon-audit (hash of query + perception time — reproducible, no rand
+dependency) samples confident verdicts; disagreement = |local −
+frontier| > 0.25; the escalation/audit log lives in the runtime
+library (instance-owned, unjournaled so the store sensor never
+perceives the audit trail, capped 1000); at most one frontier call per
+5s, band escalations dropped in between are counted. Verified on a
+disposable with salience + frontier stubs: verdicts recorded; a
+mid-band perception escalated and logged its disagreement (0.5 vs
+0.95); the cooldown dropped and counted a second escalation; a
+33-perception confident burst ran tick-rate with zero additional
+frontier calls; a crafted epsilon hit produced an audit row with
+agreement correctly classified. The serving half (5b) — the resident
+online-learning service's live pointer behind this same seam — waits
+for the owner's hardware.*
+
 ### Phase 6 — The flywheel, continuous and gated-behind **[AMENDED]**
 The resident online-learning service of commitment 5, in full: ingest
 queue fed by the curator (adjudicated claims + escalation pairs + the

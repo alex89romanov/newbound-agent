@@ -1,7 +1,10 @@
 use ndata::dataobject::DataObject;
 use ndata::dataarray::DataArray;
+use ndata::data::Data;
 use flowlang::datastore::DataStore;
+use flowlang::command::Command;
 use flowlang::flowlang::system::time::time;
+use crate::agent::llm::ask_llm::ask_llm;
 pub fn execute(o: DataObject) -> DataObject {
     use std::panic;
     for p in ["perception"] {
@@ -57,7 +60,7 @@ pub fn perceive(perception: DataObject) -> DataObject {
 // perception, so a new sensor works before the executive learns its words.
 // Shared runtime state under one globals key. Idempotent; every field a
 // later read touches is initialized here, so no command path can panic on
-// a missing key.
+// a missing key. (Keep every executive command's copy of this identical.)
 fn ensure_exec_state(g: &mut DataObject) -> DataObject {
     if !g.has("AGENT_EXECUTIVE") {
         let mut ex = DataObject::new();
@@ -68,6 +71,16 @@ fn ensure_exec_state(g: &mut DataObject) -> DataObject {
         ex.put_int("started", 0);
         ex.put_string("last_kind", "");
         ex.put_int("last_time", 0);
+        ex.put_int("drive", 4);
+        ex.put_int("next_act_time", 0);
+        ex.put_int("acts_total", 0);
+        ex.put_int("work_depth", 0);
+        ex.put_int("salience_calls", 0);
+        ex.put_int("escalations", 0);
+        ex.put_int("audits", 0);
+        ex.put_int("esc_dropped", 0);
+        ex.put_int("disagreements", 0);
+        ex.put_int("last_frontier_time", 0);
         g.put_object("AGENT_EXECUTIVE", ex);
     }
     g.get_object("AGENT_EXECUTIVE")

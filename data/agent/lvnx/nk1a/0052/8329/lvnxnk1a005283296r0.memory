@@ -11,5 +11,11 @@
     "tags": "phase4",
     "confidence": "high",
     "time": 1786816272947
+  },
+  {
+    "claim": "Phase 5a landed (claude/phase5a-salience): SALIENCE_CTL is the salience seam (runtime meta lib:ctl:cmd, unset = off) - the executive records a {salient, reasoning} verdict per perception in last_context without acting on it. Band 0.35-0.65 escalates to the frontier, deterministic 5% epsilon-audit samples confident verdicts, disagreements (delta > 0.25) log to the runtime salience_log (capped 1000, unjournaled - invisible to the store sensor), one frontier call per 5s max. The zero-executive-change test is 5b acceptance: swapping the stub for the resident nanochat pointer must change nothing upstream.",
+    "tags": "phase5",
+    "confidence": "high",
+    "time": 1786817584351
   }
 ]

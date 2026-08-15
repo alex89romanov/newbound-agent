@@ -1,17 +1,21 @@
-// start (understandingloop.md Phases 1-4): the executive loop, explicit
-// and killable - it NEVER autostarts. Observe: drain the perception
-// queue. Orient: join each perception to the claims it touches
-// (sensor-bound precise join + recall's fuzzy one). Decide/Act (Phase
-// 4): when and only when the queue is idle, at the pace the drive
-// budget allows (acts/hour; 0 = initiative off), pull the top item of
-// the epistemic work queue. The ONLY autonomous write is decay on a
-// stale claim - review and unpromoted items are surfaced, never
-// touched, and every act records its attribution in last_act BEFORE
-// anything else happens: observability before autonomy. Perceptions
-// always preempt initiative.
+// start (understandingloop.md Phases 1-5a): the executive loop, explicit
+// and killable - it NEVER autostarts. Observe: drain perceptions.
+// Orient: bind + recall, then (Phase 5a) the salience verdict through
+// SALIENCE_CTL - a REAL seam: the filler crosses a delivery boundary
+// (the frontier today, the resident nanochat live pointer tomorrow;
+// swapping them must change nothing here - the zero-executive-change
+// test). Verdicts are RECORDED, not acted on: the verdict stream and
+// audit trail come first, behavioral gating later. Uncertain verdicts
+// (0.35..=0.65, owner-blessed) escalate to the frontier and the
+// disagreement lands in the runtime salience log - curriculum feedstock.
+// A deterministic 5% epsilon-audit samples confident verdicts so the
+// local judge never drifts unobserved. One frontier call per 5s at most
+// (band escalations dropped in between are counted): tick-rate
+// orientation must never become a cost explosion. Decide/Act (Phase 4)
+// unchanged: idle-only, drive-budgeted, decay-only writes, attributed.
 // Shared runtime state under one globals key. Idempotent; every field a
 // later read touches is initialized here, so no command path can panic on
-// a missing key.
+// a missing key. (Keep every executive command's copy of this identical.)
 fn ensure_exec_state(g: &mut DataObject) -> DataObject {
     if !g.has("AGENT_EXECUTIVE") {
         let mut ex = DataObject::new();
@@ -26,9 +30,58 @@ fn ensure_exec_state(g: &mut DataObject) -> DataObject {
         ex.put_int("next_act_time", 0);
         ex.put_int("acts_total", 0);
         ex.put_int("work_depth", 0);
+        ex.put_int("salience_calls", 0);
+        ex.put_int("escalations", 0);
+        ex.put_int("audits", 0);
+        ex.put_int("esc_dropped", 0);
+        ex.put_int("disagreements", 0);
+        ex.put_int("last_frontier_time", 0);
         g.put_object("AGENT_EXECUTIVE", ex);
     }
     g.get_object("AGENT_EXECUTIVE")
+}
+
+fn as_float(o: &DataObject, k: &str) -> f64 {
+    if !o.has(k) { return -1.0; }
+    match o.get_property(k) {
+        Data::DFloat(f) => f,
+        Data::DInt(i) => i as f64,
+        _ => -1.0,
+    }
+}
+fn salience_ctl() -> String {
+    (|| -> Option<String> {
+        let s = DataStore::globals().try_get_object("system").ok()?;
+        let a = s.try_get_object("apps").ok()?;
+        let g = a.try_get_object("agent").ok()?;
+        let r = g.try_get_object("runtime").ok()?;
+        r.try_get_string("SALIENCE_CTL").ok()
+    })().unwrap_or_default()
+}
+// The escalation log: runtime-library record, instance-owned like
+// archivist_queue, capped, unjournaled (so the store sensor never
+// perceives its own audit trail - no feedback channel).
+fn log_salience_row(row: DataObject) {
+    let store = DataStore::new();
+    let mut rec = if store.exists("runtime", "salience_log") {
+        store.get_data("runtime", "salience_log")
+    } else {
+        let mut r = DataObject::new();
+        r.put_string("id", "salience_log");
+        r.put_string("username", "system");
+        r.put_array("readers", DataArray::new());
+        r.put_array("writers", DataArray::new());
+        r.put_object("data", DataObject::new());
+        r
+    };
+    let mut d = rec.get_object("data");
+    let mut rows = if d.has("rows") { d.get_array("rows") } else { DataArray::new() };
+    rows.push_object(row);
+    while rows.len() > 1000 { rows.remove_property(0); }
+    d.put_array("rows", rows);
+    rec.put_object("data", d);
+    rec.put_int("time", time());
+    store.set_data("runtime", "salience_log", rec);
 }
 
 let mut g = DataStore::globals();
@@ -104,6 +157,90 @@ std::thread::spawn(move || {
                         }
                     }
                 }
+                // ── salience (Phase 5a) ─────────────────────────────────
+                let sctl = salience_ctl();
+                if !sctl.trim().is_empty() {
+                    let parts: Vec<String> = sctl.split(':').map(|s| s.to_string()).collect();
+                    if parts.len() >= 3 {
+                        let judged = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                            let cmd = Command::lookup(&parts[0], &parts[1], &parts[2]);
+                            let mut args = DataObject::new();
+                            args.put_object("perception", p.deep_copy());
+                            args.put_object("context", ctx.deep_copy());
+                            cmd.execute(args)
+                        }));
+                        if let Ok(Ok(r)) = judged {
+                            let a = if r.has("a") { r.get_object("a") } else { r };
+                            let sal = as_float(&a, "salient");
+                            if sal >= 0.0 {
+                                let n = if ex.has("salience_calls") { ex.get_int("salience_calls") } else { 0 };
+                                ex.put_int("salience_calls", n + 1);
+                                ctx.put_float("salience", sal);
+                                if a.has("reasoning") { ctx.put_string("salience_why", &a.get_string("reasoning")); }
+                                let band = sal >= 0.35 && sal <= 0.65;
+                                // Deterministic epsilon: hash of query +
+                                // perception time - reproducible sampling,
+                                // no rand dependency.
+                                let eps = {
+                                    let mut h: u64 = 0xcbf29ce484222325;
+                                    for b in qs.as_bytes() {
+                                        h ^= *b as u64;
+                                        h = h.wrapping_mul(0x100000001b3);
+                                    }
+                                    let pt = if p.has("time") { p.get_int("time") } else { 0 };
+                                    h ^= pt as u64;
+                                    (h % 100) < 5
+                                };
+                                if band || eps {
+                                    let now2 = time();
+                                    let lf = if ex.has("last_frontier_time") { ex.get_int("last_frontier_time") } else { 0 };
+                                    if now2 - lf >= 5000 {
+                                        ex.put_int("last_frontier_time", now2);
+                                        let fprompt = format!(
+                                            "You are the salience auditor for an autonomous agent's perception stream.\nPERCEPTION: {}\nCONTEXT: recall matched {} claims.\nThe resident model rated salience {:.2}.\nIndependently rate how much this perception matters to the agent's understanding of its environment, from 0.0 (noise) to 1.0 (critical).\nReply with ONLY a JSON object: {{\"salient\": <0.0-1.0>, \"reasoning\": \"<one sentence>\"}}",
+                                            qs, ctx.get_int("matched"), sal);
+                                        let fres = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                                            ask_llm(fprompt, Data::DNull)
+                                        }));
+                                        if let Ok(resp) = fres {
+                                            if !resp.starts_with("ERROR") {
+                                                if let (Some(s0), Some(e0)) = (resp.find('{'), resp.rfind('}')) {
+                                                    if e0 > s0 {
+                                                        if let Ok(fd) = DataObject::try_from_string(&resp[s0..=e0]) {
+                                                            let fsal = as_float(&fd, "salient");
+                                                            if fsal >= 0.0 {
+                                                                let disagree = (sal - fsal).abs() > 0.25;
+                                                                let mut row = DataObject::new();
+                                                                row.put_int("time", now2);
+                                                                row.put_string("kind", if band { "escalation" } else { "audit" });
+                                                                row.put_string("input", &qs);
+                                                                row.put_float("local", sal);
+                                                                row.put_float("frontier", fsal);
+                                                                if fd.has("reasoning") { row.put_string("frontier_why", &fd.get_string("reasoning")); }
+                                                                row.put_boolean("disagree", disagree);
+                                                                log_salience_row(row);
+                                                                let k = if band { "escalations" } else { "audits" };
+                                                                let c = if ex.has(k) { ex.get_int(k) } else { 0 };
+                                                                ex.put_int(k, c + 1);
+                                                                if disagree {
+                                                                    let dcount = if ex.has("disagreements") { ex.get_int("disagreements") } else { 0 };
+                                                                    ex.put_int("disagreements", dcount + 1);
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    } else if band {
+                                        let dropped = if ex.has("esc_dropped") { ex.get_int("esc_dropped") } else { 0 };
+                                        ex.put_int("esc_dropped", dropped + 1);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
                 ex.put_object("last_context", ctx);
             }
             q.remove_property(0);
@@ -153,8 +290,6 @@ std::thread::spawn(move || {
                                 }
                                 act.put_string("action", &action);
                             } else {
-                                // review / unpromoted: surfacing IS the
-                                // act - those channels stay human-driven.
                                 act.put_string("action", "surfaced");
                             }
                             ex.put_object("last_act", act);

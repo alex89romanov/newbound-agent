@@ -1,11 +1,9 @@
-// status: the observable half of observability-before-autonomy - phase,
-// queue depth, counters, the last perception's orientation, and (Phase
-// 4) the initiative picture: drive budget, epistemic work depth, act
-// count, time to the next allowed act, and the last act WITH its
-// attribution (kind, claim, home, why, action, before/after).
+// status: the observable half - phase, queue, counters, orientation,
+// initiative, and (Phase 5a) the salience picture: verdict counters,
+// escalations vs audits vs cooldown drops, disagreement count.
 // Shared runtime state under one globals key. Idempotent; every field a
 // later read touches is initialized here, so no command path can panic on
-// a missing key.
+// a missing key. (Keep every executive command's copy of this identical.)
 fn ensure_exec_state(g: &mut DataObject) -> DataObject {
     if !g.has("AGENT_EXECUTIVE") {
         let mut ex = DataObject::new();
@@ -20,6 +18,12 @@ fn ensure_exec_state(g: &mut DataObject) -> DataObject {
         ex.put_int("next_act_time", 0);
         ex.put_int("acts_total", 0);
         ex.put_int("work_depth", 0);
+        ex.put_int("salience_calls", 0);
+        ex.put_int("escalations", 0);
+        ex.put_int("audits", 0);
+        ex.put_int("esc_dropped", 0);
+        ex.put_int("disagreements", 0);
+        ex.put_int("last_frontier_time", 0);
         g.put_object("AGENT_EXECUTIVE", ex);
     }
     g.get_object("AGENT_EXECUTIVE")
@@ -47,5 +51,8 @@ let now = time();
 o.put_int("next_act_in_ms", if next_at > now { next_at - now } else { 0 });
 if ex.has("last_act") {
     o.put_object("last_act", ex.get_object("last_act"));
+}
+for k in ["salience_calls", "escalations", "audits", "esc_dropped", "disagreements"] {
+    o.put_int(k, if ex.has(k) { ex.get_int(k) } else { 0 });
 }
 o
