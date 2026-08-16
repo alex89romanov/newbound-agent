@@ -101,6 +101,61 @@ if checkpoint != "stub" {
 }
 o.put_string("nanochat_env", &nanochat_env);
 
+// stage 1.6: the model itself. If MODEL_CHECKPOINT has no loadable
+// checkpoint, the agent TRAINS one (owner, 2026-08-16: "isn't that the
+// whole point of the bootstrap?"). nanochat's own speedrun pipeline
+// (dataset -> tokenizer -> base_train -> chat_sft), run from a script
+// shipped as a library asset, in the background - this is GPU-hours,
+// logged to runtime/agent/model/train.log, pidfile-guarded so repeat
+// bootstraps report `running` instead of double-starting. The service
+// launches regardless and sits in `waiting`, retrying its load every
+// 60s, so verdicts begin on their own once base weights land. Training
+// knobs come from NANOCHAT_TRAIN_ARGS (default --depth=20; the
+// speedrun's own scale is --depth=24 --device-batch-size=16 --fp8 on
+// 8xH100 - set what fits the hardware).
+let mut training = "not_needed".to_string();
+if checkpoint != "stub" && nanochat_env != "install_failed" {
+    let ckpath = std::path::Path::new(&checkpoint);
+    let has_ckpt = ["base_checkpoints", "chatsft_checkpoints", "chatrl_checkpoints"]
+        .iter().any(|d| ckpath.join(d).is_dir())
+        || ckpath.join("train_done").exists();
+    if !has_ckpt {
+        let pidfile = modeldir.join("train.pid");
+        let mut already = false;
+        if let Ok(pid) = std::fs::read_to_string(&pidfile) {
+            let pid = pid.trim().to_string();
+            if !pid.is_empty() && std::path::Path::new(&format!("/proc/{}", pid)).exists() {
+                already = true;
+            }
+        }
+        if already {
+            training = "running".to_string();
+        } else {
+            let tsh = modeldir.join("train.sh");
+            let tasset = include_str!("../../../../data/agent/_ASSETS/train.sh");
+            if std::fs::read_to_string(&tsh).unwrap_or_default() != tasset {
+                if let Err(e) = std::fs::write(&tsh, tasset) {
+                    return err(format!("could not write {}: {}", tsh.display(), e));
+                }
+            }
+            let targs = prop("NANOCHAT_TRAIN_ARGS", "--depth=20");
+            let mut cmd = "cd ".to_string();
+            cmd += &modeldir.display().to_string();
+            cmd += &format!(
+                "; nohup bash train.sh '{}' '{}' '{}' >> train.log 2>&1 & echo $! > train.pid",
+                checkpoint, nc.display(), targs);
+            let mut x = DataArray::new();
+            x.push_string("bash");
+            x.push_string("-c");
+            x.push_string(&cmd);
+            let r = system_call(x);
+            println!("BOOTSTRAP START TRAINING {}", r.to_string());
+            training = "started".to_string();
+        }
+    }
+}
+o.put_string("training", &training);
+
 // stage 2: the service script, from the compiled-in asset
 let svc = modeldir.join("service.py");
 let asset = include_str!("../../../../data/agent/_ASSETS/service.py");
@@ -174,7 +229,10 @@ if service != "launch_failed" {
                 if d.has("mode") { o.put_string("service_mode", &d.get_string("mode")); }
                 if let Ok(be) = d.try_get_string("boot_error") {
                     o.put_string("boot_error", &be);
-                    o.put_string("status", "err");
+                    // `waiting` while training runs is the expected state,
+                    // not a failure - only a load error with nothing
+                    // training behind it is genuinely wrong.
+                    if training == "not_needed" { o.put_string("status", "err"); }
                 }
             }
         }

@@ -22,5 +22,11 @@
     "tags": "phase5b",
     "confidence": "high",
     "time": 1786843175049
+  },
+  {
+    "claim": "Bootstrap trains the model too (owner, 2026-08-16: an empty MODEL_CHECKPOINT dir means BUILD it, not error). Stage 1.6: if the checkpoint dir has no base/chatsft/chatrl_checkpoints and no train_done, bootstrap writes train.sh from the library asset (data/agent/_ASSETS/train.sh - nanochat speedrun pipeline: dataset, tok_train, base_train, chat_sft, torchrun on nvidia-smi GPU count) and nohups it with a pidfile guard; knobs via NANOCHAT_TRAIN_ARGS (default --depth=20; speedrun scale is --depth=24 --device-batch-size=16 --fp8). The service load-retries every 60s in mode waiting, so verdicts start on their own when base weights land; sft lands later - a service restart upgrades the loaded source. boot_error only fails the bootstrap report when training is not_needed - waiting-while-training is ok.",
+    "tags": "phase5b",
+    "confidence": "high",
+    "time": 1786843815148
   }
 ]

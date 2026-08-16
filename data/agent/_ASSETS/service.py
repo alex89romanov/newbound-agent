@@ -251,7 +251,7 @@ class Handler(BaseHTTPRequestHandler):
             elif STATE["loading"]:
                 mode = "loading"
             else:
-                mode = "error"
+                mode = "waiting"
             ck = os.path.join(self.server.args.data_dir, "checkpoints")
             self._json(200, {
                 "status": "ok",
@@ -333,22 +333,31 @@ class Handler(BaseHTTPRequestHandler):
 def load_initial(args):
     """Load the scorer AFTER the port binds - a real checkpoint takes
     long enough (torch import + weights) that loading before serving
-    made every honest launch look dead to the outside. /status says
-    `loading` until this lands, `error` (with boot_error) if it fails;
-    /salience answers 503 either way, which the executive treats as
-    no-verdict."""
-    try:
-        scorer = make_scorer(args.checkpoint)
-        with LOCK:
-            STATE["slots"]["A"] = scorer
-            STATE["loading"] = False
-        print(f"[service] scorer ready: {scorer.name}", flush=True)
-    except Exception as e:
-        import traceback
-        with LOCK:
-            STATE["loading"] = False
-            STATE["boot_error"] = f"{type(e).__name__}: {e}"
-        traceback.print_exc()
+    made every honest launch look dead to the outside. And a load
+    failure is NOT fatal: when bootstrap has kicked off base training,
+    the checkpoint this service is waiting for may be hours away - so
+    retry every 60s forever, and the service upgrades itself the moment
+    weights appear. /status says `loading`, then `waiting` (with
+    boot_error naming what was missing) between retries; /salience
+    answers 503 throughout, which the executive treats as no-verdict."""
+    while True:
+        try:
+            scorer = make_scorer(args.checkpoint)
+            with LOCK:
+                STATE["slots"]["A"] = scorer
+                STATE["loading"] = False
+                STATE["boot_error"] = None
+            print(f"[service] scorer ready: {scorer.name}", flush=True)
+            return
+        except Exception as e:
+            import traceback
+            with LOCK:
+                STATE["loading"] = False
+                STATE["boot_error"] = f"{type(e).__name__}: {e}"
+            traceback.print_exc()
+            print("[service] scorer load failed; retrying in 60s "
+                  "(training may still be producing the checkpoint)", flush=True)
+            time.sleep(60)
 
 
 def main():

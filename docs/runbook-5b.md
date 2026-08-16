@@ -39,11 +39,26 @@ answers, and the first perception already carries a verdict:
     tools/nb-call.py agent-model-service_status '{}'   # mode: stub
     tools/nb-call.py agent-executive-status '{}'       # last_context.salience
 
-## 2. The base model — fresh nanochat run
+## 2. The base model — bootstrap trains it
 
-Train the base from standard nanochat data per nanochat's own
-instructions (the speedrun; this is the GPU-hours step). Note the
-checkpoint directory — `$CKPT`.
+Point `MODEL_CHECKPOINT` at a directory. If it holds no loadable
+checkpoint (empty is fine), bootstrap starts training in the
+background: nanochat's own speedrun pipeline (dataset → tokenizer →
+`base_train` → `chat_sft`) on every GPU `nvidia-smi` can see, logged
+to `runtime/agent/model/train.log`, pidfile-guarded so repeat
+bootstraps report `running` instead of double-starting. This is the
+GPU-hours step. Size it to the hardware with:
+
+    NANOCHAT_TRAIN_ARGS=--depth=20        # default
+    # speedrun-scale (8xH100): --depth=24 --device-batch-size=16 --fp8
+
+Meanwhile the service sits in `mode: waiting` and retries its load
+every 60s — verdicts begin on their own the moment base weights land.
+Training ends with `chat_sft`; if the service picked up the bare base
+first, restart it (kill by PID; the executive's next start relaunches)
+to upgrade to `nanochat:sft`. A pre-existing base dir (the
+`~/.cache/nanochat` layout, or a copy) is honored as-is: `training:
+not_needed`, immediate load.
 
 ## 3. The NanochatScorer glue — shipped, validate on first contact
 
