@@ -12,9 +12,34 @@ and audit rows, the degradation drill, the nanochat env install
 (donefile-guarded clone + venv), and curriculum export draining into
 the trainer skeleton.
 
-Out of scope (Phase 6): actual CPT stepping, replay ratio and gate
-thresholds (owner calls, still open), the gated user-facing pointer,
-eval + auto-rollback, LoRA re-derivation.
+**Phase 6 is in (2026-08-16): the trainer is real.** When a nanochat
+checkpoint serves and `MODEL_TRAIN=on` (the default), a candidate copy
+of the live model steps continuously on mixed mini-batches - fresh
+curriculum from ingest, a replay reservoir, standard pretraining data -
+and every `MODEL_GATE every=` steps it faces the gate: no regression on
+held-out standard data (forgetting guard) and at least parity with the
+live pointer on held-out curriculum (learning check). Pass -> ring
+checkpoint + promotion through the double buffer, zero serving
+interruption; fail -> hold, and after `fails=` consecutive holds the
+candidate resets to the live weights. Settings (defaults are proposals
+- the replay mix and gate thresholds are owner calls):
+
+    MODEL_TRAIN=on                                  # off = 5b behavior
+    MODEL_MIX=fresh=0.25,replay=0.25,standard=0.5   # replay ratio
+    MODEL_TRAIN_LR=2e-5
+    MODEL_GATE=every=50,regress=0.02,fails=3        # gate thresholds
+    MODEL_TRAIN_INTERVAL=10                         # seconds per step
+
+Watch it: `service_status` carries a `trainer` block (steps, loss_ema,
+gates, promotions, resets, replay_size, last_gate with both eval
+pairs). Feed it: `agent-model-curriculum_export` into
+`runtime/agent/model/ingest/`. The serving pointer name shows the
+lineage: `nanochat:sft` at birth, `nanochat:cpt-<step>` once its own
+training has passed a gate.
+
+Still out of scope (Phase 6b+): generation-based agreement evals (the
+gate's curriculum check is loss-based for now), the separately-gated
+user-facing pointer, LoRA personality re-derivation.
 
 ## Settings (runtime/agent/botd.properties)
 

@@ -182,7 +182,14 @@ uses that context.
      fresh brain; the model seed bootstraps a fresh mind; both diverge
      under their instance's own experience thereafter. The seed ships
      fetched-at-install (the hollis models pattern), with the mix-ratio
-     recipe, never in-repo. **A fresh install treats seed data and
+     recipe, never in-repo. **[2026-08-16: the mixed-mini-batch trainer
+     is LIVE in the resident service (Phase 6) - candidate-copy CPT,
+     fresh/replay/standard mix (MODEL_MIX), a held-out gate (no
+     standard-data regression + curriculum parity, MODEL_GATE) before
+     any promotion through the double-buffered pointer, and
+     consecutive-failure reset. Verified end-to-end on a fabricated
+     tiny nanochat base: promote, hold, and reset paths all
+     exercised.]** **A fresh install treats seed data and
      standard nanochat data identically** — one ingest, one sampler,
      one mix; no install-time state machine and no grace-period
      mechanism (owner's correction, 2026-08-15). **[AMENDED
