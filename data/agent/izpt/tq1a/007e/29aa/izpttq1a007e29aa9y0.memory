@@ -1,0 +1,8 @@
+[
+  {
+    "claim": "Phase 5b prebuild landed (claude/phase5b-prebuild): agent.model is the resident service doorway - salience (SALIENCE_CTL filler, POST /salience, 1.5s timeout, err degrades like an unset seam), service_status, and curriculum_export (salience pairs + curation traces + live claims to one JSONL batch, deliberate like seed_export). tools/model-service/service.py is trainer+server in one process: stdlib-only stub mode, double-buffered live pointer with /promote, trainer skeleton draining runtime/model/ingest with a 5-deep checkpoint ring. NanochatScorer is the single class the GPU day fills in; docs/runbook-5b.md is the owner script.",
+    "tags": "phase5b",
+    "confidence": "high",
+    "time": 1786838926380
+  }
+]
