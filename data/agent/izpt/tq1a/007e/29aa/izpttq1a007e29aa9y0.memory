@@ -34,5 +34,11 @@
     "tags": "phase5b",
     "confidence": "high",
     "time": 1786844579176
+  },
+  {
+    "claim": "First real training run (owner 5090, 2026-08-16): pipeline worked end to end (dataset, tokenizer trained into the base dir, model built) then OOMed on step one - base_train device-batch-size default 32 is an 80GB-card number; and without FlashAttention 3 the SDPA fallback cannot do sliding windows so SSSL runs terribly (nanochat warns both). NANOCHAT_TRAIN_ARGS default is now --depth=20 --device-batch-size=8 --window-pattern=L (consumer ~32GB); drop batch to 4 if still OOM - grad accum keeps the total batch identical, and chat_sft inherits device_batch_size from pretrain meta so one setting sizes both stages. train.sh exports PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True. Because train args are read from botd at bootstrap time, a failed run is retuned by editing botd.properties and rerunning bootstrap - no pull needed.",
+    "tags": "phase5b",
+    "confidence": "high",
+    "time": 1786844940379
   }
 ]

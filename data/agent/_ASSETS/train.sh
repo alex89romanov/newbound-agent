@@ -16,6 +16,8 @@ EXTRA_ARGS="${3:-}"
 export NANOCHAT_BASE_DIR="$BASE_DIR"
 export OMP_NUM_THREADS=1
 export WANDB_RUN=dummy
+# Reduces fragmentation-driven OOM on tightly-fitting consumer GPUs
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 mkdir -p "$BASE_DIR"
 cd "$CLONE"
 source venv/bin/activate

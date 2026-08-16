@@ -110,9 +110,14 @@ o.put_string("nanochat_env", &nanochat_env);
 // bootstraps report `running` instead of double-starting. The service
 // launches regardless and sits in `waiting`, retrying its load every
 // 60s, so verdicts begin on their own once base weights land. Training
-// knobs come from NANOCHAT_TRAIN_ARGS (default --depth=20; the
-// speedrun's own scale is --depth=24 --device-batch-size=16 --fp8 on
-// 8xH100 - set what fits the hardware).
+// knobs come from NANOCHAT_TRAIN_ARGS. The default is sized for one
+// consumer GPU (~32GB, no FlashAttention 3): --device-batch-size=8
+// because base_train's own default of 32 is an 80GB-card number and
+// OOMs a 5090 on step one, and --window-pattern=L because the SDPA
+// fallback cannot do sliding windows (nanochat's own warning). The
+// speedrun's 8xH100 scale is --depth=24 --device-batch-size=16 --fp8.
+// chat_sft inherits device_batch_size from the pretrain meta, so one
+// setting sizes both stages.
 let mut training = "not_needed".to_string();
 if checkpoint != "stub" && nanochat_env != "install_failed" {
     let ckpath = std::path::Path::new(&checkpoint);
@@ -138,7 +143,7 @@ if checkpoint != "stub" && nanochat_env != "install_failed" {
                     return err(format!("could not write {}: {}", tsh.display(), e));
                 }
             }
-            let targs = prop("NANOCHAT_TRAIN_ARGS", "--depth=20");
+            let targs = prop("NANOCHAT_TRAIN_ARGS", "--depth=20 --device-batch-size=8 --window-pattern=L");
             let mut cmd = "cd ".to_string();
             cmd += &modeldir.display().to_string();
             cmd += &format!(

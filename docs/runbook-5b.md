@@ -49,8 +49,11 @@ to `runtime/agent/model/train.log`, pidfile-guarded so repeat
 bootstraps report `running` instead of double-starting. This is the
 GPU-hours step. Size it to the hardware with:
 
-    NANOCHAT_TRAIN_ARGS=--depth=20        # default
+    # default, sized for one ~32GB consumer GPU without FA3:
+    NANOCHAT_TRAIN_ARGS=--depth=20 --device-batch-size=8 --window-pattern=L
     # speedrun-scale (8xH100): --depth=24 --device-batch-size=16 --fp8
+    # still OOM? drop --device-batch-size to 4 (grad accum keeps the
+    # total batch identical; chat_sft inherits the size from pretrain)
 
 Meanwhile the service sits in `mode: waiting` and retries its load
 every 60s — verdicts begin on their own the moment base weights land.
