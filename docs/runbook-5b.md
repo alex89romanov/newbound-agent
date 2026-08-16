@@ -31,9 +31,10 @@ restart the instance. Start the sensor and executive:
     tools/nb-call.py agent-sensor-start '{}'
     tools/nb-call.py agent-executive-start '{}'
 
-The first perception finds no service; the executive fires bootstrap
-itself. Within a few seconds `runtime/model/service.py` exists, the
-service answers, and the next perception carries a verdict:
+`agent-executive-start` fires bootstrap eagerly, in the background —
+install and launch happen at start, never lazily behind a perception.
+Within a few seconds `runtime/model/service.py` exists, the service
+answers, and the first perception already carries a verdict:
 
     tools/nb-call.py agent-model-service_status '{}'   # mode: stub
     tools/nb-call.py agent-executive-status '{}'       # last_context.salience
@@ -108,10 +109,11 @@ diagnosis happens from the web session.
 ## Troubleshooting
 
 - **No verdicts, `SALIENCE=on`**: check `service_status`; then
-  `runtime/model/service.log`. Bootstrap fires once per executive
+  `runtime/model/service.log`. Bootstrap fires eagerly at executive
   start — restart the executive to retry, or run
-  `agent-model-bootstrap` by hand for the full report
-  (`nanochat_env`, `script_written`, `service`).
+  `agent-model-bootstrap` by hand (no parameters, `'{}'`) for the full
+  report (`nanochat_env`, `script_written`, `service`). The manual
+  call blocks through the whole install — that's it working.
 - **`launch_failed` with a real checkpoint**: almost always the
   NanochatScorer glue (step 3) — the log shows the exact exception.
 - **Verdicts feel flat**: a fresh base is a weak judge — expected.

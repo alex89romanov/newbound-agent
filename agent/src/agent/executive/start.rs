@@ -48,10 +48,13 @@ pub fn start() -> DataObject {
 // model service - ON or OFF in settings (SALIENCE=on in
 // botd.properties; owner's simplification, 2026-08-16: nothing
 // pluggable, the agent.model.salience client is called directly,
-// in-crate). If salience is on and the service isn't answering, the
-// agent builds its own server: agent.model.bootstrap fires ONCE per
-// start, in the background, and the loop runs degraded - no verdict,
-// nothing else changes - until the service comes up. Verdicts are
+// in-crate). The judge is ensured EAGERLY: when salience is on,
+// agent.model.bootstrap fires in the background the moment start is
+// called - never lazily behind a perception (owner, 2026-08-16: a
+// multi-hour install must not wait for something to need it).
+// Bootstrap is idempotent - a no-op probe when everything is already
+// up. While the service isn't answering, the loop runs degraded - no
+// verdict, nothing else changes. Verdicts are
 // RECORDED, not acted on: the verdict stream and audit trail come
 // first, behavioral gating later. Uncertain verdicts (0.35..=0.65,
 // owner-blessed) escalate to the frontier and the disagreement lands in
@@ -146,9 +149,16 @@ if ex.get_boolean("running") {
 ex.put_boolean("running", true);
 ex.put_string("phase", "idle");
 ex.put_int("started", time());
-// One self-heal attempt per start: if salience is on and the service is
-// down, the loop fires agent.model.bootstrap once and carries on.
-ex.put_boolean("bootstrap_fired", false);
+// Ensure the judge NOW, not when a perception happens to need it:
+// bootstrap in the background (install if configured, launch if down,
+// no-op if answering). The loop below never triggers installs.
+if salience_on() {
+    std::thread::spawn(|| {
+        let _ = std::panic::catch_unwind(|| {
+            crate::agent::model::bootstrap::bootstrap()
+        });
+    });
+}
 
 std::thread::spawn(move || {
     let g = DataStore::globals();
@@ -283,19 +293,10 @@ std::thread::spawn(move || {
                                     ex.put_int("esc_dropped", dropped + 1);
                                 }
                             }
-                        } else {
-                            // No verdict - the service is down or erring.
-                            // Degrade in place; self-heal once per start:
-                            // the agent builds its own nanochat server.
-                            if !(ex.has("bootstrap_fired") && ex.get_boolean("bootstrap_fired")) {
-                                ex.put_boolean("bootstrap_fired", true);
-                                std::thread::spawn(|| {
-                                    let _ = std::panic::catch_unwind(|| {
-                                        crate::agent::model::bootstrap::bootstrap()
-                                    });
-                                });
-                            }
                         }
+                        // sal < 0: no verdict - the service is down or
+                        // still bootstrapping. Degrade in place; the
+                        // eager bootstrap at start owns recovery.
                     }
                 }
                 ex.put_object("last_context", ctx);
