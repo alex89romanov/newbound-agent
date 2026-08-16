@@ -222,11 +222,18 @@ if was_stale || !probe() {
         (nc.join("venv").join("bin").join("python").display().to_string(),
          format!("PYTHONPATH='{}' ", nc.display()))
     };
+    // Phase 6 trainer settings ride the launch line; a dead service
+    // relaunch picks up botd changes without a rebuild.
+    let train = prop("MODEL_TRAIN", "on");
+    let mix = prop("MODEL_MIX", "fresh=0.25,replay=0.25,standard=0.5");
+    let lr = prop("MODEL_TRAIN_LR", "2e-5");
+    let gate = prop("MODEL_GATE", "every=50,regress=0.02,fails=3");
+    let interval = prop("MODEL_TRAIN_INTERVAL", "10");
     let mut cmd = "cd ".to_string();
     cmd += &root.display().to_string();
     cmd += &format!(
-        "; {}nohup '{}' runtime/agent/model/service.py --data-dir runtime/agent/model --port {} --checkpoint '{}' >> runtime/agent/model/service.log 2>&1 &",
-        envprefix, py, port, checkpoint);
+        "; {}nohup '{}' runtime/agent/model/service.py --data-dir runtime/agent/model --port {} --checkpoint '{}' --train {} --mix '{}' --lr {} --gate '{}' --train-interval {} >> runtime/agent/model/service.log 2>&1 &",
+        envprefix, py, port, checkpoint, train, mix, lr, gate, interval);
     let mut x = DataArray::new();
     x.push_string("bash");
     x.push_string("-c");

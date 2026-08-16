@@ -40,5 +40,17 @@
     "tags": "phase5b",
     "confidence": "high",
     "time": 1786844940379
+  },
+  {
+    "claim": "Phase 6 landed (2026-08-16): the resident service trains for real. trainer_real in the service asset: candidate deepcopy of the live model, AdamW at MODEL_TRAIN_LR, mixed mini-batches per MODEL_MIX (fresh curriculum from ingest via render_sample, replay reservoir capped 4096 in replay.jsonl, standard data from the base dirs parquet shards or standard.txt fallback), 1-in-10 fresh docs held out (heldout.jsonl, never trained). Gate every MODEL_GATE every= steps: cand must not regress on held-out standard beyond regress= AND must be <= live on held-out curriculum; pass -> ring checkpoint (cpt-<step>, keep 5) + promote via NanochatScorer.from_parts through the double buffer; fail streak of fails= -> candidate resets to live weights. All settings ride the bootstrap launch line so a service relaunch picks up botd changes. Verified on a fabricated tiny nanochat base (CPU): promote/hold/reset all exercised; serving uninterrupted through 40+ promotions. Owner calls (replay ratio MODEL_MIX, gate thresholds MODEL_GATE) shipped as proposed defaults pending veto.",
+    "tags": "phase6",
+    "confidence": "high",
+    "time": 1786892344268
+  },
+  {
+    "claim": "Process lesson (bit three times, 2026-08-16): killing processes by pattern match kills your own shell - the bash -c command text contains the pattern. And `cd X && nohup python ... &` backgrounds the whole list, so $! is the SUBSHELL pid, not pythons - pid files written that way lie, and kill $(cat pidfile) silently no-ops after the subshell exits. Reliable: scan /proc matching the executable path in cmdline[0] plus an argument, excluding os.getpid(); or write the pidfile from INSIDE the nohup-ed script ($$).",
+    "tags": "process",
+    "confidence": "high",
+    "time": 1786892344869
   }
 ]
