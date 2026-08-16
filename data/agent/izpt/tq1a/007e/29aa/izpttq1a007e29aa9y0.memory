@@ -58,5 +58,11 @@
     "tags": "phase6",
     "confidence": "high",
     "time": 1786894731163
+  },
+  {
+    "claim": "Phase 6b (2026-08-16): the gate measures the job, and the metrics are real. Gate: once >=4 held-out salience pairs exist, both candidate and live GENERATE verdicts on agree_n held-out pairs with THE serving prompt (salience_prompt/parse_salience shared between scorer and gate); agreement = 1 - mean|gen - frontier target|; promote needs cand_agree >= live_agree - agree_slack (MODEL_GATE gains agree_slack=0.05, agree_n=8) plus the standard-loss forgetting guard; under 4 pairs the loss proxy remains. Metrics: the service journals every served verdict, loss every 10 steps, and every gate row to runtime/agent/model/metrics.jsonl (self-capped at ~8k lines); agent-model-metrics returns downsampled loss series, gate history + pass count, and a 10-bucket verdict histogram; the mind tab renders them as sparkline/histogram/gatebar. Verified on the tiny base (agreement arithmetic exact: 0.5-default gen vs 0.75 targets = 0.75 both sides) and in headless Chromium.",
+    "tags": "phase6b",
+    "confidence": "high",
+    "time": 1786900393518
   }
 ]

@@ -62,8 +62,32 @@ TRAINER = {
     "last_gate": None,
     "mix": None,
 }
-TRAIN_Q = []          # rendered curriculum docs awaiting training (LOCK)
+TRAIN_Q = []          # {doc, pair} curriculum entries awaiting training (LOCK)
 HELDOUT_FRESH = []    # reserved curriculum docs, never trained on (LOCK)
+HELDOUT_PAIRS = []    # structured held-out salience pairs for the agreement gate
+MET_COUNT = [0]
+
+
+def append_metric(data_dir, row):
+    """The metrics journal (metrics.jsonl): every served verdict, loss
+    samples, every gate. Instance-owned, capped in place - the mind
+    tab's trends read it through agent-model-metrics."""
+    row = dict(row)
+    row["t"] = int(time.time() * 1000)
+    path = os.path.join(data_dir, "metrics.jsonl")
+    try:
+        with LOCK:
+            with open(path, "a") as f:
+                f.write(json.dumps(row) + "\n")
+            MET_COUNT[0] += 1
+            if MET_COUNT[0] % 500 == 0:
+                with open(path) as f:
+                    lines = f.readlines()
+                if len(lines) > 8000:
+                    with open(path, "w") as f:
+                        f.writelines(lines[-4000:])
+    except Exception:
+        pass
 STATE = {
     "slots": {"A": None, "B": None},
     "live": "A",
@@ -113,6 +137,38 @@ class StubScorer:
         bound = context.get("bound") or 0
         score = min(0.95, base + 0.1 * min(int(bound), 3))
         return score, f"stub[{self.tag}]: kind base with {bound} bound claims"
+
+
+def salience_prompt(kind, text, matched, bound):
+    """THE serving prompt - the skill the agreement gate measures is the
+    skill the scorer serves, so both build prompts here."""
+    return (
+        "You judge salience for an autonomous agent's perception stream.\n"
+        f"PERCEPTION kind={kind}: {text}\n"
+        f"CONTEXT: {int(matched)} recalled and {int(bound)} bound memory claims.\n"
+        "How much does this perception matter to the agent's "
+        "understanding of its environment, from 0.0 (noise) to 1.0 "
+        "(critical)? Reply with ONLY a JSON object: "
+        '{"salient": <0.0-1.0>, "reasoning": "<one sentence>"}')
+
+
+def parse_salience(completion):
+    """{salient, reasoning} out of a model reply, salvaging a bare
+    number; (None, why) when nothing parseable is there."""
+    s0, e0 = completion.find("{"), completion.rfind("}")
+    if 0 <= s0 < e0:
+        try:
+            d = json.loads(completion[s0:e0 + 1])
+            sal = float(d.get("salient"))
+            why = str(d.get("reasoning") or "")[:300]
+            return max(0.0, min(1.0, sal)), (why or "model gave no reasoning")
+        except Exception:
+            pass
+    m = re.search(r"(?<![\w.])(?:0?\.\d+|[01](?:\.\d+)?)(?![\w.])", completion)
+    if m:
+        return (max(0.0, min(1.0, float(m.group(0)))),
+                f"unparseable reply, salvaged number: {completion[:120]!r}")
+    return None, f"unparseable reply: {completion[:120]!r}"
 
 
 class NanochatScorer:
@@ -174,15 +230,8 @@ class NanochatScorer:
     def score(self, perception, context):
         payload = perception.get("payload") or {}
         text = " ".join(str(v) for v in payload.values() if isinstance(v, str))[:600]
-        prompt = (
-            "You judge salience for an autonomous agent's perception stream.\n"
-            f"PERCEPTION kind={perception.get('kind', '?')}: {text}\n"
-            f"CONTEXT: {int(context.get('matched') or 0)} recalled and "
-            f"{int(context.get('bound') or 0)} bound memory claims.\n"
-            "How much does this perception matter to the agent's "
-            "understanding of its environment, from 0.0 (noise) to 1.0 "
-            "(critical)? Reply with ONLY a JSON object: "
-            '{"salient": <0.0-1.0>, "reasoning": "<one sentence>"}')
+        prompt = salience_prompt(perception.get("kind", "?"), text,
+                                 context.get("matched") or 0, context.get("bound") or 0)
         conversation = {"messages": [
             {"role": "user", "content": prompt},
             {"role": "assistant", "content": ""},
@@ -191,21 +240,10 @@ class NanochatScorer:
         results, _masks = self.engine.generate_batch(
             ids, num_samples=1, max_tokens=96, temperature=0.2, top_k=50)
         completion = self.tokenizer.decode(results[0][len(ids):])
-        # Parse {salient, reasoning}; fall back to the first number found.
-        s0, e0 = completion.find("{"), completion.rfind("}")
-        if 0 <= s0 < e0:
-            try:
-                d = json.loads(completion[s0:e0 + 1])
-                sal = float(d.get("salient"))
-                why = str(d.get("reasoning") or "")[:300]
-                return max(0.0, min(1.0, sal)), why or "model gave no reasoning"
-            except Exception:
-                pass
-        m = re.search(r"(?<![\w.])(?:0?\.\d+|[01](?:\.\d+)?)(?![\w.])", completion)
-        if m:
-            return max(0.0, min(1.0, float(m.group(0)))), \
-                f"unparseable reply, salvaged number: {completion[:120]!r}"
-        return 0.5, f"unparseable reply, defaulting uncertain: {completion[:120]!r}"
+        sal, why = parse_salience(completion)
+        if sal is None:
+            return 0.5, "defaulting uncertain - " + why
+        return sal, why
 
 
 def make_scorer(checkpoint):
@@ -298,7 +336,8 @@ def trainer_real(args):
         time.sleep(5)
     import torch
     mix = parse_kv(args.mix, {"fresh": 0.25, "replay": 0.25, "standard": 0.5})
-    gate_cfg = parse_kv(args.gate, {"every": 50, "regress": 0.02, "fails": 3})
+    gate_cfg = parse_kv(args.gate, {"every": 50, "regress": 0.02, "fails": 3,
+                                    "agree_slack": 0.05, "agree_n": 8})
     seq_len = live.meta["model_config"]["sequence_len"] if live.meta else 2048
     seq_len = min(int(seq_len), 2048)
     device = live.engine.model.get_device()
@@ -307,11 +346,21 @@ def trainer_real(args):
     opt = torch.optim.AdamW(candidate.parameters(), lr=float(args.lr))
     replay_path = os.path.join(args.data_dir, "replay.jsonl")
     heldout_path = os.path.join(args.data_dir, "heldout.jsonl")
+    pairs_path = os.path.join(args.data_dir, "heldout_pairs.jsonl")
     replay = []
     for path, dest in ((replay_path, replay), (heldout_path, HELDOUT_FRESH)):
         if os.path.exists(path):
             with open(path) as f:
                 dest.extend(ln.strip() for ln in f if ln.strip())
+    if os.path.exists(pairs_path):
+        with open(pairs_path) as f:
+            for ln in f:
+                ln = ln.strip()
+                if ln:
+                    try:
+                        HELDOUT_PAIRS.append(json.loads(ln))
+                    except Exception:
+                        pass
     standard = load_standard_docs(args)
     heldout_std = standard[:24]
     standard = standard[24:]
@@ -347,9 +396,38 @@ def trainer_real(args):
             model.train()
         return tot / min(len(chs), 16)
 
+    def gen_agreement(model, n):
+        """Generate verdicts on held-out pairs with THE serving prompt;
+        agreement = 1 - mean |generated - frontier target|. This is the
+        gate measuring the actual job, not a perplexity proxy."""
+        from nanochat.engine import Engine as _Engine
+        pairs = HELDOUT_PAIRS[-int(n):]
+        if not pairs:
+            return None
+        was_training = model.training
+        model.eval()
+        eng = _Engine(model, live.tokenizer)
+        total = 0.0
+        for pr in pairs:
+            conversation = {"messages": [
+                {"role": "user", "content": salience_prompt("?", pr["input"], 0, 0)},
+                {"role": "assistant", "content": ""},
+            ]}
+            ids = live.tokenizer.render_for_completion(conversation)
+            results, _m2 = eng.generate_batch(ids, num_samples=1, max_tokens=64,
+                                              temperature=0.01, top_k=1)
+            sal, _why = parse_salience(live.tokenizer.decode(results[0][len(ids):]))
+            if sal is None:
+                sal = 0.5
+            total += min(1.0, abs(sal - float(pr["target"])))
+        if was_training:
+            model.train()
+        return round(1.0 - total / len(pairs), 4)
+
     heldout_std_chunks = chunks_of(heldout_std)
     live_std = eval_loss(live.engine.model, heldout_std_chunks)
     live_fresh = None
+    live_agree = None
     fails = 0
     ema = None
     while True:
@@ -358,14 +436,23 @@ def trainer_real(args):
         with LOCK:
             fresh_in = list(TRAIN_Q)
             TRAIN_Q.clear()
-        for d in fresh_in:
+        fresh_docs = []
+        for entry in fresh_in:
+            d = entry["doc"] if isinstance(entry, dict) else entry
+            pair = entry.get("pair") if isinstance(entry, dict) else None
             if random.random() < 0.1 and len(HELDOUT_FRESH) < 512:
                 with LOCK:
                     HELDOUT_FRESH.append(d)
                 with open(heldout_path, "a") as f:
                     f.write(d.replace("\n", " ") + "\n")
-                live_fresh = None  # held-out set changed; re-baseline
+                if pair:
+                    HELDOUT_PAIRS.append(pair)
+                    with open(pairs_path, "a") as f:
+                        f.write(json.dumps(pair) + "\n")
+                    live_agree = None  # held-out pairs changed; re-baseline
+                live_fresh = None
             else:
+                fresh_docs.append(d)
                 replay.append(d)
                 with open(replay_path, "a") as f:
                     f.write(d.replace("\n", " ") + "\n")
@@ -374,7 +461,7 @@ def trainer_real(args):
             replay = replay[:4096]
             with open(replay_path, "w") as f:
                 f.writelines(d + "\n" for d in replay)
-        pools = {"fresh": fresh_in or replay, "replay": replay, "standard": standard}
+        pools = {"fresh": fresh_docs or replay, "replay": replay, "standard": standard}
         avail = {k: p for k, p in pools.items() if p and mix.get(k, 0) > 0}
         if not avail:
             with LOCK:
@@ -408,28 +495,45 @@ def trainer_real(args):
             TRAINER["loss_ema"] = round(ema, 4)
             TRAINER["replay_size"] = len(replay)
             steps = TRAINER["steps"]
+        if steps % 10 == 0:
+            append_metric(args.data_dir, {"kind": "loss", "step": steps,
+                                          "loss": round(ema, 4)})
         if steps % int(gate_cfg["every"]) != 0:
             continue
-        # ── the gate ──
-        heldout_fresh_chunks = chunks_of(HELDOUT_FRESH[-64:])
-        if live_fresh is None:
-            live_fresh = eval_loss(live.engine.model, heldout_fresh_chunks)
+        # ── the gate: forgetting guard on held-out standard data, and -
+        # when held-out pairs exist - GENERATED-verdict agreement with
+        # the frontier's labels (the actual job), else the loss proxy.
         cand_std = eval_loss(candidate, heldout_std_chunks)
-        cand_fresh = eval_loss(candidate, heldout_fresh_chunks)
         std_ok = (cand_std is None or live_std is None
                   or cand_std <= live_std * (1 + gate_cfg["regress"]))
-        fresh_ok = (cand_fresh is None or live_fresh is None
-                    or cand_fresh <= live_fresh)
-        verdict = "promote" if (std_ok and fresh_ok) else "hold"
+        cand_fresh = live_fresh2 = cand_agree = None
+        if len(HELDOUT_PAIRS) >= 4:
+            if live_agree is None:
+                live_agree = gen_agreement(live.engine.model, gate_cfg["agree_n"])
+            cand_agree = gen_agreement(candidate, gate_cfg["agree_n"])
+            learn_ok = (cand_agree is None or live_agree is None
+                        or cand_agree >= live_agree - gate_cfg["agree_slack"])
+        else:
+            heldout_fresh_chunks = chunks_of(HELDOUT_FRESH[-64:])
+            if live_fresh is None:
+                live_fresh = eval_loss(live.engine.model, heldout_fresh_chunks)
+            live_fresh2 = live_fresh
+            cand_fresh = eval_loss(candidate, heldout_fresh_chunks)
+            learn_ok = (cand_fresh is None or live_fresh is None
+                        or cand_fresh <= live_fresh)
+        verdict = "promote" if (std_ok and learn_ok) else "hold"
         gate_row = {
             "step": steps, "verdict": verdict,
             "cand_std": cand_std, "live_std": live_std,
-            "cand_fresh": cand_fresh, "live_fresh": live_fresh,
+            "cand_fresh": cand_fresh, "live_fresh": live_fresh2,
+            "cand_agree": cand_agree, "live_agree": live_agree,
+            "pairs": len(HELDOUT_PAIRS),
         }
         print(f"[trainer] gate: {gate_row}", flush=True)
         with LOCK:
             TRAINER["gates"] += 1
             TRAINER["last_gate"] = gate_row
+        append_metric(args.data_dir, dict(gate_row, kind="gate"))
         if verdict == "promote":
             try:
                 from nanochat.checkpoint_manager import save_checkpoint
@@ -457,6 +561,7 @@ def trainer_real(args):
             live = scorer
             live_std = eval_loss(live.engine.model, heldout_std_chunks)
             live_fresh = None
+            live_agree = None
             fails = 0
             print(f"[trainer] PROMOTED -> {scorer.name}", flush=True)
         else:
@@ -507,7 +612,15 @@ def trainer_loop(args):
                         if not line:
                             continue
                         try:
-                            docs.append(render_sample(json.loads(line)))
+                            o = json.loads(line)
+                            pair = None
+                            if o.get("kind") == "salience_pair":
+                                r2 = o.get("row") or {}
+                                tgt = r2.get("frontier", r2.get("local"))
+                                if r2.get("input") and tgt is not None:
+                                    pair = {"input": str(r2["input"])[:600],
+                                            "target": float(tgt)}
+                            docs.append({"doc": render_sample(o), "pair": pair})
                         except Exception:
                             pass
                 with LOCK:
@@ -610,6 +723,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(500, {"status": "err", "msg": f"scorer failed: {e}"})
             with LOCK:
                 STATE["scored"] += 1
+            append_metric(self.server.args.data_dir,
+                          {"kind": "verdict", "sal": round(float(sal), 3)})
             return self._json(200, {
                 "status": "ok",
                 "salient": round(float(sal), 4),

@@ -130,7 +130,12 @@
         <div class="ag-card" data-card="stats">
           <p class="ag-card-t lbl">statistics — the salience audit trail</p>
           <div class="ag-kv" data-kv="stats"></div>
-          <p class="lbl ag-stub">not yet gathered (stubs): verdict histogram over time · trainer loss curve · frontier spend · perception rate · gate pass-rate history</p>
+          <div class="ag-trends">
+            <div class="ag-trend"><p class="lbl">trainer loss</p><svg class="ag-spark" data-spark viewBox="0 0 100 28" preserveAspectRatio="none"></svg></div>
+            <div class="ag-trend"><p class="lbl">served verdicts (0 → 1)</p><div class="ag-hist" data-hist></div></div>
+            <div class="ag-trend"><p class="lbl">gates</p><div class="ag-gatebar lbl" data-gatebar>—</div></div>
+          </div>
+          <p class="lbl ag-stub">not yet gathered (stubs): frontier spend · perception rate</p>
         </div>
         <div class="ag-card" data-card="config">
           <p class="ag-card-t lbl">configuration — runtime/agent/botd.properties</p>

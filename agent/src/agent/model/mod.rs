@@ -1,5 +1,6 @@
 // This file is auto-generated and managed by the flowlang build script.
 use flowlang::rustcmd::Transform;
+pub mod metrics;
 pub mod promote_pointer;
 pub mod set_setting;
 pub mod get_settings;
@@ -17,4 +18,5 @@ pub fn cmdinit(cmds: &mut Vec<(String, Transform, String)>) {
     cmds.push(("pvstyk1a00b6edc7fo3".to_string(), get_settings::execute, "".to_string()));
     cmds.push(("snntws1a00b6eeefbp5".to_string(), set_setting::execute, "".to_string()));
     cmds.push(("rvkipx1a00b6f02c0y7".to_string(), promote_pointer::execute, "".to_string()));
+    cmds.push(("xwjiht1a00b8b4d59o1".to_string(), metrics::execute, "".to_string()));
 }

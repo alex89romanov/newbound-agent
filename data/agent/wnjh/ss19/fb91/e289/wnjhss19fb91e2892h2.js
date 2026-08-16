@@ -666,7 +666,9 @@ async function init(host) {
     host.querySelector("[data-gate]").innerHTML = !g ? "no gate yet" :
       `last gate @${g.step}: <b class="${g.verdict === "promote" ? "ok" : "warn"}">${mEsc(g.verdict)}</b>` +
       ` · standard cand ${g.cand_std?.toFixed?.(4) ?? "—"} vs live ${g.live_std?.toFixed?.(4) ?? "—"}` +
-      ` · curriculum cand ${g.cand_fresh?.toFixed?.(4) ?? "—"} vs live ${g.live_fresh?.toFixed?.(4) ?? "—"}`;
+      (g.cand_agree != null
+        ? ` · AGREEMENT cand ${g.cand_agree?.toFixed?.(3)} vs live ${g.live_agree?.toFixed?.(3) ?? "—"} (${g.pairs ?? 0} held-out pairs)`
+        : ` · curriculum-loss cand ${g.cand_fresh?.toFixed?.(4) ?? "—"} vs live ${g.live_fresh?.toFixed?.(4) ?? "—"}`);
 
     // the forge (base training) - card appears only when relevant
     const forge = host.querySelector('[data-card="forge"]');
@@ -691,6 +693,36 @@ async function init(host) {
       ["band escalations dropped", ex.esc_dropped ?? 0],
       ["newest row", rows.length ? `${(rows[rows.length - 1].input || "").slice(0, 50)} → local ${rows[rows.length - 1].local} / frontier ${rows[rows.length - 1].frontier}` : "—"],
     ]);
+
+    // trends from the metrics journal
+    const mtR = await invoke("agent", "model", "metrics", {});
+    const mt = mEnv(mtR);
+    if (mt && mt.status === "ok") {
+      const spark = host.querySelector("[data-spark]");
+      const pts = (mt.loss || []).map((p2) => p2.loss);
+      if (pts.length > 1) {
+        const lo = Math.min(...pts), hi = Math.max(...pts), rng = (hi - lo) || 1;
+        const path = pts.map((v2, i2) =>
+          `${(i2 / (pts.length - 1) * 100).toFixed(1)},${(26 - (v2 - lo) / rng * 24).toFixed(1)}`).join(" ");
+        spark.innerHTML = `<polyline points="${path}" fill="none" stroke="currentColor" stroke-width="1.2"/>`;
+        spark.parentElement.querySelector(".lbl").textContent =
+          `trainer loss ${pts[pts.length - 1].toFixed(3)} (${pts.length} samples)`;
+      } else {
+        spark.innerHTML = "";
+      }
+      const histEl = host.querySelector("[data-hist]");
+      const hist = mt.verdict_hist || [];
+      const hmax = Math.max(1, ...hist);
+      histEl.innerHTML = hist.map((n2, i2) =>
+        `<span class="ag-hbar" title="${(i2 / 10).toFixed(1)}–${((i2 + 1) / 10).toFixed(1)}: ${n2}"` +
+        ` style="height:${Math.max(2, n2 / hmax * 26)}px"></span>`).join("");
+      histEl.dataset.total = mt.verdict_total || 0;
+      const gb = host.querySelector("[data-gatebar]");
+      gb.textContent = mt.gate_total
+        ? `${mt.gate_pass}/${mt.gate_total} promoted · ` +
+          (mt.gates || []).slice(-12).map((g2) => g2.verdict === "promote" ? "▲" : "·").join("")
+        : "no gates yet";
+    }
 
     // configuration
     const cfR = await invoke("agent", "model", "get_settings", {});

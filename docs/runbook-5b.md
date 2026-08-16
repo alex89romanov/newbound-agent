@@ -17,8 +17,14 @@ checkpoint serves and `MODEL_TRAIN=on` (the default), a candidate copy
 of the live model steps continuously on mixed mini-batches - fresh
 curriculum from ingest, a replay reservoir, standard pretraining data -
 and every `MODEL_GATE every=` steps it faces the gate: no regression on
-held-out standard data (forgetting guard) and at least parity with the
-live pointer on held-out curriculum (learning check). Pass -> ring
+held-out standard data (forgetting guard), and — once at least 4
+held-out salience pairs have accumulated — GENERATED-verdict agreement
+with the frontier's labels (6b: the gate measures the actual job;
+candidate agreement must be within `agree_slack` of live, over
+`agree_n` pairs; before that, a loss proxy on held-out curriculum).
+The service journals every served verdict, loss samples, and every
+gate to `runtime/agent/model/metrics.jsonl` (self-capped);
+`agent-model-metrics` serves the mind tab's trends from it. Pass -> ring
 checkpoint + promotion through the double buffer, zero serving
 interruption; fail -> hold, and after `fails=` consecutive holds the
 candidate resets to the live weights. Settings (defaults are proposals
@@ -27,7 +33,7 @@ candidate resets to the live weights. Settings (defaults are proposals
     MODEL_TRAIN=on                                  # off = 5b behavior
     MODEL_MIX=fresh=0.25,replay=0.25,standard=0.5   # replay ratio
     MODEL_TRAIN_LR=2e-5
-    MODEL_GATE=every=50,regress=0.02,fails=3        # gate thresholds
+    MODEL_GATE=every=50,regress=0.02,fails=3,agree_slack=0.05,agree_n=8
     MODEL_TRAIN_INTERVAL=10                         # seconds per step
 
 Watch it: `service_status` carries a `trainer` block (steps, loss_ema,
@@ -37,9 +43,10 @@ pairs). Feed it: `agent-model-curriculum_export` into
 lineage: `nanochat:sft` at birth, `nanochat:cpt-<step>` once its own
 training has passed a gate.
 
-Still out of scope (Phase 6b+): generation-based agreement evals (the
-gate's curriculum check is loss-based for now), the separately-gated
-user-facing pointer, LoRA personality re-derivation.
+Still out of scope (Phase 7+): salience steering behavior (verdicts
+are still recorded, not acted on), the separately-gated user-facing
+pointer, LoRA personality re-derivation, frontier-spend and
+perception-rate stats.
 
 ## Settings (runtime/agent/botd.properties)
 
