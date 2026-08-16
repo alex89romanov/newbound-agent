@@ -1,0 +1,8 @@
+[
+  {
+    "claim": "The mind tab (2026-08-16): the agent apps fourth tab - status/statistics/tools/configuration for the autonomous machinery. UI lives in agent.chat control facets, edited ONLY via dev-code-read_control_facet + patch_control_facet (nn_sessionid is a required param; pass empty). The HTTP exec envelope nests the command result under .data ({status,pid,nn_return_type,data}) - unwrap before reading fields; the top-level pid is the EXECUTION id, not a process. Backend: agent-model train_status (train.pid + log tail), get_settings/set_setting (live globals + botd.properties rewrite, secret keys masked/refused), promote_pointer (POST /promote client). Verified in headless Chromium against a disposable running the real server.",
+    "tags": "ui",
+    "confidence": "high",
+    "time": 1786899133189
+  }
+]
