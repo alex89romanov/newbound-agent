@@ -143,12 +143,41 @@ if !probe() {
     x.push_string(&cmd);
     let r = system_call(x);
     println!("BOOTSTRAP LAUNCH MODEL SERVICE {}", r.to_string());
-    std::thread::sleep(std::time::Duration::from_millis(900));
-    if probe() {
+    // The service binds its port immediately and loads the scorer in
+    // the background, so /status answers within a couple of seconds
+    // even when a real checkpoint takes a minute to land - poll up to
+    // 20s for the bind, then report the service's own view (mode may
+    // legitimately be "loading"; a load failure shows as mode "error"
+    // with boot_error, visible any time via service_status).
+    let mut up = false;
+    let mut waited = 0;
+    while waited < 20000 {
+        std::thread::sleep(std::time::Duration::from_millis(500));
+        waited += 500;
+        if probe() { up = true; break; }
+    }
+    if up {
         service = "launched".to_string();
     } else {
         service = "launch_failed".to_string();
         o.put_string("status", "err");
+    }
+}
+if service != "launch_failed" {
+    if let Ok(r) = ureq::AgentBuilder::new()
+        .timeout(std::time::Duration::from_millis(1500))
+        .build()
+        .get(&status_url)
+        .call() {
+        if let Ok(t) = r.into_string() {
+            if let Ok(d) = DataObject::try_from_string(&t) {
+                if d.has("mode") { o.put_string("service_mode", &d.get_string("mode")); }
+                if let Ok(be) = d.try_get_string("boot_error") {
+                    o.put_string("boot_error", &be);
+                    o.put_string("status", "err");
+                }
+            }
+        }
     }
 }
 o.put_string("service", &service);

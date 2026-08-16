@@ -16,5 +16,11 @@
     "tags": "phase5b",
     "confidence": "high",
     "time": 1786842592406
+  },
+  {
+    "claim": "Model service load is ASYNC (2026-08-16): the port binds first, the scorer loads in a background thread - a real checkpoint takes long enough (torch import + weights) that loading before serving made every honest launch look dead. /status reports mode loading|error|<scorer> plus boot_error; /salience answers 503 during both (executive degrades). bootstrap polls the bind up to 20s and passes service_mode + boot_error through its report, so agent-model-service_status is the diagnostic for any launch problem - no log digging needed for the common cases.",
+    "tags": "phase5b",
+    "confidence": "high",
+    "time": 1786843175049
   }
 ]

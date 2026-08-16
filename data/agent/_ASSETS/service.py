@@ -40,6 +40,8 @@ LOCK = threading.Lock()
 STATE = {
     "slots": {"A": None, "B": None},
     "live": "A",
+    "loading": True,
+    "boot_error": None,
     "scored": 0,
     "ingested_files": 0,
     "ingested_samples": 0,
@@ -244,12 +246,19 @@ class Handler(BaseHTTPRequestHandler):
         with LOCK:
             live = STATE["live"]
             scorer = STATE["slots"][live]
+            if scorer is not None:
+                mode = scorer.name
+            elif STATE["loading"]:
+                mode = "loading"
+            else:
+                mode = "error"
             ck = os.path.join(self.server.args.data_dir, "checkpoints")
             self._json(200, {
                 "status": "ok",
-                "mode": scorer.name if scorer else "empty",
+                "mode": mode,
+                "boot_error": STATE["boot_error"],
                 "live_slot": live,
-                "checkpoint": getattr(scorer, "checkpoint", "stub"),
+                "checkpoint": getattr(scorer, "checkpoint", self.server.args.checkpoint),
                 "scored": STATE["scored"],
                 "promotions": STATE["promotions"],
                 "ingested_files": STATE["ingested_files"],
@@ -275,7 +284,8 @@ class Handler(BaseHTTPRequestHandler):
                 live = STATE["live"]
                 scorer = STATE["slots"][live]
             if scorer is None:
-                return self._json(503, {"status": "err", "msg": "no scorer loaded"})
+                msg = STATE["boot_error"] or "scorer still loading"
+                return self._json(503, {"status": "err", "msg": msg})
             try:
                 sal, why = scorer.score(
                     req.get("perception") or {}, req.get("context") or {})
@@ -320,21 +330,42 @@ class Handler(BaseHTTPRequestHandler):
         return self._json(404, {"status": "err", "msg": "unknown path"})
 
 
+def load_initial(args):
+    """Load the scorer AFTER the port binds - a real checkpoint takes
+    long enough (torch import + weights) that loading before serving
+    made every honest launch look dead to the outside. /status says
+    `loading` until this lands, `error` (with boot_error) if it fails;
+    /salience answers 503 either way, which the executive treats as
+    no-verdict."""
+    try:
+        scorer = make_scorer(args.checkpoint)
+        with LOCK:
+            STATE["slots"]["A"] = scorer
+            STATE["loading"] = False
+        print(f"[service] scorer ready: {scorer.name}", flush=True)
+    except Exception as e:
+        import traceback
+        with LOCK:
+            STATE["loading"] = False
+            STATE["boot_error"] = f"{type(e).__name__}: {e}"
+        traceback.print_exc()
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--port", type=int, default=8077)
     ap.add_argument("--data-dir", default="runtime/agent/model")
     ap.add_argument("--checkpoint", default="stub",
-                    help="'stub' or a nanochat checkpoint path")
+                    help="'stub' or a nanochat base directory")
     args = ap.parse_args()
     for sub in ("checkpoints", "ingest", "ingested"):
         os.makedirs(os.path.join(args.data_dir, sub), exist_ok=True)
-    STATE["slots"]["A"] = make_scorer(args.checkpoint)
+    threading.Thread(target=load_initial, args=(args,), daemon=True).start()
     threading.Thread(target=trainer_loop, args=(args,), daemon=True).start()
     srv = ThreadingHTTPServer(("127.0.0.1", args.port), Handler)
     srv.args = args
-    print(f"[service] serving on 127.0.0.1:{args.port} "
-          f"mode={STATE['slots']['A'].name} data={args.data_dir}", flush=True)
+    print(f"[service] serving on 127.0.0.1:{args.port} (scorer loading) "
+          f"data={args.data_dir}", flush=True)
     srv.serve_forever()
 
 
