@@ -118,4 +118,10 @@
 .ag-conf-k.setk { color: var(--text); }
 .ag-conf-t { grid-column: 1 / -1; font-size: .75em; opacity: .7; margin-left: 1em; }
 .ag-stub { opacity: .55; font-style: italic; }
+.ag-trends { display: flex; gap: 14px; align-items: flex-end; flex-wrap: wrap; }
+.ag-trend { min-width: 8em; }
+.ag-spark { width: 100%; height: 28px; color: #6c9; display: block; }
+.ag-hist { display: flex; gap: 2px; align-items: flex-end; height: 28px; }
+.ag-hbar { width: 8px; background: var(--text-dim); display: inline-block; border-radius: 2px 2px 0 0; }
+.ag-gatebar { letter-spacing: .15em; }
 
