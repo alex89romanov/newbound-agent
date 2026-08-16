@@ -65,6 +65,7 @@ async function init(host) {
       for (const p of host.querySelectorAll(".ag-pane")) p.hidden = p.dataset.pane !== tab.dataset.tab;
       if (tab.dataset.tab === "memory") loadDomains();
       if (tab.dataset.tab === "prompts") loadPrompts();
+      if (tab.dataset.tab === "mind") loadMind();
     });
   }
 
@@ -581,6 +582,200 @@ async function init(host) {
           : `save failed: ${pr.msg}`, pr.status !== "ok");
       });
     }
+  }
+
+  // ── the mind tab (docs/understandingloop.md): the autonomous agent's
+  // status, statistics, tools, and configuration in one pane. Status is
+  // polled while the pane is open; every mutating button is an existing
+  // platform command - this pane owns no state of its own. ────────────
+  let mindWired = false;
+  let mindTimer = null;
+  const mEsc = (s) => { const d = document.createElement("span"); d.textContent = String(s ?? ""); return d.innerHTML; };
+  const mKv = (pairs) => pairs.map(([k, v, cls]) =>
+    `<span class="ag-kv-row"><span class="ag-kv-k lbl">${mEsc(k)}</span>` +
+    `<span class="ag-kv-v ${cls || ""}">${mEsc(v)}</span></span>`).join("");
+  const mChip = (txt, cls) => `<span class="ag-chip ${cls}">${mEsc(txt)}</span>`;
+  // The HTTP exec envelope nests the command's own result under .data
+  // ({status, pid, nn_return_type, data:{...}}); unwrap it, letting an
+  // inner status (our commands carry one) win over the transport's.
+  const mEnv = (r) => {
+    if (r instanceof Error || !r || !r.envelope) return null;
+    const e = r.envelope;
+    return (e.data && typeof e.data === "object") ? { status: e.status, ...e.data } : e;
+  };
+
+  async function loadMind() {
+    if (!mindWired) { mindWired = true; wireMind(); }
+    if (!mindTimer) mindTimer = setInterval(() => {
+      const pane = host.querySelector('[data-pane="mind"]');
+      if (pane && !pane.hidden) loadMind();
+    }, 5000);
+    const kv = (n) => host.querySelector(`[data-kv="${n}"]`);
+
+    const [exR, snR, svR, trR, slR] = await Promise.all([
+      invoke("agent", "executive", "status", {}),
+      invoke("agent", "sensor", "status", {}),
+      invoke("agent", "model", "service_status", {}),
+      invoke("agent", "model", "train_status", {}),
+      invoke("agent", "executive", "salience_log", {}),
+    ]);
+    const ex = mEnv(exR) || {}, sn = mEnv(snR) || {}, sv = mEnv(svR) || {};
+    const tr = mEnv(trR) || {}, sl = mEnv(slR) || {};
+
+    // the loop
+    const ctx = ex.last_context || {};
+    kv("loop").innerHTML =
+      mChip(ex.running ? `executive ${ex.phase || "on"}` : "executive stopped", ex.running ? "ok" : "off") +
+      mChip(sn.running ? "sensor on" : "sensor stopped", sn.running ? "ok" : "off") +
+      mKv([
+        ["perceived", ex.perceived_total ?? "—"],
+        ["salience calls", ex.salience_calls ?? "—"],
+        ["escalations / audits", `${ex.escalations ?? 0} / ${ex.audits ?? 0}`],
+        ["disagreements", ex.disagreements ?? 0, (ex.disagreements ?? 0) > 0 ? "warn" : ""],
+        ["drive (acts/hr)", ex.drive ?? "—"],
+        ["epistemic acts", ex.acts_total ?? "—"],
+        ["last verdict", ctx.salience != null ? `${ctx.salience} — ${(ctx.salience_why || "").slice(0, 60)}` : "none"],
+      ]);
+    host.querySelector('[data-act="exec-toggle"]').textContent = ex.running ? "stop executive" : "start executive";
+    host.querySelector('[data-act="sensor-toggle"]').textContent = sn.running ? "stop sensor" : "start sensor";
+
+    // the judge
+    const mode = sv.mode || "down";
+    const modeCls = mode.startsWith("nanochat") ? "ok" : (mode === "stub" ? "warn" : (mode === "down" ? "err" : "warn"));
+    kv("judge").innerHTML = mChip(mode, modeCls) + mKv([
+      ["checkpoint", sv.checkpoint || "—"],
+      ["live slot / pid", `${sv.live_slot || "—"} / ${sv.pid || "—"}`],
+      ["verdicts served", sv.scored ?? "—"],
+      ["pointer promotions", sv.promotions ?? "—"],
+      ["uptime", sv.uptime_s != null ? `${Math.floor(sv.uptime_s / 3600)}h ${Math.floor((sv.uptime_s % 3600) / 60)}m` : "—"],
+      ["load error", sv.boot_error || "none", sv.boot_error ? "err" : ""],
+    ]);
+
+    // the flywheel
+    const t = sv.trainer || {};
+    kv("flywheel").innerHTML =
+      mChip(t.active ? "training" : "idle", t.active ? "ok" : "off") + mKv([
+        ["steps", t.steps ?? 0],
+        ["loss ema", t.loss_ema ?? "—"],
+        ["replay reservoir", t.replay_size ?? 0],
+        ["fresh pending", t.fresh_pending ?? 0],
+        ["gates / promotions / resets", `${t.gates ?? 0} / ${t.promotions ?? 0} / ${t.resets ?? 0}`],
+        ["mix", t.mix ? Object.entries(t.mix).map(([k2, v2]) => `${k2} ${v2}`).join(" · ") : "—"],
+      ]);
+    const g = t.last_gate;
+    host.querySelector("[data-gate]").innerHTML = !g ? "no gate yet" :
+      `last gate @${g.step}: <b class="${g.verdict === "promote" ? "ok" : "warn"}">${mEsc(g.verdict)}</b>` +
+      ` · standard cand ${g.cand_std?.toFixed?.(4) ?? "—"} vs live ${g.live_std?.toFixed?.(4) ?? "—"}` +
+      ` · curriculum cand ${g.cand_fresh?.toFixed?.(4) ?? "—"} vs live ${g.live_fresh?.toFixed?.(4) ?? "—"}`;
+
+    // the forge (base training) - card appears only when relevant
+    const forge = host.querySelector('[data-card="forge"]');
+    const hasForge = tr.running || tr.done || (tr.log && tr.log.length);
+    forge.hidden = !hasForge;
+    if (hasForge) {
+      kv("forge").innerHTML =
+        mChip(tr.running ? "training running" : (tr.done ? "train_done" : "stopped"),
+              tr.running ? "ok" : (tr.done ? "ok" : "warn")) +
+        mKv([["pid", tr.pid || "—"]]);
+      host.querySelector("[data-trainlog]").textContent = (tr.log || []).join("\n");
+    }
+
+    // statistics from the audit trail
+    const rows = sl.rows || [];
+    const dis = rows.filter((r2) => r2.disagree).length;
+    const gap = rows.length ? rows.reduce((a2, r2) => a2 + Math.abs((r2.local ?? 0) - (r2.frontier ?? 0)), 0) / rows.length : null;
+    kv("stats").innerHTML = mKv([
+      ["audit rows (total)", sl.total ?? 0],
+      ["recent disagreement rate", rows.length ? `${dis}/${rows.length}` : "—", dis > rows.length / 2 ? "warn" : ""],
+      ["recent |local − frontier|", gap != null ? gap.toFixed(3) : "—"],
+      ["band escalations dropped", ex.esc_dropped ?? 0],
+      ["newest row", rows.length ? `${(rows[rows.length - 1].input || "").slice(0, 50)} → local ${rows[rows.length - 1].local} / frontier ${rows[rows.length - 1].frontier}` : "—"],
+    ]);
+
+    // configuration
+    const cfR = await invoke("agent", "model", "get_settings", {});
+    const cf = mEnv(cfR);
+    const conf = host.querySelector("[data-conf]");
+    if (cf && cf.status === "ok" && !conf.dataset.editing) {
+      conf.innerHTML = (cf.settings || []).map((s2) =>
+        `<span class="ag-conf-row" data-key="${mEsc(s2.key)}">` +
+        `<span class="ag-conf-k lbl${s2.set ? " setk" : ""}" title="${s2.set ? "explicitly set" : "default"}">${mEsc(s2.key)}</span>` +
+        (s2.locked
+          ? `<span class="ag-conf-v lbl">${mEsc(s2.value || "(file-only)")}</span>`
+          : `<input class="ag-conf-v" value="${mEsc(s2.value)}" placeholder="${mEsc(s2.default)}">` +
+            `<button class="ag-conf-save">set</button>`) +
+        `<span class="ag-conf-t lbl">${mEsc(s2.takes || "")}</span></span>`).join("");
+      for (const row of conf.querySelectorAll(".ag-conf-row")) {
+        const inp = row.querySelector("input");
+        if (!inp) continue;
+        inp.addEventListener("focus", () => { conf.dataset.editing = "1"; });
+        inp.addEventListener("blur", () => { setTimeout(() => { delete conf.dataset.editing; }, 200); });
+        row.querySelector(".ag-conf-save").addEventListener("click", async () => {
+          const r2 = await invoke("agent", "model", "set_setting",
+            { key: row.dataset.key, value: inp.value });
+          const env2 = mEnv(r2);
+          mindNote("loop", env2 && env2.status === "ok"
+            ? `${row.dataset.key} ${env2.action} — ${env2.action === "removed" ? "reverted to default" : "saved"}`
+            : `save failed: ${env2 ? env2.msg : "no reply"}`, !(env2 && env2.status === "ok"));
+          delete conf.dataset.editing;
+          loadMind();
+        });
+      }
+    }
+  }
+
+  function mindNote(card, text, isErr) {
+    const el = host.querySelector(`[data-note="${card}"]`);
+    if (!el) return;
+    el.textContent = text;
+    el.classList.toggle("err", !!isErr);
+  }
+
+  function wireMind() {
+    const act = (n) => host.querySelector(`[data-act="${n}"]`);
+    act("exec-toggle").addEventListener("click", async () => {
+      const ex = mEnv(await invoke("agent", "executive", "status", {}));
+      const cmd = ex && ex.running ? "stop" : "start";
+      const r = mEnv(await invoke("agent", "executive", cmd, {}));
+      mindNote("loop", r && r.status === "ok" ? `executive ${cmd} ok` : `executive ${cmd} failed`, !(r && r.status === "ok"));
+      loadMind();
+    });
+    act("sensor-toggle").addEventListener("click", async () => {
+      const sn = mEnv(await invoke("agent", "sensor", "status", {}));
+      const cmd = sn && sn.running ? "stop" : "start";
+      const r = mEnv(await invoke("agent", "sensor", cmd, {}));
+      mindNote("loop", r && r.status === "ok" ? `sensor ${cmd} ok` : `sensor ${cmd} failed`, !(r && r.status === "ok"));
+      loadMind();
+    });
+    act("set-drive").addEventListener("click", async () => {
+      const n = parseInt(host.querySelector(".ag-drive").value, 10);
+      if (isNaN(n) || n < 0) { mindNote("loop", "drive must be a number ≥ 0", true); return; }
+      const r = mEnv(await invoke("agent", "executive", "set_drive", { acts_per_hour: n }));
+      mindNote("loop", r && r.status === "ok" ? `drive set to ${n}/hr` : "set_drive failed", !(r && r.status === "ok"));
+      loadMind();
+    });
+    act("bootstrap").addEventListener("click", async (ev) => {
+      ev.currentTarget.disabled = true;
+      mindNote("judge", "bootstrap running — installs and training can take a while…");
+      const r = mEnv(await invoke("agent", "model", "bootstrap", {}));
+      ev.currentTarget.disabled = false;
+      mindNote("judge", r ? JSON.stringify(r, null, 1) : "bootstrap: no reply", !(r && r.status === "ok"));
+      loadMind();
+    });
+    act("promote").addEventListener("click", async () => {
+      const r = mEnv(await invoke("agent", "model", "promote_pointer", {}));
+      mindNote("judge", r ? JSON.stringify(r) : "promote: no reply", !(r && r.status === "ok"));
+      loadMind();
+    });
+    act("export").addEventListener("click", async () => {
+      const ts = new Date().toISOString().replace(/[-:T]/g, "").slice(0, 14);
+      const r = mEnv(await invoke("agent", "model", "curriculum_export",
+        { path: `runtime/agent/model/ingest/batch-${ts}.jsonl` }));
+      mindNote("flywheel", r && r.status === "ok"
+        ? `exported ${r.total} samples (${r.salience_pairs} pairs, ${r.claims} claims, ${r.curation_traces} traces) — the trainer drains ingest within seconds`
+        : `export failed: ${r ? r.msg : "no reply"}`, !(r && r.status === "ok"));
+      loadMind();
+    });
   }
 
   function note(el, text, isErr) {

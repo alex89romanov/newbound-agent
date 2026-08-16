@@ -5,6 +5,7 @@
       <button class="ag-tab on" data-tab="chat" role="tab">chat</button>
       <button class="ag-tab" data-tab="memory" role="tab">memory</button>
       <button class="ag-tab" data-tab="prompts" role="tab">prompts</button>
+      <button class="ag-tab" data-tab="mind" role="tab">mind</button>
     </nav>
     <button class="ag-newsession" title="clear this chat's history and start fresh (local to this browser; memory and journals are untouched)">new session</button>
     <span class="ag-arch">
@@ -84,6 +85,58 @@
         <textarea rows="10" aria-label="The archivist extraction prompt"></textarea>
         <button class="ag-prompt-save">save archivist</button>
         <span class="ag-prompt-note lbl"></span>
+      </div>
+    </section>
+
+    <section class="ag-pane" data-pane="mind" hidden>
+      <div class="ag-mind-grid">
+        <div class="ag-card" data-card="loop">
+          <p class="ag-card-t lbl">the loop — executive + sensor</p>
+          <div class="ag-kv" data-kv="loop"></div>
+          <span class="ag-btnrow">
+            <button class="ag-mind-btn" data-act="exec-toggle">executive…</button>
+            <button class="ag-mind-btn" data-act="sensor-toggle">sensor…</button>
+            <label class="lbl">acts/hr <input class="ag-drive" type="number" min="0" value="4"></label>
+            <button class="ag-mind-btn" data-act="set-drive">set</button>
+          </span>
+          <pre class="ag-mind-note lbl" data-note="loop"></pre>
+        </div>
+        <div class="ag-card" data-card="judge">
+          <p class="ag-card-t lbl">the judge — resident model service</p>
+          <div class="ag-kv" data-kv="judge"></div>
+          <span class="ag-btnrow">
+            <button class="ag-mind-btn" data-act="bootstrap"
+              title="idempotent oneshot: install env if configured, train if the checkpoint dir is empty, write scripts, launch/converge the service">bootstrap</button>
+            <button class="ag-mind-btn" data-act="promote"
+              title="load the newest ring checkpoint into the inactive slot and swap the live pointer">promote pointer</button>
+          </span>
+          <pre class="ag-mind-note lbl" data-note="judge"></pre>
+        </div>
+        <div class="ag-card" data-card="flywheel">
+          <p class="ag-card-t lbl">the flywheel — continuous training</p>
+          <div class="ag-kv" data-kv="flywheel"></div>
+          <div class="ag-gate lbl" data-gate></div>
+          <span class="ag-btnrow">
+            <button class="ag-mind-btn" data-act="export"
+              title="write the accumulated feedstock (salience pairs, claims, curation traces) as a JSONL batch into the trainer's ingest directory">export curriculum → ingest</button>
+          </span>
+          <pre class="ag-mind-note lbl" data-note="flywheel"></pre>
+        </div>
+        <div class="ag-card" data-card="forge" hidden>
+          <p class="ag-card-t lbl">the forge — base training</p>
+          <div class="ag-kv" data-kv="forge"></div>
+          <pre class="ag-trainlog" data-trainlog></pre>
+        </div>
+        <div class="ag-card" data-card="stats">
+          <p class="ag-card-t lbl">statistics — the salience audit trail</p>
+          <div class="ag-kv" data-kv="stats"></div>
+          <p class="lbl ag-stub">not yet gathered (stubs): verdict histogram over time · trainer loss curve · frontier spend · perception rate · gate pass-rate history</p>
+        </div>
+        <div class="ag-card" data-card="config">
+          <p class="ag-card-t lbl">configuration — runtime/agent/botd.properties</p>
+          <p class="lbl">live keys (SALIENCE, the LLM arm) apply immediately; each row says when the rest take effect. blank a value to revert to its default. secret keys stay file-only.</p>
+          <div class="ag-conf" data-conf></div>
+        </div>
       </div>
     </section>
   </main>
