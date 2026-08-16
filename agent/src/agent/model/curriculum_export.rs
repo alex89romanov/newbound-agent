@@ -61,19 +61,20 @@ pub fn curriculum_export(path: String) -> DataObject {
 // Raw logs never ride: these are the adjudicated, structured residues
 // the flywheel doctrine names. Export is deliberate and explicit, like
 // seed_export - nothing writes training data on its own.
-fn service_url() -> String {
-    // MODEL_SERVICE_URL in runtime/agent/botd.properties; the default
-    // matches service.py's default port.
+fn prop(key: &str, dflt: &str) -> String {
     (|| -> Option<String> {
         let s = DataStore::globals().try_get_object("system").ok()?;
         let a = s.try_get_object("apps").ok()?;
         let g = a.try_get_object("agent").ok()?;
         let r = g.try_get_object("runtime").ok()?;
-        match r.try_get_string("MODEL_SERVICE_URL") {
-            Ok(v) if !v.trim().is_empty() => Some(v.trim().trim_end_matches('/').to_string()),
+        match r.try_get_string(key) {
+            Ok(v) if !v.trim().is_empty() => Some(v.trim().to_string()),
             _ => None,
         }
-    })().unwrap_or_else(|| "http://127.0.0.1:8077".to_string())
+    })().unwrap_or_else(|| dflt.to_string())
+}
+fn service_url() -> String {
+    format!("http://127.0.0.1:{}", prop("MODEL_SERVICE_PORT", "8077"))
 }
 fn err(msg: String) -> DataObject {
     let mut o = DataObject::new();

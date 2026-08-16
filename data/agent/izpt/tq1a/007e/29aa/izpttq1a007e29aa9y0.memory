@@ -4,5 +4,11 @@
     "tags": "phase5b",
     "confidence": "high",
     "time": 1786838926380
+  },
+  {
+    "claim": "Owner simplification 2026-08-16: NO salience seam - SALIENCE_CTL is gone. The subsystem is on/off via SALIENCE=on in botd.properties; the executive calls agent.model.salience directly (in-crate) and fires agent.model.bootstrap once per start when the service is not answering. bootstrap is the owner-idiom oneshot: donefile-guarded nanochat env under runtime/model/deps (only when MODEL_CHECKPOINT is a real path), service script rewritten from the compiled-in asset data/agent/_ASSETS/service.py whenever it differs (so glue edits go in the ASSET, never the runtime copy), launch when /status is down. Settings: SALIENCE, MODEL_CHECKPOINT, MODEL_SERVICE_PORT, NANOCHAT_REPO. This supersedes the SALIENCE_CTL claims.",
+    "tags": "phase5b",
+    "confidence": "high",
+    "time": 1786840042087
   }
 ]

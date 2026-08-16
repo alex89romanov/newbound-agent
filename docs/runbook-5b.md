@@ -1,151 +1,119 @@
 # Runbook: Phase 5b — the resident model serves salience
 
-**For the owner's GPU box. 2026-08-16.** Everything here except step 4
-was verified end-to-end in-container with the stub scorer before this
-runbook shipped: the executive's verdicts flowed through
-`SALIENCE_CTL → agent-model-salience → HTTP → service.py`, a killed
-service degraded the executive to no-verdict without missing a tick,
-a restart resumed verdicts, `curriculum_export` produced a 173-sample
-batch the trainer skeleton drained with the checkpoint ring rotating,
-and a `/promote` double-buffer swap served through the transition.
-The GPU day's genuinely new surface is one class: `NanochatScorer`.
+**For the owner's GPU box. Updated 2026-08-16: no seam, no manual
+service management.** Salience is ON or OFF in settings, and the agent
+builds its own nanochat server — install, script, launch are all
+`agent.model.bootstrap`, which the executive fires itself whenever
+salience is on and nothing is answering. Everything below except step 3
+was verified end-to-end in-container before this shipped: the off
+switch, the self-bootstrap (script written from the compiled-in asset,
+service launched, verdicts flowing on the next perception), escalation
+and audit rows, the degradation drill, the nanochat env install
+(donefile-guarded clone + venv), and curriculum export draining into
+the trainer skeleton.
 
-Out of scope for 5b (Phase 6, later): actual CPT stepping, the replay
-ratio and gate thresholds (owner calls, still open), the gated
-user-facing pointer, the eval harness with auto-rollback, LoRA
-re-derivation.
+Out of scope (Phase 6): actual CPT stepping, replay ratio and gate
+thresholds (owner calls, still open), the gated user-facing pointer,
+eval + auto-rollback, LoRA re-derivation.
 
-## 0. Prereqs
+## Settings (runtime/agent/botd.properties)
 
-- The box has: a CUDA-capable GPU, python3 with torch, and a clone of
-  nanochat.
-- Pull masters and rebuild:
+    SALIENCE=on                  # the whole subsystem; absent = off
+    MODEL_CHECKPOINT=<path>      # optional; default stub (no install)
+    MODEL_SERVICE_PORT=8078      # optional; default 8077
+    NANOCHAT_REPO=<url>          # optional; default karpathy/nanochat
 
-      cd ~/path/to/newbound && git pull
-      (cd ../newbound-agent && git pull)   # or wherever the overlay lives
-      ../newbound-agent/tools/setup.sh     # idempotent: overlay, build, stage
+## 1. Wiring first, on stubs — no GPU involved
 
-- Sanity: `./target/release/newbound mcp` answers, and
-  `tools/nb-call.py agent-executive-status '{}'` returns `running: false`.
-
-## 1. The base model — fresh nanochat run
-
-Train the base from standard nanochat data per nanochat's own
-instructions (the speedrun). This is the GPU-hours step; everything
-after it is minutes. Note the resulting checkpoint directory — call it
-`$CKPT`. (When curriculum export matures, the class-stamped seed joins
-this mix; for 5b the standard run is the base.)
-
-## 2. Start the service in stub mode first
-
-Prove the wiring on this box before the model enters:
-
-    cd ~/path/to/newbound
-    python3 ../newbound-agent/tools/model-service/service.py \
-        --data-dir runtime/model --port 8077 &
-
-    curl -s http://127.0.0.1:8077/status
-    # expect: {"status": "ok", "mode": "stub", "live_slot": "A", ...}
-
-## 3. Point the seam at it
-
-Append to `runtime/agent/botd.properties` (keep your existing LLM=
-lines — the frontier stays the escalation judge):
-
-    SALIENCE_CTL=agent:model:salience
-    MODEL_SERVICE_URL=http://127.0.0.1:8077
-
-Restart the newbound instance. Then:
-
-    tools/nb-call.py agent-model-service_status '{}'
-    # expect mode: stub — the command reaches the service through the store
-
-Start the loop and watch a verdict arrive:
+Pull masters, run `tools/setup.sh`, then set only `SALIENCE=on` and
+restart the instance. Start the sensor and executive:
 
     tools/nb-call.py agent-sensor-start '{}'
     tools/nb-call.py agent-executive-start '{}'
-    # touch any store record via dev.code, or just wait for real activity
-    tools/nb-call.py agent-executive-status '{}'
-    # expect last_context to carry salience + salience_why ("stub[...]")
 
-This is the wiring proven with zero model risk. Every failure up to
-here is plumbing, not ML.
+The first perception finds no service; the executive fires bootstrap
+itself. Within a few seconds `runtime/model/service.py` exists, the
+service answers, and the next perception carries a verdict:
 
-## 4. Fill in NanochatScorer — the one GPU-specific edit
+    tools/nb-call.py agent-model-service_status '{}'   # mode: stub
+    tools/nb-call.py agent-executive-status '{}'       # last_context.salience
 
-Open `tools/model-service/service.py`, class `NanochatScorer`. Two
-marked blocks:
+## 2. The base model — fresh nanochat run
 
-- `__init__`: load tokenizer + model from `self.checkpoint`, move to
-  device, eval mode, delete the `NotImplementedError`.
-- `score(perception, context)`: prompt the model with the perception's
-  text/kind and the bound claims from `context`; ask for a 0..1
-  salience with one sentence of reasoning; parse and clamp. Contract:
-  return `(float, str)`. Keep it cheap — this runs at tick rate.
+Train the base from standard nanochat data per nanochat's own
+instructions (the speedrun; this is the GPU-hours step). Note the
+checkpoint directory — `$CKPT`.
 
-Restart the service with the real checkpoint:
+## 3. Fill in NanochatScorer — the one GPU-specific edit
 
-    python3 ../newbound-agent/tools/model-service/service.py \
-        --data-dir runtime/model --port 8077 --checkpoint $CKPT &
-    curl -s http://127.0.0.1:8077/status   # expect mode: nanochat
+The service script is a **library asset**: edit
+`data/agent/_ASSETS/service.py` in the repo checkout (NOT
+`runtime/model/service.py` — bootstrap rewrites that copy from the
+compiled-in asset whenever they differ; the glue belongs in git so
+every instance gets it). Class `NanochatScorer`, two marked blocks:
 
-## 5. The zero-executive-change test
+- `__init__`: load tokenizer + model from `self.checkpoint`, device,
+  eval mode; delete the `NotImplementedError`.
+- `score(perception, context)`: prompt for a 0..1 salience plus one
+  sentence of reasoning over the perception text/kind and bound
+  claims; parse, clamp, return `(float, str)`. Keep it cheap — this
+  runs at tick rate.
 
-Nothing else changes. No botd edit, no rebuild, no executive restart:
+Rebuild the agent dylib (`cargo build --release` in `agent/` —
+hot-reloads) and commit the asset + regenerated src on a branch.
 
-    tools/nb-call.py agent-executive-status '{}'
-    # last_context.salience now comes from your weights;
-    # salience_why is the model's own sentence
+## 4. Turn the checkpoint on
 
-That's the acceptance criterion for the whole phase: the same
-executive that ran on stubs is judged by the local model, and nothing
-upstream noticed the swap.
+    MODEL_CHECKPOINT=/path/to/$CKPT
 
-## 6. Watch the curriculum write itself
+Restart the instance. Bootstrap now also builds the serving env
+(clones `NANOCHAT_REPO` under `runtime/model/deps`, venv + deps,
+donefile-guarded — one-time), rewrites the service script from the
+new asset, and launches with your weights. Kill the old stub service
+first if one is running (by PID — never by pattern).
 
-With the loop running and the frontier configured, band verdicts
-(0.35–0.65) escalate and disagreements land as training pairs:
+    tools/nb-call.py agent-model-service_status '{}'   # mode: nanochat
+
+**Acceptance — zero executive change:** the same executive that ran on
+stubs now gets `last_context.salience` from your checkpoint, with the
+model's own reasoning sentence. Nothing upstream was touched.
+
+## 5. Watch the curriculum write itself
+
+Band verdicts (0.35–0.65) escalate to the frontier; disagreements land
+as training pairs:
 
     tools/nb-call.py agent-executive-salience_log '{}'
-    # rows fill with {input, local, frontier, disagree} as activity flows
 
-Export the feedstock into the trainer's intake and watch the skeleton
-acknowledge it:
+Export the feedstock; the trainer skeleton drains it within ~5s and
+rotates the checkpoint ring:
 
     tools/nb-call.py agent-model-curriculum_export \
         '{"path": "runtime/model/ingest/batch-day1.jsonl"}'
-    # expect per-kind counts; within ~5s the service log prints
-    # "[trainer] ... would step on N samples" and /status shows the
-    # ring rotated
 
-## 7. The degradation drill (do it once, deliberately)
+## 6. The degradation drill (once, deliberately)
 
-    kill <service pid>
-    tools/nb-call.py agent-executive-status '{}'
-    # loop still running; last_context simply has no salience field
-    # restart the service; verdicts resume on the next perception
+Kill the service by PID: the loop keeps running, `last_context` simply
+has no salience field. Restart the executive (or call
+`agent-model-bootstrap` yourself) and verdicts resume. The off switch,
+any time: delete `SALIENCE=on`, restart the instance.
 
-The off switch, any time: remove the `SALIENCE_CTL` line and restart
-the instance — salience is off, everything else unchanged.
+## 7. Report back
 
-## 8. Report back
-
-Paste into the session: `/status` output in nanochat mode, one
-`last_context` with a model verdict, `salience_log` totals after an
-hour of activity, and the trainer's drain lines. Anything odd, include
-`service.log` — diagnosis happens from the web session.
+Paste: `/status` in nanochat mode, one `last_context` with a model
+verdict, `salience_log` totals after an hour, the trainer drain lines
+from `runtime/model/service.log`. Anything odd, include the log —
+diagnosis happens from the web session.
 
 ## Troubleshooting
 
-- **`model service unreachable`** from the command: service not
-  running, wrong port, or `MODEL_SERVICE_URL` typo. The executive is
-  unharmed either way.
-- **`scorer failed: ...`** in verdicts: your `score()` glue threw —
-  the service caught it and answered err; the executive degraded. Fix
-  the glue, restart the service only.
-- **Verdicts feel constant/flat**: a fresh base is a weak judge —
-  expected. The escalation log is where the correction signal
-  accumulates; that's the flywheel's food, not a bug.
-- **Port already in use**: a previous service instance survived —
-  `kill $(cat service.pid)` style, by PID, never by pattern (a pkill
-  pattern can match your own shell; the brain remembers).
+- **No verdicts, `SALIENCE=on`**: check `service_status`; then
+  `runtime/model/service.log`. Bootstrap fires once per executive
+  start — restart the executive to retry, or run
+  `agent-model-bootstrap` by hand for the full report
+  (`nanochat_env`, `script_written`, `service`).
+- **`launch_failed` with a real checkpoint**: almost always the
+  NanochatScorer glue (step 3) — the log shows the exact exception.
+- **Verdicts feel flat**: a fresh base is a weak judge — expected.
+  The escalation log is the correction signal accumulating; that's
+  the flywheel's food, not a bug.

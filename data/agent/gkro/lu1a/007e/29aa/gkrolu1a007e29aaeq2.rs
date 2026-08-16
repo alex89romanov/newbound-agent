@@ -1,24 +1,25 @@
-// salience: SALIENCE_CTL's filler - a thin client on the resident model
-// service (tools/model-service/service.py, one process: trainer +
-// server, live/gated pointers inside). The service answers from
-// whatever its live pointer holds: the stub scorer anywhere, a nanochat
-// checkpoint on the owner's hardware - the zero-executive-change test
-// is exactly that swap. A short timeout keeps a hung service from
-// stalling the executive's tick; any error is a plain err result, which
-// the executive treats as no-verdict and degrades like an unset seam.
-fn service_url() -> String {
-    // MODEL_SERVICE_URL in runtime/agent/botd.properties; the default
-    // matches service.py's default port.
+// salience: the executive's judge, called DIRECTLY (in-crate, no
+// dispatch) when SALIENCE=on in botd.properties - on or off in
+// settings, nothing pluggable (owner's simplification, 2026-08-16).
+// POSTs {perception, context} to the resident service's /salience and
+// returns its {salient, reasoning, pointer, ms}. A short timeout keeps
+// a hung service from stalling the tick; any failure is a plain err the
+// executive treats as no-verdict - and its cue to fire bootstrap.
+fn prop(key: &str, dflt: &str) -> String {
+    // Settings live in runtime/agent/botd.properties like everything else.
     (|| -> Option<String> {
         let s = DataStore::globals().try_get_object("system").ok()?;
         let a = s.try_get_object("apps").ok()?;
         let g = a.try_get_object("agent").ok()?;
         let r = g.try_get_object("runtime").ok()?;
-        match r.try_get_string("MODEL_SERVICE_URL") {
-            Ok(v) if !v.trim().is_empty() => Some(v.trim().trim_end_matches('/').to_string()),
+        match r.try_get_string(key) {
+            Ok(v) if !v.trim().is_empty() => Some(v.trim().to_string()),
             _ => None,
         }
-    })().unwrap_or_else(|| "http://127.0.0.1:8077".to_string())
+    })().unwrap_or_else(|| dflt.to_string())
+}
+fn service_url() -> String {
+    format!("http://127.0.0.1:{}", prop("MODEL_SERVICE_PORT", "8077"))
 }
 fn err(msg: String) -> DataObject {
     let mut o = DataObject::new();
