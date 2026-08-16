@@ -3,13 +3,14 @@
 
 Trainer and server in ONE process, beside the newbound instance, speaking
 HTTP on localhost. The agent.model control's commands are thin clients on
-this; SALIENCE_CTL=agent:model:salience routes the executive's verdicts
-here. Stdlib only in stub mode - torch is imported ONLY when a real
+this; with SALIENCE=on in botd.properties the executive's verdicts route
+here (and agent-model-bootstrap installs, writes, and launches this file
+itself). Stdlib only in stub mode - torch is imported ONLY when a real
 checkpoint is named, so the whole chain verifies on any machine before a
 GPU ever gets involved.
 
-    python3 tools/model-service/service.py --data-dir runtime/model
-    python3 tools/model-service/service.py --data-dir runtime/model \
+    python3 runtime/agent/model/service.py --data-dir runtime/agent/model
+    python3 runtime/agent/model/service.py --data-dir runtime/agent/model \
         --checkpoint /path/to/nanochat/checkpoint
 
 Endpoints:
@@ -28,6 +29,7 @@ gate-threshold calls) arrive with Phase 6.
 import argparse
 import json
 import os
+import re
 import shutil
 import threading
 import time
@@ -85,32 +87,82 @@ class StubScorer:
 
 
 class NanochatScorer:
-    """The real judge - loads a nanochat checkpoint. Finished on the box.
+    """The real judge - a nanochat checkpoint served in-process.
 
-    Everything outside this class is hardware-independent; this is the
-    single seam the GPU day fills in. The score() contract is the same
-    as the stub's: (perception, context) -> (float 0..1, reasoning str).
+    `checkpoint` is a nanochat BASE DIRECTORY - the layout nanochat
+    itself maintains under ~/.cache/nanochat after a run: tokenizer/
+    plus base_checkpoints/ (and chatsft_checkpoints/ /
+    chatrl_checkpoints/ if those phases ran). The most-trained source
+    available wins: rl, then sft, then base. Needs the nanochat repo
+    importable (bootstrap launches this service with PYTHONPATH set to
+    its clone) and its deps in the venv python running this process.
+    The score() contract matches the stub's:
+    (perception, context) -> (float 0..1, reasoning str).
     """
 
     name = "nanochat"
 
     def __init__(self, checkpoint):
         self.checkpoint = checkpoint
-        # === nanochat glue begins (runbook-5b.md step 4) ==================
-        # import torch  # noqa - only reached when --checkpoint is real
-        # Load tokenizer + model from `checkpoint` here, move to device,
-        # eval mode. Keep the object on self; score() must be cheap.
-        # ==================================================================
-        raise NotImplementedError(
-            "NanochatScorer needs its glue filled in on the GPU box - "
-            "see docs/runbook-5b.md step 4. Run with --checkpoint stub "
-            "until then."
-        )
+        # The base dir must be in the env BEFORE nanochat's modules
+        # resolve it (get_base_dir also owns the tokenizer location).
+        os.environ["NANOCHAT_BASE_DIR"] = checkpoint
+        import torch
+        from nanochat.checkpoint_manager import load_model
+        from nanochat.engine import Engine
+        self.torch = torch
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        last_err = None
+        for source in ("rl", "sft", "base"):
+            try:
+                model, tokenizer, _meta = load_model(source, device, phase="eval")
+                break
+            except Exception as e:
+                last_err = e
+        else:
+            raise RuntimeError(
+                f"no loadable checkpoint under {checkpoint} "
+                f"(expected the nanochat base-dir layout: tokenizer/ + "
+                f"base_checkpoints/<tag>/model_<step>.pt etc): {last_err}")
+        self.tokenizer = tokenizer
+        self.engine = Engine(model, tokenizer)
+        self.name = f"nanochat:{source}"
 
     def score(self, perception, context):
-        # === nanochat glue: prompt the checkpoint for {salient, reasoning}
-        # over the perception + bound claims, parse, clamp to 0..1. =======
-        raise NotImplementedError
+        payload = perception.get("payload") or {}
+        text = " ".join(str(v) for v in payload.values() if isinstance(v, str))[:600]
+        prompt = (
+            "You judge salience for an autonomous agent's perception stream.\n"
+            f"PERCEPTION kind={perception.get('kind', '?')}: {text}\n"
+            f"CONTEXT: {int(context.get('matched') or 0)} recalled and "
+            f"{int(context.get('bound') or 0)} bound memory claims.\n"
+            "How much does this perception matter to the agent's "
+            "understanding of its environment, from 0.0 (noise) to 1.0 "
+            "(critical)? Reply with ONLY a JSON object: "
+            '{"salient": <0.0-1.0>, "reasoning": "<one sentence>"}')
+        conversation = {"messages": [
+            {"role": "user", "content": prompt},
+            {"role": "assistant", "content": ""},
+        ]}
+        ids = self.tokenizer.render_for_completion(conversation)
+        results, _masks = self.engine.generate_batch(
+            ids, num_samples=1, max_tokens=96, temperature=0.2, top_k=50)
+        completion = self.tokenizer.decode(results[0][len(ids):])
+        # Parse {salient, reasoning}; fall back to the first number found.
+        s0, e0 = completion.find("{"), completion.rfind("}")
+        if 0 <= s0 < e0:
+            try:
+                d = json.loads(completion[s0:e0 + 1])
+                sal = float(d.get("salient"))
+                why = str(d.get("reasoning") or "")[:300]
+                return max(0.0, min(1.0, sal)), why or "model gave no reasoning"
+            except Exception:
+                pass
+        m = re.search(r"(?<![\w.])(?:0?\.\d+|[01](?:\.\d+)?)(?![\w.])", completion)
+        if m:
+            return max(0.0, min(1.0, float(m.group(0)))), \
+                f"unparseable reply, salvaged number: {completion[:120]!r}"
+        return 0.5, f"unparseable reply, defaulting uncertain: {completion[:120]!r}"
 
 
 def make_scorer(checkpoint):
@@ -271,7 +323,7 @@ class Handler(BaseHTTPRequestHandler):
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--port", type=int, default=8077)
-    ap.add_argument("--data-dir", default="runtime/model")
+    ap.add_argument("--data-dir", default="runtime/agent/model")
     ap.add_argument("--checkpoint", default="stub",
                     help="'stub' or a nanochat checkpoint path")
     args = ap.parse_args()

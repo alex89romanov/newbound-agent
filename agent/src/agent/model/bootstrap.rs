@@ -43,7 +43,8 @@ pub fn bootstrap() -> DataObject {
 // steps: SALIENCE=on in botd.properties turns the subsystem on, and the
 // executive fires this once per start whenever the service isn't
 // answering. Modeled on the owner's oneshot-installer idiom: donefile-
-// guarded stages, everything under the instance's own runtime/, nothing
+// guarded stages, everything under the agent app's own runtime folder
+// (runtime/agent/model - the runtime/ root belongs to apps), nothing
 // at a hardcoded absolute path.
 //
 //   MODEL_CHECKPOINT    stub (default) | path to a nanochat checkpoint
@@ -92,19 +93,27 @@ let root = match root.parent() {
     Some(p) => p.to_path_buf(),
     None => { return err("store root has no parent".to_string()); }
 };
-let modeldir = root.join("runtime").join("model");
+let modeldir = root.join("runtime").join("agent").join("model");
 let deps = modeldir.join("deps");
 let _ = std::fs::create_dir_all(&deps);
 
 let mut o = DataObject::new();
 o.put_string("status", "ok");
 
-// stage 1: the nanochat environment - only for a real checkpoint
+// stage 1: the nanochat environment - only for a real checkpoint.
+// No `pip install -e .`: nanochat's repo is flat-layout (dev/, runs/,
+// nanochat/ at top level) and setuptools refuses to build it. The
+// package is never installed - the service runs with PYTHONPATH at the
+// clone; only the pyproject [project] dependencies go into the venv,
+// extracted with tomllib. The success sentinel (env_ready) is written
+// by the script ITSELF as its last act under set -e, so a failed pip
+// can never mark the env ready (the old rust-side venv-exists check
+// could, and did).
+let nc = deps.join("nanochat");
 let mut nanochat_env = "not_needed".to_string();
 if checkpoint != "stub" {
-    let nc = deps.join("nanochat");
-    let donefile = nc.join("oneshot_ready");
-    if donefile.exists() && nc.join("venv").exists() {
+    let sentinel = nc.join("env_ready");
+    if sentinel.exists() && nc.join("venv").exists() {
         nanochat_env = "ready".to_string();
     } else {
         if nc.exists() { let _ = std::fs::remove_dir_all(&nc); }
@@ -112,15 +121,17 @@ if checkpoint != "stub" {
         cmd += &deps.display().to_string();
         cmd += &format!("; git clone {} nanochat", repo);
         cmd += "; cd nanochat; python3 -m venv venv; source venv/bin/activate";
-        cmd += "; pip install --upgrade pip setuptools wheel; pip install -e .";
+        cmd += "; pip install --upgrade pip setuptools wheel";
+        cmd += "; python3 -c 'import tomllib; print(\"\\n\".join(tomllib.load(open(\"pyproject.toml\",\"rb\"))[\"project\"][\"dependencies\"]))' > .deps.txt";
+        cmd += "; pip install -r .deps.txt";
+        cmd += "; touch env_ready";
         let mut x = DataArray::new();
         x.push_string("bash");
         x.push_string("-c");
         x.push_string(&cmd);
         let r = system_call(x);
         println!("BOOTSTRAP NANOCHAT ENV {}", r.to_string());
-        if nc.join("venv").join("bin").join("python").exists() {
-            let _ = std::fs::write(&donefile, "x");
+        if sentinel.exists() {
             nanochat_env = "installed".to_string();
         } else {
             nanochat_env = "install_failed".to_string();
@@ -153,16 +164,19 @@ let probe = || ureq::AgentBuilder::new()
     .is_ok();
 let mut service = "already_running".to_string();
 if !probe() {
-    let py = if checkpoint == "stub" {
-        "python3".to_string()
+    // Real checkpoint: the venv python (torch et al) with PYTHONPATH at
+    // the clone, since the nanochat package is deliberately uninstalled.
+    let (py, envprefix) = if checkpoint == "stub" {
+        ("python3".to_string(), "".to_string())
     } else {
-        deps.join("nanochat").join("venv").join("bin").join("python").display().to_string()
+        (nc.join("venv").join("bin").join("python").display().to_string(),
+         format!("PYTHONPATH='{}' ", nc.display()))
     };
     let mut cmd = "cd ".to_string();
     cmd += &root.display().to_string();
     cmd += &format!(
-        "; nohup '{}' runtime/model/service.py --data-dir runtime/model --port {} --checkpoint '{}' >> runtime/model/service.log 2>&1 &",
-        py, port, checkpoint);
+        "; {}nohup '{}' runtime/agent/model/service.py --data-dir runtime/agent/model --port {} --checkpoint '{}' >> runtime/agent/model/service.log 2>&1 &",
+        envprefix, py, port, checkpoint);
     let mut x = DataArray::new();
     x.push_string("bash");
     x.push_string("-c");

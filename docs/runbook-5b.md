@@ -33,7 +33,7 @@ restart the instance. Start the sensor and executive:
 
 `agent-executive-start` fires bootstrap eagerly, in the background —
 install and launch happen at start, never lazily behind a perception.
-Within a few seconds `runtime/model/service.py` exists, the service
+Within a few seconds `runtime/agent/model/service.py` exists, the service
 answers, and the first perception already carries a verdict:
 
     tools/nb-call.py agent-model-service_status '{}'   # mode: stub
@@ -45,33 +45,38 @@ Train the base from standard nanochat data per nanochat's own
 instructions (the speedrun; this is the GPU-hours step). Note the
 checkpoint directory — `$CKPT`.
 
-## 3. Fill in NanochatScorer — the one GPU-specific edit
+## 3. The NanochatScorer glue — shipped, validate on first contact
 
-The service script is a **library asset**: edit
-`data/agent/_ASSETS/service.py` in the repo checkout (NOT
-`runtime/model/service.py` — bootstrap rewrites that copy from the
-compiled-in asset whenever they differ; the glue belongs in git so
-every instance gets it). Class `NanochatScorer`, two marked blocks:
-
-- `__init__`: load tokenizer + model from `self.checkpoint`, device,
-  eval mode; delete the `NotImplementedError`.
-- `score(perception, context)`: prompt for a 0..1 salience plus one
-  sentence of reasoning over the perception text/kind and bound
-  claims; parse, clamp, return `(float, str)`. Keep it cheap — this
-  runs at tick rate.
-
-Rebuild the agent dylib (`cargo build --release` in `agent/` —
-hot-reloads) and commit the asset + regenerated src on a branch.
+The glue is written into the asset (`data/agent/_ASSETS/service.py`,
+class `NanochatScorer`) against nanochat's real API:
+`load_model(source, device, phase="eval")` trying `rl` → `sft` →
+`base`, `Engine.generate_batch` for the completion, JSON parse with a
+salvage fallback. If it ever needs editing, edit the **asset** in the
+repo checkout, never `runtime/agent/model/service.py` — bootstrap
+rewrites that copy from the compiled-in asset whenever they differ;
+glue belongs in git so every instance gets it. Rebuild the agent dylib
+after any asset change (`cargo build --release` in `agent/` —
+hot-reloads).
 
 ## 4. Turn the checkpoint on
 
-    MODEL_CHECKPOINT=/path/to/$CKPT
+**`MODEL_CHECKPOINT` is a nanochat BASE directory** — the layout
+nanochat maintains under `~/.cache/nanochat` after a run:
+`tokenizer/` plus `base_checkpoints/` (and `chatsft_checkpoints/` /
+`chatrl_checkpoints/` if those phases ran). Point at a copy of that
+whole directory, not at a single `model_<step>.pt`:
 
-Restart the instance. Bootstrap now also builds the serving env
-(clones `NANOCHAT_REPO` under `runtime/model/deps`, venv + deps,
-donefile-guarded — one-time), rewrites the service script from the
-new asset, and launches with your weights. Kill the old stub service
-first if one is running (by PID — never by pattern).
+    MODEL_CHECKPOINT=/path/to/nanochat-base-dir
+
+Restart the instance. Bootstrap builds the serving env one time
+(clones `NANOCHAT_REPO` under `runtime/agent/model/deps`, venv, the
+pyproject dependencies — the nanochat package itself is never
+installed; the service runs with `PYTHONPATH` at the clone, because
+the repo's flat layout refuses `pip install -e .`). The `env_ready`
+sentinel is written by the install script itself only on full success,
+so a half-failed install always retries from clean on the next
+bootstrap. Kill the old stub service first if one is running (by PID —
+never by pattern).
 
     tools/nb-call.py agent-model-service_status '{}'   # mode: nanochat
 
@@ -90,7 +95,7 @@ Export the feedstock; the trainer skeleton drains it within ~5s and
 rotates the checkpoint ring:
 
     tools/nb-call.py agent-model-curriculum_export \
-        '{"path": "runtime/model/ingest/batch-day1.jsonl"}'
+        '{"path": "runtime/agent/model/ingest/batch-day1.jsonl"}'
 
 ## 6. The degradation drill (once, deliberately)
 
@@ -103,13 +108,13 @@ any time: delete `SALIENCE=on`, restart the instance.
 
 Paste: `/status` in nanochat mode, one `last_context` with a model
 verdict, `salience_log` totals after an hour, the trainer drain lines
-from `runtime/model/service.log`. Anything odd, include the log —
+from `runtime/agent/model/service.log`. Anything odd, include the log —
 diagnosis happens from the web session.
 
 ## Troubleshooting
 
 - **No verdicts, `SALIENCE=on`**: check `service_status`; then
-  `runtime/model/service.log`. Bootstrap fires eagerly at executive
+  `runtime/agent/model/service.log`. Bootstrap fires eagerly at executive
   start — restart the executive to retry, or run
   `agent-model-bootstrap` by hand (no parameters, `'{}'`) for the full
   report (`nanochat_env`, `script_written`, `service`). The manual

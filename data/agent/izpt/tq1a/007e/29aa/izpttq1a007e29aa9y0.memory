@@ -10,5 +10,11 @@
     "tags": "phase5b",
     "confidence": "high",
     "time": 1786840042087
+  },
+  {
+    "claim": "Phase 5b fixes from the owner box (2026-08-16): (1) nanochat cannot pip install -e . (flat layout: dev/, runs/, nanochat/ top-level - setuptools refuses); bootstrap instead installs only the pyproject [project] dependencies (tomllib extraction) and launches the service with PYTHONPATH at the clone. (2) Install success sentinel env_ready is written by the bash script itself as its last act under set -e - a rust-side venv-exists check stamped broken envs as installed. Sentinel rename also self-heals boxes that hit the old bug (reinstall from clean). (3) MODEL_CHECKPOINT is a nanochat BASE DIR (tokenizer/ + *_checkpoints/, the ~/.cache/nanochat layout); NanochatScorer glue is shipped in the asset: NANOCHAT_BASE_DIR env before import, load_model rl->sft->base, Engine.generate_batch, render_for_completion, JSON parse with number salvage. (4) The model dir is runtime/agent/model - the runtime/ root belongs to apps (owner rule).",
+    "tags": "phase5b",
+    "confidence": "high",
+    "time": 1786842592406
   }
 ]
