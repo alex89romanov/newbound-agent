@@ -11,5 +11,85 @@
     },
     "confidence": "high",
     "time": 1785964641067
+  },
+  {
+    "claim": "Anthropic's Messages API cannot be reached through the OPENAI arm: it is a distinct wire, not chat-completions with a different key.",
+    "detail": "Five differences, any one of which 400s: the key rides x-api-key (not Authorization: Bearer) and anthropic-version is required; the system prompt is a top-level `system` param, not a role:\"system\" message; max_tokens is REQUIRED and has no server-side default; tools carry `input_schema` rather than `parameters`; and tool traffic is tool_use / tool_result CONTENT BLOCKS inside user/assistant turns, never a role:\"tool\" message. <ARM>_HEADERS can fix the header and nothing else. Hence the ANTHROPIC arm and the `anthropic` dialect - the same lesson the GEMINI arm already taught.",
+    "tags": "llm,anthropic,dialect,resolver",
+    "source": {
+      "doc": "agent.llm.chat_llm"
+    },
+    "confidence": "high",
+    "time": 1786878897877
+  },
+  {
+    "claim": "With thinking on, an Anthropic assistant turn that called a tool is rejected on the NEXT request unless its thinking block is replayed verbatim and first.",
+    "detail": "Thinking is ON BY DEFAULT on Opus 5 (omitting the `thinking` param runs adaptive), so this fires on the very first tool call rather than only under an opt-in. parse_anthropic keeps the raw thinking/redacted_thinking blocks on the assistant_message as `thinking_blocks`, and build_anthropic_payload re-emits them as the first entries of the assistant content array - the same carry-it-on-the-replay-object trick Gemini's thought_signature uses. Dropping them, or ordering them after text/tool_use, breaks the turn. display:\"omitted\" (the default) still returns the block with an empty `thinking` string and a live signature: it is the signature that matters, not the text.",
+    "tags": "llm,anthropic,thinking,tool-loop",
+    "source": {
+      "doc": "agent.llm.chat_llm"
+    },
+    "confidence": "high",
+    "time": 1786878898049
+  },
+  {
+    "claim": "The anthropic dialect deliberately ignores LLM_TEMPERATURE: Opus 5 and the 4.7/4.8 family reject temperature, top_p and top_k with a 400.",
+    "detail": "build_anthropic_payload is the one builder that takes no temperature argument, so the shared LLM_TEMPERATURE default (0.2) cannot leak onto the wire. Reasoning depth is output_config.effort instead (ANTHROPIC_EFFORT; xhigh is the recommendation for coding and agentic work, and the API default is high). ANTHROPIC_THINKING is left unset by default because omitting `thinking` runs adaptive on Opus 5 but means NO thinking on 4.8/4.7, and `disabled` is itself a 400 above effort `high`.",
+    "tags": "llm,anthropic,effort,sampling",
+    "source": {
+      "doc": "agent.llm.chat_llm"
+    },
+    "confidence": "high",
+    "time": 1786878898228
+  },
+  {
+    "claim": "Two Anthropic non-answers arrive as HTTP 200 with an empty content array, and must be read off stop_reason before the content walk.",
+    "detail": "stop_reason:\"refusal\" is a safety decline carrying stop_details.category (e.g. cyber, bio) - Opus 5 ships elevated cybersecurity safeguards, so an agent that ships code and stack traces can trip it. stop_reason:\"max_tokens\" means the budget ran out, and because max_tokens caps THINKING plus visible text together, a thinking model can spend the whole budget before answering - the fix is raising LLM_MAX_TOKENS, which the error names. Both would read as \"unexpected response shape\" if stop_reason were not checked first: the identical misdiagnosis Gemini's filtered answers used to produce.",
+    "tags": "llm,anthropic,errors,refusal",
+    "source": {
+      "doc": "agent.llm.chat_llm"
+    },
+    "confidence": "high",
+    "time": 1786878898449
+  },
+  {
+    "claim": "agent.llm.claude_code is a delegating sub-agent, not a drop-in model provider: it always answers kind:text and never kind:tool_calls.",
+    "detail": "chat_llm's other arms answer ONE model turn and hand tool calls back for tool_loop to execute. Claude Code is an agent harness that runs its own loop with its own tools and returns only when the work is done, so tool_loop terminates on its answer - the turn was delegated wholesale and the text IS the finished result. The `tools` newbound passes are therefore ignored (they name commands only the newbound process can run). To give the delegate real capability, point CLAUDE_CODE_MCP at newbound's own MCP server, which exposes every store command rather than the subset tool_loop forwarded.",
+    "tags": "llm,claude-code,llm-ctl,bridge",
+    "source": {
+      "doc": "agent.llm.claude_code"
+    },
+    "confidence": "high",
+    "time": 1786882401239
+  },
+  {
+    "claim": "Replacing Claude Code's default system prompt and disabling its built-in tools makes a bridged turn roughly 170x cheaper.",
+    "detail": "Measured on a trivial prompt: the default configuration loaded ~38,000 cache-creation tokens of Claude Code system prompt plus CLAUDE.md discovery ($0.229 notional), against ~200 input tokens ($0.0013) with --system-prompt replacing it and --tools \"\" disabling built-ins. claude_code therefore defaults to replace-mode, mapping the conversation's own system messages onto --system-prompt. CLAUDE_CODE_SYSTEM_MODE=append keeps Claude Code's prompt and pays for it, which is what agentic delegation actually wants.",
+    "tags": "llm,claude-code,cost",
+    "source": {
+      "doc": "agent.llm.claude_code"
+    },
+    "confidence": "high",
+    "time": 1786882401312
+  },
+  {
+    "claim": "The prompt must ride stdin, never argv, because Claude Code's variadic flags silently swallow a positional prompt.",
+    "detail": "--tools, --allowedTools, --disallowedTools and --mcp-config are declared <tools...> style, so any following non-option argument is consumed as another value: `claude -p --tools \"\" \"my prompt\"` fails with \"Input must be provided either through stdin or as a prompt argument\". stdin also sidesteps ARG_MAX on long conversations. claude_code additionally emits --tools LAST so nothing it appends can be eaten.",
+    "tags": "llm,claude-code,cli",
+    "source": {
+      "doc": "agent.llm.claude_code"
+    },
+    "confidence": "high",
+    "time": 1786882401387
+  },
+  {
+    "claim": "Reaping a timed-out `claude` needs BOTH an explicit process group and `kill -9 -- -PID`; either alone leaves the tree running.",
+    "detail": "`claude` is a node launcher, so killing the direct child can leave the interpreter alive. The child is spawned with process_group(0) (pgid == pid) and the timeout path signals the negative pid. The `--` is load-bearing and was a real bug: /bin/kill is not the shell builtin and parses a bare `-1234` as options, so the first implementation reported a successful kill while the process kept running - verified by ps five seconds later. Separately, CLAUDE_CODE_PERMISSION_MODE=bypassPermissions is refused outright when the server runs as root (\"cannot be used with root/sudo privileges\").",
+    "tags": "llm,claude-code,process,timeout",
+    "source": {
+      "doc": "agent.llm.claude_code"
+    },
+    "confidence": "high",
+    "time": 1786882401513
   }
 ]

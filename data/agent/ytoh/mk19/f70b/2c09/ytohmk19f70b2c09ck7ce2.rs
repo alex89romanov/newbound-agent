@@ -4,12 +4,13 @@
 // `LLM` in runtime/agent/botd.properties picks an ARM; each arm names the
 // DIALECT it actually speaks on the wire:
 //
-//   VLLM   -> openai   OpenAI chat-completions (+ vLLM's chat_template_kwargs)
-//   OPENAI -> openai   also LM Studio / llama.cpp / Groq / OpenRouter via _URL
-//   GEMINI -> gemini   NATIVE generateContent  (see the safety note below)
-//   OLLAMA -> ollama   NATIVE /api/chat        (keep_alive is not expressible
-//                                               on the compat endpoint)
-//   other  -> custom   LLM_CTL=lib:ctl:cmd
+//   VLLM      -> openai     OpenAI chat-completions (+ vLLM chat_template_kwargs)
+//   OPENAI    -> openai     also LM Studio / llama.cpp / Groq / OpenRouter via _URL
+//   ANTHROPIC -> anthropic  NATIVE /v1/messages     (see the thinking note below)
+//   GEMINI    -> gemini     NATIVE generateContent  (see the safety note below)
+//   OLLAMA    -> ollama     NATIVE /api/chat        (keep_alive is not expressible
+//                                                    on the compat endpoint)
+//   other     -> custom     LLM_CTL=lib:ctl:cmd
 //
 // The "they all speak OpenAI, so one request path serves them" shortcut this
 // replaced was wrong where it counted. Gemini's compat endpoint has nowhere
@@ -18,6 +19,18 @@
 // JSON structure". An agent that ships code and stack traces all day was
 // being silently blocked and then misdiagnosed. The native dialect sends
 // safetySettings BLOCK_NONE and NAMES the block when one happens.
+//
+// Anthropic is that same lesson a second time. The Messages API is not
+// chat-completions wearing a different key: the system prompt is a top-level
+// param, max_tokens is REQUIRED, tools carry `input_schema` rather than
+// `parameters`, and tool traffic is tool_use / tool_result CONTENT BLOCKS
+// instead of a role:"tool" message. Pointing the OPENAI arm at it with a
+// header override 400s on the first call, and a safety decline arrives as a
+// 200 with empty content - the same silent-misdiagnosis shape as Gemini's
+// filtered answer. One demand no other dialect makes: with thinking on (the
+// DEFAULT on Opus 5) an assistant turn that called a tool is rejected on the
+// NEXT request unless its thinking block is replayed verbatim, so those
+// blocks ride the assistant_message the caller already keeps.
 //
 // Everything below normalizes INTO the OpenAI-shaped result the callers
 // already speak ({kind, content|tool_calls, assistant_message}), so
@@ -46,7 +59,7 @@ fn text_result(msg: &str) -> DataObject {
 fn need(meta: &DataObject, key: &str, arm: &str) -> Result<String, String> {
     match meta.try_get_string(key) {
         Ok(v) if !v.trim().is_empty() => Ok(v.trim().to_string()),
-        _ => Err(format!("LLM arm {} needs {} - set it in runtime/agent/botd.properties and restart. (LLM= selects VLLM | OPENAI | GEMINI | OLLAMA; any other value uses LLM_CTL=lib:ctl:cmd.)", arm, key)),
+        _ => Err(format!("LLM arm {} needs {} - set it in runtime/agent/botd.properties and restart. (LLM= selects VLLM | OPENAI | ANTHROPIC | GEMINI | OLLAMA; any other value uses LLM_CTL=lib:ctl:cmd.)", arm, key)),
     }
 }
 fn opt(meta: &DataObject, key: &str, default: &str) -> String {
@@ -68,7 +81,7 @@ fn need_key(meta: &DataObject, arm: &str) -> Result<String, String> {
             if !v.trim().is_empty() { return Ok(v.trim().to_string()); }
         }
     }
-    Err(format!("LLM arm {} needs {}_KEY (or {}_API_KEY) - set it in runtime/agent/botd.properties and restart. (LLM= selects VLLM | OPENAI | GEMINI | OLLAMA; any other value uses LLM_CTL=lib:ctl:cmd.)", arm, arm, arm))
+    Err(format!("LLM arm {} needs {}_KEY (or {}_API_KEY) - set it in runtime/agent/botd.properties and restart. (LLM= selects VLLM | OPENAI | ANTHROPIC | GEMINI | OLLAMA; any other value uses LLM_CTL=lib:ctl:cmd.)", arm, arm, arm))
 }
 fn opt_key(meta: &DataObject, arm: &str) -> String {
     need_key(meta, arm).unwrap_or_default()
@@ -519,6 +532,226 @@ fn parse_ollama(root: &DataObject, arm: &str) -> Result<DataObject, DataObject> 
         root.to_string().chars().take(1200).collect::<String>())))
 }
 
+fn build_anthropic_payload(messages: &DataArray, tools: &DataArray, model: &str,
+                           max_tokens: i64, effort: &str, thinking: &str,
+                           cache: bool) -> DataObject {
+    // Tool results are their own USER turn here, and every tool_use in the
+    // preceding assistant turn must be answered inside ONE of them. tool_loop
+    // emits one role:"tool" message per call, so consecutive ones are merged
+    // instead of sent as separate turns - splitting them is what teaches a
+    // model to stop calling tools in parallel.
+    fn flush(pending: &mut Vec<DataObject>, out: &mut DataArray) {
+        if pending.is_empty() { return; }
+        let mut arr = DataArray::new();
+        for b in pending.drain(..) { arr.push_object(b); }
+        let mut m = DataObject::new();
+        m.put_string("role", "user");
+        m.put_array("content", arr);
+        out.push_object(m);
+    }
+
+    let mut payload = DataObject::new();
+    payload.put_string("model", model);
+    // REQUIRED - the Messages API has no server-side default. It caps THINKING
+    // plus visible text together, so on a thinking-by-default model a tight
+    // LLM_MAX_TOKENS truncates the answer rather than the reasoning.
+    payload.put_int("max_tokens", max_tokens);
+
+    let mut system = String::new();
+    let mut out = DataArray::new();
+    let mut pending: Vec<DataObject> = Vec::new();
+
+    for i in 0..messages.len() {
+        let m = messages.get_object(i);
+        let role = m.try_get_string("role").unwrap_or_default();
+        let content = m.try_get_string("content").unwrap_or_default();
+
+        // Not a message at all on this wire: a top-level parameter.
+        if role == "system" {
+            if !system.is_empty() { system.push_str("\n\n"); }
+            system.push_str(&content);
+            continue;
+        }
+        if role == "tool" {
+            let body = if content.is_empty() { "(no output)".to_string() } else { content.clone() };
+            let mut tr = DataObject::new();
+            tr.put_string("type", "tool_result");
+            tr.put_string("tool_use_id", &m.try_get_string("tool_call_id").unwrap_or_default());
+            tr.put_string("content", &body);
+            pending.push(tr);
+            continue;
+        }
+        flush(&mut pending, &mut out);
+
+        let mut blocks = DataArray::new();
+        if role == "assistant" {
+            // Replayed VERBATIM and FIRST. With thinking on - the default on
+            // Opus 5 - an assistant turn that called a tool is rejected on the
+            // next request unless its thinking block comes back untouched.
+            // They ride the assistant_message the caller already keeps,
+            // exactly as Gemini's thought_signature does.
+            if let Ok(tb) = m.try_get_array("thinking_blocks") {
+                for b in tb.objects() { blocks.push_object(b.object()); }
+            }
+        }
+        if !content.is_empty() {
+            let mut t = DataObject::new();
+            t.put_string("type", "text");
+            t.put_string("text", &content);
+            blocks.push_object(t);
+        }
+        if role == "assistant" {
+            if let Ok(calls) = m.try_get_array("tool_calls") {
+                for c in calls.objects() {
+                    let c = c.object();
+                    let f = c.get_object("function");
+                    let mut tu = DataObject::new();
+                    tu.put_string("type", "tool_use");
+                    tu.put_string("id", &c.get_string("id"));
+                    tu.put_string("name", &f.get_string("name"));
+                    // input is an OBJECT here, not OpenAI's JSON string.
+                    tu.put_object("input", args_to_object(&args_to_string(&f.get_property("arguments"))));
+                    blocks.push_object(tu);
+                }
+            }
+        }
+        // An empty content array is rejected outright, so a contentless turn
+        // is dropped rather than sent.
+        if blocks.len() == 0 { continue; }
+        let mut n = DataObject::new();
+        n.put_string("role", if role == "assistant" { "assistant" } else { "user" });
+        n.put_array("content", blocks);
+        out.push_object(n);
+    }
+    flush(&mut pending, &mut out);
+    payload.put_array("messages", out);
+    if !system.is_empty() { payload.put_string("system", &system); }
+
+    if tools.len() > 0 {
+        let mut ts = DataArray::new();
+        for t in tools.objects() {
+            let t = t.object();
+            let f = if t.has("function") { t.get_object("function") } else { t.clone() };
+            if !f.has("name") { continue; }
+            let mut d = DataObject::new();
+            d.put_string("name", &f.get_string("name"));
+            if f.has("description") { d.put_string("description", &f.get_string("description")); }
+            // `input_schema`, not `parameters`, and it must be an object
+            // schema. Copied rather than edited in place: the caller's tools
+            // array is shared, and a builder has no business mutating it.
+            let mut schema = DataObject::new();
+            if let Ok(p) = f.try_get_object("parameters") {
+                for (k, v) in p.objects() { schema.set_property(&k, v.clone()); }
+            }
+            if !schema.has("type") { schema.put_string("type", "object"); }
+            d.put_object("input_schema", schema);
+            ts.push_object(d);
+        }
+        if ts.len() > 0 { payload.put_array("tools", ts); }
+    }
+
+    // NO temperature: Opus 5 and the 4.7/4.8 family reject temperature, top_p
+    // and top_k outright (400). Depth is output_config.effort instead, which
+    // is why LLM_TEMPERATURE is not threaded into this builder at all.
+    if !effort.is_empty() {
+        let mut oc = DataObject::new();
+        oc.put_string("effort", effort);
+        payload.put_object("output_config", oc);
+    }
+    // Left unset by default: omitting it runs adaptive thinking on Opus 5 but
+    // means NO thinking on 4.8/4.7, and `disabled` is a 400 above effort
+    // `high`. Set ANTHROPIC_THINKING=adaptive to force it on an older model.
+    if !thinking.is_empty() {
+        let mut th = DataObject::new();
+        th.put_string("type", thinking);
+        payload.put_object("thinking", th);
+    }
+    // Top-level cache_control auto-places the breakpoint on the last cacheable
+    // block, which for a growing conversation is the newest turn - so every
+    // request after the first reads the whole prior prefix at ~0.1x input
+    // price. The agent loop resends its entire history every call; this is the
+    // difference between that being cheap and being the bill.
+    if cache {
+        let mut cc = DataObject::new();
+        cc.put_string("type", "ephemeral");
+        payload.put_object("cache_control", cc);
+    }
+    payload
+}
+
+fn parse_anthropic(root: &DataObject, arm: &str) -> Result<DataObject, DataObject> {
+    if let Ok(e) = root.try_get_object("error") {
+        return Err(err_out(&format!("{} error: {}", arm,
+            e.try_get_string("message").unwrap_or_else(|_| e.to_string()))));
+    }
+    let stop = root.try_get_string("stop_reason").unwrap_or_default();
+    // A safety decline is a 200 with EMPTY content, not an HTTP error. Read it
+    // before walking content or it surfaces as "unexpected response shape" -
+    // the exact misdiagnosis the native dialects exist to prevent.
+    if stop == "refusal" {
+        let detail = match root.try_get_object("stop_details") {
+            Ok(d) => format!(" ({}{})",
+                d.try_get_string("category").unwrap_or_else(|_| "unspecified".to_string()),
+                match d.try_get_string("explanation") {
+                    Ok(x) if !x.is_empty() => format!(": {}", x),
+                    _ => String::new(),
+                }),
+            _ => String::new(),
+        };
+        return Err(err_out(&format!("{} declined the request{}", arm, detail)));
+    }
+    if let Ok(content) = root.try_get_array("content") {
+        let mut text = String::new();
+        let mut raw = Vec::new();
+        let mut tb = DataArray::new();
+        for item in content.objects() {
+            let b = item.object();
+            match b.try_get_string("type").unwrap_or_default().as_str() {
+                "text" => text.push_str(&b.try_get_string("text").unwrap_or_default()),
+                "tool_use" => {
+                    let args = match b.try_get_object("input") {
+                        Ok(a) => a.to_string(), _ => "{}".to_string() };
+                    raw.push((b.try_get_string("id").unwrap_or_default(),
+                              b.try_get_string("name").unwrap_or_default(),
+                              args, String::new()));
+                },
+                // Reasoning, not the answer: never concatenated into it, but
+                // kept whole so the next turn can replay it.
+                "thinking" | "redacted_thinking" => tb.push_object(b),
+                _ => {}
+            }
+        }
+        if !raw.is_empty() {
+            let (norm, replay) = pack_calls(raw);
+            let mut out = DataObject::new();
+            out.put_string("kind", "tool_calls");
+            out.put_array("tool_calls", norm);
+            out.put_object("assistant_message", assistant_msg(&text, Some(replay)));
+            if tb.len() > 0 {
+                let mut am = out.get_object("assistant_message");
+                am.put_array("thinking_blocks", tb);
+            }
+            return Ok(out);
+        }
+        if !text.is_empty() {
+            let out = text_result(&text);
+            if tb.len() > 0 {
+                let mut am = out.get_object("assistant_message");
+                am.put_array("thinking_blocks", tb);
+            }
+            return Ok(out);
+        }
+        if stop == "max_tokens" {
+            return Err(err_out(&format!("{} returned no content (stop_reason: max_tokens). max_tokens caps THINKING plus text together, so a thinking model can spend the whole budget before answering - raise LLM_MAX_TOKENS.", arm)));
+        }
+        if !stop.is_empty() {
+            return Err(err_out(&format!("{} returned no content (stop_reason: {})", arm, stop)));
+        }
+    }
+    Err(err_out(&format!("{}: unexpected response shape: {}", arm,
+        root.to_string().chars().take(1200).collect::<String>())))
+}
+
 // ── resolve ──────────────────────────────────────────────────────────────
 let meta = (|| -> Option<DataObject> {
     let s = DataStore::globals().try_get_object("system").ok()?;
@@ -559,6 +792,20 @@ let resolved: Option<(String, String, String, Vec<(String, String)>)> = match ar
         } else { opt_key(&meta, "OPENAI") };
         if !k.is_empty() { h.push(("Authorization".to_string(), format!("Bearer {}", k))); }
         Some(("openai".to_string(), url, model, h))
+    },
+    "ANTHROPIC" => {
+        let model = match need(&meta, "ANTHROPIC_MODEL", &arm) { Ok(v) => v, Err(e) => return err_out(&e) };
+        let key = match need_key(&meta, "ANTHROPIC") { Ok(v) => v, Err(e) => return err_out(&e) };
+        let url = opt(&meta, "ANTHROPIC_URL", "https://api.anthropic.com/v1/messages");
+        // The key rides x-api-key, NOT Authorization: Bearer - and
+        // anthropic-version is required on every request. Neither is
+        // expressible by pointing the OPENAI arm at this URL, and the body
+        // differs anyway (see the dialect note at the top).
+        let h = vec![("Content-Type".to_string(), "application/json".to_string()),
+                     ("x-api-key".to_string(), key),
+                     ("anthropic-version".to_string(),
+                      opt(&meta, "ANTHROPIC_VERSION", "2023-06-01"))];
+        Some(("anthropic".to_string(), url, model, h))
     },
     "GEMINI" => {
         let model = match need(&meta, "GEMINI_MODEL", &arm) { Ok(v) => v, Err(e) => return err_out(&e) };
@@ -658,6 +905,10 @@ let temperature = opt(&meta, "LLM_TEMPERATURE", "0.2").parse::<f64>().unwrap_or(
 let max_tokens = opt(&meta, "LLM_MAX_TOKENS", "8192").parse::<i64>().unwrap_or(8192);
 
 let payload = match dialect.as_str() {
+    "anthropic" => build_anthropic_payload(&messages, &tools, &model, max_tokens,
+                                           &opt(&meta, "ANTHROPIC_EFFORT", ""),
+                                           &opt(&meta, "ANTHROPIC_THINKING", ""),
+                                           opt(&meta, "ANTHROPIC_CACHE", "on") != "off"),
     "gemini" => build_gemini_payload(&messages, &tools, temperature, max_tokens),
     "ollama" => build_ollama_payload(&messages, &tools, &model, temperature, max_tokens,
                                      &opt(&meta, "OLLAMA_KEEP_ALIVE", "0")),
@@ -705,6 +956,7 @@ for attempt in 0..attempts {
                 Ok(body) => {
                     match obj_from_str(&body) {
                         Some(root) => match match dialect.as_str() {
+                            "anthropic" => parse_anthropic(&root, &arm),
                             "gemini" => parse_gemini(&root, &arm),
                             "ollama" => parse_ollama(&root, &arm),
                             _ => parse_openai(&root, &arm),
