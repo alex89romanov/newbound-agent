@@ -117,8 +117,10 @@ uses that context.
 
    - **The base trains continuously in the background.** A resident
      online-learning service (trainer and server in one process behind
-     the `model` control / PyO3 seam, exposed through `SALIENCE_CTL`)
-     steps all day: new curated tokens enter an ingest buffer the
+     the `model` control, speaking HTTP on localhost; **[AMENDED
+     2026-08-16: no dispatch seam — the subsystem is ON or OFF via
+     `SALIENCE=on` in settings, and the agent bootstraps its own
+     server when it's on and nothing is answering]**) steps all day: new curated tokens enter an ingest buffer the
      moment the narrator/archivist produces them, and **every step
      samples a mixed mini-batch** — fresh tokens + a reservoir of older
      synthetic data + standard nanochat data at a set replay ratio.
@@ -183,10 +185,13 @@ uses that context.
      recipe, never in-repo. **A fresh install treats seed data and
      standard nanochat data identically** — one ingest, one sampler,
      one mix; no install-time state machine and no grace-period
-     mechanism (owner's correction, 2026-08-15). `SALIENCE_CTL` points
-     at the frontier by default, indefinitely; moving any workload onto
-     the local model is a deliberate decision made someday, when it is
-     demonstrably good enough — informed by the continuously-running
+     mechanism (owner's correction, 2026-08-15). **[AMENDED
+     2026-08-16: salience defaults OFF (`SALIENCE` unset); turning it
+     on is the deliberate decision.]** When on, the resident model
+     judges at tick rate and the frontier stays the auditor — band
+     verdicts escalate, disagreements become curriculum. Moving any
+     *further* workload onto the local model is a decision made
+     someday, when it is demonstrably good enough — informed by the continuously-running
      eval suites and the syspack-shrinkage metric, which measure
      readiness without ever deciding it. The local model is an
      optimization every instance grows into, never a dependency of any
@@ -366,11 +371,15 @@ decayed twice; a second drift walked the claim to low; perceptions
 preempted; drive 0 froze acts; stop stopped. "Gapped" detection needs
 semantic judgment and waits for the salience tier.*
 
-### Phase 5 — The salience tier **[AMENDED: serving]**
-Orient's "does this matter?" judgment goes to nanochat behind its own
-seam (`SALIENCE_CTL`, same pattern), served from the resident
-online-learning service's **live pointer** (double-buffered weights,
-standing personality adapter). Escalation disagreements are logged as
+### Phase 5 — The salience tier **[AMENDED: serving; 2026-08-16: no
+seam]** Orient's "does this matter?" judgment goes to nanochat — ON
+or OFF via `SALIENCE=on` in botd.properties, nothing pluggable (owner:
+"no one is swapping nanochat out for something else"). The executive
+calls the `agent.model.salience` client directly; it answers from the
+resident service's **live pointer** (double-buffered weights, standing
+personality adapter), and if the service isn't running the agent
+builds and launches it itself (`agent.model.bootstrap`, fired once per
+start). Escalation disagreements are logged as
 training pairs; the epsilon-audit samples non-escalated verdicts.
 *Verify:* tick-rate orientation runs without frontier calls;
 escalation log fills with (input, nanochat-call, frontier-call) rows.

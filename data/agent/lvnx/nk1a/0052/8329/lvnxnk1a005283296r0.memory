@@ -17,5 +17,11 @@
     "tags": "phase5",
     "confidence": "high",
     "time": 1786817584351
+  },
+  {
+    "claim": "Owner correction 2026-08-16 (second): bootstrap is EAGER, never lazy - agent-executive-start fires agent.model.bootstrap in a background thread immediately when SALIENCE=on (a multi-hour install must not wait behind a perception). The loop itself never triggers installs; sal<0 just degrades. bootstrap takes ZERO parameters - everything comes from botd.properties; a manual call blocks through the whole install and returns the stage report. bootstrap_fired state field is gone.",
+    "tags": "phase5b",
+    "confidence": "high",
+    "time": 1786842118178
   }
 ]
