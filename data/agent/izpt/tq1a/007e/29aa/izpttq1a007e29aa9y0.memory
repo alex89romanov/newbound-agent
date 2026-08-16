@@ -52,5 +52,11 @@
     "tags": "process",
     "confidence": "high",
     "time": 1786892344869
+  },
+  {
+    "claim": "NANOCHAT_DIST (2026-08-16): multi-node base training through the same self-bootstrap. Setting nnodes=2,rank=<node>,master=IP:PORT,iface=<NCCL iface> rides the train.sh launch line as arg 4; empty = single-node --standalone unchanged. Rank 0 trains the tokenizer and writes train_done; other ranks download data (filelock-deduped on shared dirs), wait for tokenizer.pkl+token_bytes.pt, and join the torchrun rendezvous; iface exports NCCL_SOCKET_IFNAME. The base dir must hold identical data on all nodes (NFS or pre-sync). Malformed specs (missing port) fail fast with a FATAL line. Built for the owners DGX Spark pair over ConnectX-7; ray is not involved - nanochat is plain torchrun DDP. Verified by dry-run harness (fake nvidia-smi/torchrun/python): correct torchrun args in single, rank-0, rank-1 modes; rank-1 tokenizer wait and train_done guard; bad-spec rejection.",
+    "tags": "phase6",
+    "confidence": "high",
+    "time": 1786894731163
   }
 ]
