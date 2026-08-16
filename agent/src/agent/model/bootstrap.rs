@@ -218,7 +218,37 @@ let probe = || ureq::AgentBuilder::new()
     .call()
     .is_ok();
 let mut service = "already_running".to_string();
-if !probe() {
+// Converge a stale service: if one is answering but was started from an
+// older script than the one just shipped (/status reports stale_script
+// by comparing its file's mtime to its own start), kill it by the pid
+// it reports and fall through to a fresh launch. Without this, a repo
+// update leaves an old process holding the port and the report reads
+// already_running while the behavior is last week's.
+let mut was_stale = false;
+if probe() {
+    if let Ok(r) = ureq::AgentBuilder::new()
+        .timeout(std::time::Duration::from_millis(1500))
+        .build()
+        .get(&status_url)
+        .call() {
+        if let Ok(t) = r.into_string() {
+            if let Ok(d) = DataObject::try_from_string(&t) {
+                if matches!(d.try_get_boolean("stale_script"), Ok(true)) {
+                    if let Ok(pid) = d.try_get_int("pid") {
+                        let mut x = DataArray::new();
+                        x.push_string("bash");
+                        x.push_string("-c");
+                        x.push_string(&format!("kill {} 2>/dev/null; sleep 0.6", pid));
+                        let r = system_call(x);
+                        println!("BOOTSTRAP RESTART STALE SERVICE pid {} {}", pid, r.to_string());
+                        was_stale = true;
+                    }
+                }
+            }
+        }
+    }
+}
+if was_stale || !probe() {
     // Real checkpoint: the venv python (torch et al) with PYTHONPATH at
     // the clone, since the nanochat package is deliberately uninstalled.
     let (py, envprefix) = if checkpoint == "stub" {
@@ -252,7 +282,7 @@ if !probe() {
         if probe() { up = true; break; }
     }
     if up {
-        service = "launched".to_string();
+        service = if was_stale { "relaunched".to_string() } else { "launched".to_string() };
     } else {
         service = "launch_failed".to_string();
         o.put_string("status", "err");

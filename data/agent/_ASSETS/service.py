@@ -253,9 +253,19 @@ class Handler(BaseHTTPRequestHandler):
             else:
                 mode = "waiting"
             ck = os.path.join(self.server.args.data_dir, "checkpoints")
+            # stale_script: the file this process was started from has
+            # been rewritten since (bootstrap ships a newer asset) - the
+            # running code predates it. Bootstrap reads this and
+            # converges: kill by the pid reported here, relaunch.
+            try:
+                stale = os.path.getmtime(os.path.abspath(__file__)) > START + 1
+            except OSError:
+                stale = False
             self._json(200, {
                 "status": "ok",
                 "mode": mode,
+                "pid": os.getpid(),
+                "stale_script": stale,
                 "boot_error": STATE["boot_error"],
                 "live_slot": live,
                 "checkpoint": getattr(scorer, "checkpoint", self.server.args.checkpoint),

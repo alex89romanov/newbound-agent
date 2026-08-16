@@ -28,5 +28,11 @@
     "tags": "phase5b",
     "confidence": "high",
     "time": 1786843815148
+  },
+  {
+    "claim": "Bootstrap converges stale services (2026-08-16): /status reports pid and stale_script (file mtime newer than process start). When bootstrap finds a service answering but stale, it kills that pid and relaunches -> service: relaunched. Without this, a repo update left an old process holding the port reporting already_running while running last weeks code - bit the owner twice. One manual kill is needed only for services started before this shipped (they report neither field).",
+    "tags": "phase5b",
+    "confidence": "high",
+    "time": 1786844579176
   }
 ]
