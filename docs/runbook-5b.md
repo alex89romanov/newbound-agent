@@ -80,6 +80,21 @@ GPU-hours step. Size it to the hardware with:
     # still OOM? drop --device-batch-size to 4 (grad accum keeps the
     # total batch identical; chat_sft inherits the size from pretrain)
 
+**Multi-node** (e.g. a DGX Spark pair over its ConnectX link): set on
+each node, with only `rank=` differing —
+
+    NANOCHAT_DIST=nnodes=2,rank=0,master=192.168.100.1:29500,iface=<if>
+
+Every node runs the same bootstrap; rank 0 trains the tokenizer and
+writes `train_done`, other ranks wait for the tokenizer then join the
+torchrun rendezvous (`iface=` sets `NCCL_SOCKET_IFNAME` — use the
+ConnectX interface). The `MODEL_CHECKPOINT` base dir must hold the
+same data on every node: share it over NFS (downloads are
+filelock-guarded, concurrent nodes dedupe) or pre-sync local copies.
+Empty/unset = single node, exactly as before. On 128GB-unified boxes
+raise the batch: `--device-batch-size=32` (and the pair's real payoff
+is depth the 32GB card can't hold, e.g. `--depth=26`).
+
 Meanwhile the service sits in `mode: waiting` and retries its load
 every 60s — verdicts begin on their own the moment base weights land.
 Training ends with `chat_sft`; if the service picked up the bare base

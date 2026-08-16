@@ -184,11 +184,15 @@ if checkpoint != "stub" && nanochat_env != "install_failed" {
                 }
             }
             let targs = prop("NANOCHAT_TRAIN_ARGS", "--depth=20 --device-batch-size=8 --window-pattern=L");
+            // NANOCHAT_DIST wires a multi-node run (e.g. a DGX Spark
+            // pair over ConnectX): nnodes=2,rank=<this node>,
+            // master=IP:PORT,iface=<NCCL iface>. Empty = single node.
+            let dist = prop("NANOCHAT_DIST", "");
             let mut cmd = "cd ".to_string();
             cmd += &modeldir.display().to_string();
             cmd += &format!(
-                "; nohup bash train.sh '{}' '{}' '{}' >> train.log 2>&1 & echo $! > train.pid",
-                checkpoint, nc.display(), targs);
+                "; nohup bash train.sh '{}' '{}' '{}' '{}' >> train.log 2>&1 & echo $! > train.pid",
+                checkpoint, nc.display(), targs, dist);
             let mut x = DataArray::new();
             x.push_string("bash");
             x.push_string("-c");
