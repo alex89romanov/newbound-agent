@@ -52,7 +52,7 @@ o.put_int("next_act_in_ms", if next_at > now { next_at - now } else { 0 });
 if ex.has("last_act") {
     o.put_object("last_act", ex.get_object("last_act"));
 }
-for k in ["salience_calls", "escalations", "audits", "esc_dropped", "disagreements"] {
+for k in ["salience_calls", "escalations", "audits", "esc_dropped", "disagreements", "fast_skips", "deep_orients"] {
     o.put_int(k, if ex.has(k) { ex.get_int(k) } else { 0 });
 }
 o

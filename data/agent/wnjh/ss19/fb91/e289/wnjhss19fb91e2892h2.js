@@ -634,7 +634,10 @@ async function init(host) {
         ["disagreements", ex.disagreements ?? 0, (ex.disagreements ?? 0) > 0 ? "warn" : ""],
         ["drive (acts/hr)", ex.drive ?? "—"],
         ["epistemic acts", ex.acts_total ?? "—"],
-        ["last verdict", ctx.salience != null ? `${ctx.salience} — ${(ctx.salience_why || "").slice(0, 60)}` : "none"],
+        ["steer fast / deep", `${ex.fast_skips ?? 0} / ${ex.deep_orients ?? 0}`],
+        ["last verdict", ctx.salience != null
+          ? `${ctx.salience}${ctx.steer ? ` [${ctx.steer}]` : ""} — ${(ctx.salience_why || "").slice(0, 56)}`
+          : "none"],
       ]);
     host.querySelector('[data-act="exec-toggle"]').textContent = ex.running ? "stop executive" : "start executive";
     host.querySelector('[data-act="sensor-toggle"]').textContent = sn.running ? "stop sensor" : "start sensor";

@@ -11,8 +11,15 @@
 // Bootstrap is idempotent - a no-op probe when everything is already
 // up. While the service isn't answering, the loop runs degraded - no
 // verdict, nothing else changes. Verdicts are
-// RECORDED, not acted on: the verdict stream and audit trail come
-// first, behavioral gating later. Uncertain verdicts (0.35..=0.65,
+// STEERING as of Phase 7 (owner go-ahead, 2026-08-17): the verdict is
+// computed FIRST, on bound-claims-only context - the same conditions
+// the agreement gate measures under - and then steers orientation.
+// Below SALIENCE_BANDS low= the perception takes the FAST PATH: no
+// recall, no escalation exposure, but the epsilon audit still applies,
+// so the fast lane never goes unobserved. Above high= it earns DEEP
+// orientation (deep= recall limit instead of 3). Between, exactly the
+// old behavior. SALIENCE_STEER=off (live key) reverts to
+// record-don't-act. Uncertain verdicts (0.35..=0.65,
 // owner-blessed) escalate to the frontier and the disagreement lands in
 // the runtime salience log - curriculum feedstock. A deterministic 5%
 // epsilon-audit samples confident verdicts so the local judge never
@@ -67,6 +74,37 @@ fn salience_on() -> bool {
         let v = v.trim().to_lowercase();
         v == "on" || v == "true" || v == "1" || v == "yes"
     }).unwrap_or(false)
+}
+fn steer_cfg() -> (bool, f64, f64, i64) {
+    // SALIENCE_STEER=off disables steering live. SALIENCE_BANDS tunes
+    // it: low=0.2,high=0.8,deep=6. The escalation band (0.35..=0.65)
+    // is separate and owner-blessed; keep low/high outside it.
+    fn rprop(key: &str) -> Option<String> {
+        let s = DataStore::globals().try_get_object("system").ok()?;
+        let a = s.try_get_object("apps").ok()?;
+        let g = a.try_get_object("agent").ok()?;
+        let r = g.try_get_object("runtime").ok()?;
+        match r.try_get_string(key) {
+            Ok(v) if !v.trim().is_empty() => Some(v.trim().to_string()),
+            _ => None,
+        }
+    }
+    let on = rprop("SALIENCE_STEER").map(|v| v.to_lowercase() != "off").unwrap_or(true);
+    let mut low = 0.2f64;
+    let mut high = 0.8f64;
+    let mut deep = 6i64;
+    if let Some(spec) = rprop("SALIENCE_BANDS") {
+        for part in spec.split(',') {
+            if let Some(eq) = part.find('=') {
+                let k = part[..eq].trim();
+                let v = part[eq + 1..].trim();
+                if k == "low" { if let Ok(f) = v.parse() { low = f; } }
+                else if k == "high" { if let Ok(f) = v.parse() { high = f; } }
+                else if k == "deep" { if let Ok(i) = v.parse() { deep = i; } }
+            }
+        }
+    }
+    (on, low, high, deep)
 }
 // The escalation log: runtime-library record, instance-owned like
 // archivist_queue, capped, unjournaled (so the store sensor never
@@ -154,30 +192,11 @@ std::thread::spawn(move || {
                         }
                     }
                 }
-                let looked = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                    let cmd = Command::lookup("agent", "archivist", "recall");
-                    let mut args = DataObject::new();
-                    args.put_string("query", &qs);
-                    args.put_string("domains", "");
-                    args.put_int("limit", 3);
-                    cmd.execute(args)
-                }));
-                if let Ok(Ok(r)) = looked {
-                    if r.has("a") {
-                        let a = r.get_object("a");
-                        if a.has("status") && a.get_string("status") == "ok" {
-                            ctx.put_int("matched", a.get_int("matched"));
-                            let cl = a.get_array("claims");
-                            if cl.len() > 0 {
-                                let top = cl.get_object(0);
-                                if top.has("claim") { ctx.put_string("top_claim", &top.get_string("claim")); }
-                                if top.has("home") { ctx.put_string("top_home", &top.get_string("home")); }
-                                if top.has("stale") { ctx.put_boolean("top_stale", top.get_boolean("stale")); }
-                            }
-                        }
-                    }
-                }
-                // ── salience (Phase 5a/5b) ──────────────────────────────
+                // ── salience first (Phases 5-7): the verdict is computed
+                // on bound-claims-only context - the same conditions the
+                // agreement gate measures under - then STEERS how much
+                // orientation this perception earns. ────────────────────
+                let mut recall_limit: i64 = 3;
                 if salience_on() {
                     let judged = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                         salience(p.deep_copy(), ctx.deep_copy())
@@ -189,6 +208,24 @@ std::thread::spawn(move || {
                             ex.put_int("salience_calls", n + 1);
                             ctx.put_float("salience", sal);
                             if a.has("reasoning") { ctx.put_string("salience_why", &a.get_string("reasoning")); }
+                            let (steer_on, lo, hi, deep) = steer_cfg();
+                            if steer_on {
+                                if sal < lo {
+                                    // the fast path: noise earns no recall
+                                    ctx.put_string("steer", "fast");
+                                    recall_limit = 0;
+                                    let c = if ex.has("fast_skips") { ex.get_int("fast_skips") } else { 0 };
+                                    ex.put_int("fast_skips", c + 1);
+                                } else if sal > hi {
+                                    // deep orientation: critical earns more memory
+                                    ctx.put_string("steer", "deep");
+                                    recall_limit = deep;
+                                    let c = if ex.has("deep_orients") { ex.get_int("deep_orients") } else { 0 };
+                                    ex.put_int("deep_orients", c + 1);
+                                } else {
+                                    ctx.put_string("steer", "normal");
+                                }
+                            }
                             let band = sal >= 0.35 && sal <= 0.65;
                             // Deterministic epsilon: hash of query +
                             // perception time - reproducible sampling,
@@ -253,6 +290,32 @@ std::thread::spawn(move || {
                         // sal < 0: no verdict - the service is down or
                         // still bootstrapping. Degrade in place; the
                         // eager bootstrap at start owns recovery.
+                    }
+                }
+                // orient: recall at the steered depth (fast path skips)
+                if recall_limit > 0 {
+                    let looked = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                        let cmd = Command::lookup("agent", "archivist", "recall");
+                        let mut args = DataObject::new();
+                        args.put_string("query", &qs);
+                        args.put_string("domains", "");
+                        args.put_int("limit", recall_limit);
+                        cmd.execute(args)
+                    }));
+                    if let Ok(Ok(r)) = looked {
+                        if r.has("a") {
+                            let a = r.get_object("a");
+                            if a.has("status") && a.get_string("status") == "ok" {
+                                ctx.put_int("matched", a.get_int("matched"));
+                                let cl = a.get_array("claims");
+                                if cl.len() > 0 {
+                                    let top = cl.get_object(0);
+                                    if top.has("claim") { ctx.put_string("top_claim", &top.get_string("claim")); }
+                                    if top.has("home") { ctx.put_string("top_home", &top.get_string("home")); }
+                                    if top.has("stale") { ctx.put_boolean("top_stale", top.get_boolean("stale")); }
+                                }
+                            }
+                        }
                     }
                 }
                 ex.put_object("last_context", ctx);
