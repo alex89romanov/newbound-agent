@@ -604,7 +604,88 @@ async function init(host) {
     return (e.data && typeof e.data === "object") ? { status: e.status, ...e.data } : e;
   };
 
+  // ── the persona editor: the corpus the 8b adapter derives from.
+  // Loaded once per session (the 5s poll never stomps edits); the
+  // empty corpus shows the shipped default seed until the owner saves.
+  let personaRows = null;
+  let personaDirty = false;
+  function renderPersona() {
+    const box = host.querySelector("[data-persona]");
+    box.textContent = "";
+    (personaRows || []).forEach((row, i) => {
+      const div = document.createElement("div");
+      div.className = "ag-persona-row";
+      const isPair = row && typeof row === "object" && !("messages" in row)
+        && ("user" in row || "assistant" in row) && row.__rawText == null;
+      if (isPair) {
+        const tu = document.createElement("textarea");
+        tu.placeholder = "user says…";
+        tu.value = row.user ?? "";
+        tu.addEventListener("input", () => { row.user = tu.value; personaDirty = true; });
+        const ta = document.createElement("textarea");
+        ta.placeholder = "the agent answers…";
+        ta.value = row.assistant ?? "";
+        ta.addEventListener("input", () => { row.assistant = ta.value; personaDirty = true; });
+        div.append(tu, ta);
+      } else {
+        const tr = document.createElement("textarea");
+        tr.className = "ag-persona-raw";
+        tr.value = row.__rawText != null ? row.__rawText : JSON.stringify(row);
+        tr.addEventListener("input", () => { row.__rawText = tr.value; personaDirty = true; });
+        div.append(tr);
+      }
+      const del = document.createElement("button");
+      del.className = "ag-mind-btn ag-persona-del";
+      del.textContent = "×";
+      del.title = "remove this exchange";
+      del.addEventListener("click", () => {
+        personaRows.splice(i, 1); personaDirty = true; renderPersona();
+      });
+      div.append(del);
+      box.append(div);
+    });
+  }
+  async function loadPersona(force) {
+    if (personaDirty && !force) return;
+    const r = mEnv(await invoke("agent", "model", "persona_read", {}));
+    const state = host.querySelector("[data-persona-state]");
+    if (!r || r.status !== "ok") {
+      state.textContent = "persona read failed: " + ((r && r.msg) || "no reply");
+      return;
+    }
+    personaRows = r.rows || [];
+    personaDirty = false;
+    renderPersona();
+    state.textContent = r.seed
+      ? "showing the DEFAULT SEED — nothing saved yet; edit to taste, then save to adopt it"
+      : `${personaRows.length} rows on disk`
+        + (r.invalid ? ` · ${r.invalid} unparseable lines skipped` : "");
+  }
+  async function savePersona() {
+    const lines = [];
+    for (const row of personaRows || []) {
+      if (row.__rawText != null) {
+        try { lines.push(JSON.stringify(JSON.parse(row.__rawText))); }
+        catch { mindNote("persona", "a raw row is not valid JSON — fix it before saving", true); return; }
+      } else if ("user" in row || "assistant" in row) {
+        if (!(row.user || "").trim() && !(row.assistant || "").trim()) continue;
+        lines.push(JSON.stringify({ user: row.user || "", assistant: row.assistant || "" }));
+      } else {
+        lines.push(JSON.stringify(row));
+      }
+    }
+    const r = mEnv(await invoke("agent", "model", "persona_write", { content: lines.join("\n") }));
+    if (r && r.status === "ok") {
+      mindNote("persona", `saved ${r.rows} rows (${r.heldout} held out for the probe)`);
+      loadPersona(true);
+      loadMind();
+    } else {
+      mindNote("persona", "save failed: " + ((r && r.msg) || "no reply"), true);
+    }
+  }
+
   async function loadMind() {
+    if (personaRows === null) { personaRows = []; loadPersona(true); }
     if (!mindWired) { mindWired = true; wireMind(); }
     if (!mindTimer) mindTimer = setInterval(() => {
       const pane = host.querySelector('[data-pane="mind"]');
@@ -861,6 +942,13 @@ async function init(host) {
       mindNote("judge", r ? JSON.stringify(r) : "user promote: no reply", !(r && r.status === "ok"));
       loadMind();
     });
+    act("persona-add").addEventListener("click", () => {
+      (personaRows = personaRows || []).push({ user: "", assistant: "" });
+      personaDirty = true;
+      renderPersona();
+    });
+    act("persona-save").addEventListener("click", savePersona);
+    act("persona-reload").addEventListener("click", () => loadPersona(true));
     act("rederive").addEventListener("click", async (ev) => {
       ev.currentTarget.disabled = true;
       mindNote("judge", "deriving the personality adapter — a LoRA training run; this can take a few minutes…");

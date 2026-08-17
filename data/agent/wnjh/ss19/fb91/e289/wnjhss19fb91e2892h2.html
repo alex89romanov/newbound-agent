@@ -155,6 +155,22 @@
           <p class="lbl">live keys (SALIENCE, the LLM arm) apply immediately; each row says when the rest take effect. blank a value to revert to its default. secret keys stay file-only.</p>
           <div class="ag-conf" data-conf></div>
         </div>
+        <div class="ag-card" data-card="persona-editor">
+          <p class="ag-card-t lbl">the persona — how the local model speaks</p>
+          <p class="lbl">one exchange per row; every 5th row is held out for the probe and
+            never trained on. saving takes effect at the service's next gate tick — and a
+            big rewrite can slip the probe and trigger re-derivation on its own.</p>
+          <p class="lbl ag-persona-state" data-persona-state></p>
+          <div class="ag-persona" data-persona></div>
+          <span class="ag-btnrow">
+            <button class="ag-mind-btn" data-act="persona-add">add exchange</button>
+            <button class="ag-mind-btn" data-act="persona-save"
+              title="validate and write the whole corpus (atomic); a bad row rejects the write with its line number">save persona</button>
+            <button class="ag-mind-btn" data-act="persona-reload"
+              title="discard unsaved edits and reload from disk (or the default seed when nothing is saved)">reload</button>
+          </span>
+          <pre class="ag-mind-note lbl" data-note="persona"></pre>
+        </div>
       </div>
     </section>
   </main>
