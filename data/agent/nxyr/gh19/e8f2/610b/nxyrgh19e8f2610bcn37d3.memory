@@ -98,5 +98,12 @@
     "tags": "llm,claudecode,arm,verified",
     "confidence": "high",
     "time": 1786996729608
+  },
+  {
+    "claim": "The inside delegate's CLAUDE.md-equivalent is FOUR store-resident prompt layers, all riding every chat turn as system messages (both surfaces assemble them; the bridge folds all system messages into --system-prompt): (1) the platform curriculum (agent.prompts prompt facet), (2) the venue shell + auto-injected memory index, (3) the owner addendum (agentprompt control js facet), (4) the RESIDENT CONTEXT the claude_code bridge itself injects whenever CLAUDE_CODE_MCP is set (CLAUDE_CODE_CONTEXT=off suppresses): where it is (LIVE instance), its hands (store commands as MCP tools, every param required), write rules (journaled commands only), the memory ritual (recall to orient; remember only for user asks or durable lessons), doc locations - and an explicit override of the native find_tools/call_command tool instructions, which describe a harness the delegate does not have. Verified live in full-agent posture: the delegate MCP-called the store, quoted a real command desc, and recited the write rules. Gotcha: bypassPermissions is refused under root - run the instance as a normal user, or CLAUDE_CODE_ARGS=--allowedTools mcp__newbound with empty permission mode.",
+    "detail": "Environment knowledge attaches at the layer that knows the environment: the bridge knows whether the delegate has hands, so the bridge injects the rules that govern hands. Full-agent verification turn cost ~$0.35 (MCP schemas + 2 turns) vs ~$0.008-0.016 for oracle calls.",
+    "tags": "llm,claudecode,resident-context,prompts",
+    "confidence": "high",
+    "time": 1786997803520
   }
 ]
