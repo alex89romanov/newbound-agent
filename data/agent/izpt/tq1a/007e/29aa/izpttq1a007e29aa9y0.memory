@@ -64,5 +64,11 @@
     "tags": "phase6b",
     "confidence": "high",
     "time": 1786900393518
+  },
+  {
+    "claim": "GPU release/resume (2026-08-17): the agents whole GPU footprint is the one service process. POST /shutdown (agent-model-service_stop; mind tab release GPU button) exits cleanly - ring/replay/heldout/metrics survive, only unpromoted candidate steps are lost. Resume via bootstrap: make_scorer now prefers the NEWEST RING CHECKPOINT (NanochatScorer.from_ring: build_model on the cpt dir, tokenizer from the base dir) over the birth checkpoint, so promoted CPT progress carries across restarts - this also fixed /promote in real mode, which wrongly constructed NanochatScorer(ring_dir) as if a ring dir were a base dir. Ring dirs are now time-named (cpt-<ts>-<steps>) so steps-counter resets cannot collide. SALIENCE=off (live key) keeps the service down across executive restarts.",
+    "tags": "gpu",
+    "confidence": "high",
+    "time": 1786963748247
   }
 ]

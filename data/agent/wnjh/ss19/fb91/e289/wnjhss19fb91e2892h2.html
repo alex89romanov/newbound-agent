@@ -109,6 +109,8 @@
               title="idempotent oneshot: install env if configured, train if the checkpoint dir is empty, write scripts, launch/converge the service">bootstrap</button>
             <button class="ag-mind-btn" data-act="promote"
               title="load the newest ring checkpoint into the inactive slot and swap the live pointer">promote pointer</button>
+            <button class="ag-mind-btn" data-act="release"
+              title="stop the service and free ALL of the agent's GPU memory; ring checkpoints, replay, and metrics survive - resume with bootstrap (loads the newest ring checkpoint). set SALIENCE=off too if you want it to stay off across executive restarts">release GPU</button>
           </span>
           <pre class="ag-mind-note lbl" data-note="judge"></pre>
         </div>

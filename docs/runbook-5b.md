@@ -162,6 +162,20 @@ rotates the checkpoint ring:
     tools/nb-call.py agent-model-curriculum_export \
         '{"path": "runtime/agent/model/ingest/batch-day1.jsonl"}'
 
+## 5b. Sharing the GPU
+
+The agent's entire GPU footprint is the one service process. To take
+the GPU back: the mind tab's **release GPU** button (or
+`agent-model-service_stop`) — clean exit, everything freed. Ring
+checkpoints, the replay reservoir, held-out sets, and metrics survive
+on disk; the only loss is the candidate's steps since its last
+promotion. Resume: **bootstrap** — the relaunched service loads the
+NEWEST RING CHECKPOINT, so gate-promoted CPT progress carries across
+the off/on cycle (verified: trained to cpt-168, shut down, relaunched,
+resumed serving cpt-168). To keep it off across an executive restart
+(which fires bootstrap eagerly), flip `SALIENCE=off` in the config
+card first — it's a live key — and back `on` before resuming.
+
 ## 6. The degradation drill (once, deliberately)
 
 Kill the service by PID: the loop keeps running, `last_context` simply

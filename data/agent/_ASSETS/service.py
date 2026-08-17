@@ -215,6 +215,27 @@ class NanochatScorer:
         self.name = f"nanochat:{source}"
 
     @classmethod
+    def from_ring(cls, base_checkpoint, ring_dir):
+        """Load a ring checkpoint (a gate-promoted CPT candidate) with
+        the tokenizer from the nanochat base dir - so a restarted
+        service resumes at its own latest promotion instead of
+        regressing to the birth checkpoint."""
+        os.environ["NANOCHAT_BASE_DIR"] = base_checkpoint
+        import torch
+        from nanochat.checkpoint_manager import build_model, find_last_step
+        from nanochat.engine import Engine
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        step = find_last_step(ring_dir)
+        model, tokenizer, meta = build_model(ring_dir, step, device, "eval")
+        self = object.__new__(cls)
+        self.checkpoint = base_checkpoint
+        self.tokenizer = tokenizer
+        self.engine = Engine(model, tokenizer)
+        self.meta = meta
+        self.name = f"nanochat:{os.path.basename(ring_dir)}"
+        return self
+
+    @classmethod
     def from_parts(cls, model, tokenizer, meta, name, checkpoint):
         """Wrap an in-memory model (a gate-passed candidate) as a scorer
         without touching disk - promotion through the double buffer."""
@@ -246,9 +267,23 @@ class NanochatScorer:
         return sal, why
 
 
-def make_scorer(checkpoint):
+def newest_ring(data_dir):
+    """Newest gate-promoted checkpoint dir (cpt-*, must hold weights)."""
+    import glob as _glob
+    dirs = sorted(d for d in _glob.glob(os.path.join(data_dir, "checkpoints", "cpt-*"))
+                  if _glob.glob(os.path.join(d, "model_*.pt")))
+    return dirs[-1] if dirs else None
+
+
+def make_scorer(checkpoint, data_dir):
     if checkpoint == "stub":
         return StubScorer()
+    ring = newest_ring(data_dir)
+    if ring:
+        try:
+            return NanochatScorer.from_ring(checkpoint, ring)
+        except Exception as e:
+            print(f"[service] ring load failed ({e}); falling back to base dir", flush=True)
     return NanochatScorer(checkpoint)
 
 
@@ -537,7 +572,8 @@ def trainer_real(args):
         if verdict == "promote":
             try:
                 from nanochat.checkpoint_manager import save_checkpoint
-                ckdir = os.path.join(args.data_dir, "checkpoints", f"cpt-{steps:06d}")
+                ckdir = os.path.join(args.data_dir, "checkpoints",
+                                     f"cpt-{time.strftime('%Y%m%d%H%M%S')}-{steps:06d}")
                 save_checkpoint(ckdir, steps,
                                 {k: v.detach().cpu() for k, v in candidate.state_dict().items()},
                                 None, {"model_config": dict(live.meta["model_config"])})
@@ -738,14 +774,25 @@ class Handler(BaseHTTPRequestHandler):
             with open(os.path.join(ingest, name), "w") as f:
                 f.write(raw)
             return self._json(200, {"status": "ok", "queued": name})
-        if self.path == "/promote":
+        if self.path == "/shutdown":
+            # The GPU off-switch: answer, then exit cleanly. Everything
+            # durable survives on disk (ring checkpoints, replay,
+            # held-out sets, metrics); the in-memory candidate's steps
+            # since its last promotion are the only loss. Bootstrap
+            # relaunches on demand and resumes at the newest ring
+            # checkpoint via make_scorer.
+            self._json(200, {"status": "ok", "msg": "shutting down"})
+            threading.Timer(0.3, lambda: os._exit(0)).start()
+            return
             # double-buffer: load into the slot NOT being served, then swap.
-            newest = newest_checkpoint(self.server.args)
+            args2 = self.server.args
+            newest = (newest_ring(args2.data_dir)
+                      if args2.checkpoint != "stub" else newest_checkpoint(args2))
             try:
                 scorer = (
-                    StubScorer(tag=os.path.basename(newest))
-                    if (newest is None or self.server.args.checkpoint == "stub")
-                    else NanochatScorer(newest)
+                    StubScorer(tag=os.path.basename(newest) if newest else "stub")
+                    if (newest is None or args2.checkpoint == "stub")
+                    else NanochatScorer.from_ring(args2.checkpoint, newest)
                 )
             except Exception as e:
                 return self._json(500, {"status": "err", "msg": f"load failed: {e}"})
@@ -774,7 +821,7 @@ def load_initial(args):
     answers 503 throughout, which the executive treats as no-verdict."""
     while True:
         try:
-            scorer = make_scorer(args.checkpoint)
+            scorer = make_scorer(args.checkpoint, args.data_dir)
             with LOCK:
                 STATE["slots"]["A"] = scorer
                 STATE["loading"] = False

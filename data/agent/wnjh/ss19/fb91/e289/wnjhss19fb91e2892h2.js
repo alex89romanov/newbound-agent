@@ -799,6 +799,13 @@ async function init(host) {
       mindNote("judge", r ? JSON.stringify(r) : "promote: no reply", !(r && r.status === "ok"));
       loadMind();
     });
+    act("release").addEventListener("click", async () => {
+      const r = mEnv(await invoke("agent", "model", "service_stop", {}));
+      mindNote("judge", r && r.status === "ok"
+        ? "GPU released - the judge is down by request; resume with bootstrap (it reloads the newest ring checkpoint)"
+        : `release: ${r ? r.msg : "no reply"}`, !(r && r.status === "ok"));
+      loadMind();
+    });
     act("export").addEventListener("click", async () => {
       const ts = new Date().toISOString().replace(/[-:T]/g, "").slice(0, 14);
       const r = mEnv(await invoke("agent", "model", "curriculum_export",
