@@ -56,9 +56,35 @@ limit instead of 3); between, exactly the old behavior. Counters
     SALIENCE_BANDS=low=0.2,high=0.8,deep=6   # keep low/high outside
                                              # the 0.35-0.65 escalation band
 
-Still out of scope (Phase 8+): the separately-gated user-facing
-pointer, LoRA personality re-derivation, frontier-spend and
-perception-rate stats.
+**Phase 8a is in (2026-08-17): the pointer splits in two.** The
+salience pointer stays the fast lane above. A **user-facing pointer**
+now serves `/chat` and only advances through a stricter, slower gate:
+a candidate must have SOAKED as the salience pointer (`soak_s=`
+seconds and `verdicts=` served verdicts - the fast lane is the slow
+lane's canary), the last agreement measurement must clear `agree=`,
+and held-out standard loss must not have crept past the last user
+promotion by `regress=`. `mode=manual` (the default) stops there: the
+mind tab shows **READY with evals attached** and waits for your
+click (`promote user pointer`, or `agent-model-user_promote`);
+`mode=auto` promotes on its own. A watchdog re-audits the serving
+user pointer against the growing held-out pair set every `check_s=`
+seconds and auto-rolls-back to last_good if its agreement decays;
+`roll back` / `agent-model-user_rollback` is the manual twin. Both
+user checkpoints are protected from ring pruning; the pointer
+persists across restarts (`user_pointer.json`); soak clocks reset on
+restart, deliberately.
+
+    USER_GATE=mode=manual,soak_s=21600,verdicts=100,agree=0.75,regress=0.05,check_s=300
+
+**Routing chat to it is a separate, deliberate flip**: `LLM=LOCAL` in
+botd sends the agent app's chat to the user pointer (text-only - no
+tool calls; the service refuses until a pointer is promoted). At
+d20-scale quality, leave `LLM` on your frontier arm and let the
+machinery run ahead of its passenger - that is the point of gating it
+separately.
+
+Still out of scope (Phase 8b+): LoRA personality re-derivation (it
+will ride the user pointer, not the salience one).
 
 ## Settings (runtime/agent/botd.properties)
 

@@ -70,5 +70,19 @@
     "tags": "gpu",
     "confidence": "high",
     "time": 1786963748247
+  },
+  {
+    "claim": "Phase 8a (2026-08-17): the pointer is split. The salience pointer stays the fast permissive lane; the USER-FACING pointer serves the service's /chat and advances only through the stricter USER_GATE (mode=manual|auto, soak_s + verdicts served AS the salience pointer, agree floor from the trainer's last gate, regress slack vs the last user promotion's held-out standard loss, check_s cadence). mode=manual parks the candidate as READY-with-evals for agent-model-user_promote (the mind tab button); a READY candidate is CLEARED the moment a newer promotion takes the fast lane - it qualifies only while it IS the canary. A watchdog re-audits the serving user pointer against the growing held-out pair set and auto-rolls-back to last_good on agreement decay; agent-model-user_rollback is the manual twin (one step, not a stack). User checkpoints are ring-pruning-protected; the pointer persists in user_pointer.json; soak clocks reset on restart. LLM=LOCAL in botd routes agent-app chat to it (text-only, no tools; 503 until promoted).",
+    "detail": "Verified 12/12 in real mode on the fabricated tiny base (staged battery: train-on phases for ring production, train-off phases for stable soak) plus the full endpoint surface in stub mode and platform integration (bootstrap passes --user-gate, commands, LOCAL arm, mind tab) on a disposable.",
+    "tags": "model,user-pointer,phase8a,gate",
+    "confidence": "high",
+    "time": 1786986028419
+  },
+  {
+    "claim": "The service's /promote endpoint was unreachable from the moment /shutdown landed (GPU-release phase) until Phase 8a: the /shutdown insertion accidentally replaced the 'if self.path == /promote:' line, leaving the whole promote body as dead code after a return - every promote_pointer call 404ed. Restored in Phase 8a. Lesson: after inserting an early-return path into a chained handler, re-read the whole chain - the battery that validated /shutdown did not re-test its neighbors.",
+    "detail": "Found by reading, not by a failure report - the owner's promote-pointer screenshot predated the /shutdown change.",
+    "tags": "model,service,regression",
+    "confidence": "high",
+    "time": 1786986028499
   }
 ]

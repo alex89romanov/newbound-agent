@@ -654,6 +654,29 @@ async function init(host) {
       ["load error", sv.boot_error || "none", sv.boot_error ? "err" : ""],
     ]);
 
+    // the user-facing pointer (8a): the stricter lane's state
+    const u = sv.user || {};
+    const soak = u.soak || {};
+    const uCls = u.serving ? "ok" : (u.ready ? "warn" : "off");
+    const uTxt = u.serving ? `serving ${u.name}` : (u.ready ? `READY: ${u.ready}` : "lagging (by design)");
+    const soakTxt = u.soaking
+      ? `${u.soaking} · ${Math.floor((soak.since_s ?? 0) / 3600)}h ${Math.floor(((soak.since_s ?? 0) % 3600) / 60)}m · ${soak.verdicts ?? 0} verdicts`
+      : "—";
+    const ev = u.eval || {};
+    kv("userptr").innerHTML = mChip(uTxt, uCls) + mKv([
+      ["soaking on the fast lane", soakTxt],
+      ["ready candidate", u.ready ? `${u.ready} (evals attached)` : "none"],
+      ["last promotion eval", ev.agree != null || ev.std != null
+        ? `agree ${ev.agree ?? "—"} · std ${ev.std?.toFixed?.(4) ?? ev.std ?? "—"}` : "—"],
+      ["watchdog re-audit", ev.watch_agree != null ? `agree ${ev.watch_agree}` : "not yet"],
+      ["promotions / rollbacks", `${u.promotions ?? 0} / ${u.rollbacks ?? 0}`],
+      ["rollback target", u.last_good || "none"],
+    ]);
+    const upBtn = host.querySelector('[data-act="user-promote"]');
+    const urBtn = host.querySelector('[data-act="user-rollback"]');
+    upBtn.hidden = !u.ready;
+    urBtn.hidden = !u.last_good;
+
     // the flywheel
     const t = sv.trainer || {};
     kv("flywheel").innerHTML =
@@ -812,6 +835,16 @@ async function init(host) {
     act("promote").addEventListener("click", async () => {
       const r = mEnv(await invoke("agent", "model", "promote_pointer", {}));
       mindNote("judge", r ? JSON.stringify(r) : "promote: no reply", !(r && r.status === "ok"));
+      loadMind();
+    });
+    act("user-promote").addEventListener("click", async () => {
+      const r = mEnv(await invoke("agent", "model", "user_promote", {}));
+      mindNote("judge", r ? JSON.stringify(r) : "user promote: no reply", !(r && r.status === "ok"));
+      loadMind();
+    });
+    act("user-rollback").addEventListener("click", async () => {
+      const r = mEnv(await invoke("agent", "model", "user_rollback", {}));
+      mindNote("judge", r ? JSON.stringify(r) : "user rollback: no reply", !(r && r.status === "ok"));
       loadMind();
     });
     act("release").addEventListener("click", async () => {

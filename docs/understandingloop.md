@@ -464,6 +464,29 @@ deliberately-poisoned batch triggers auto-rollback for stated reasons.
 *Unblocks:* the goal itself: learnings landing in weights, safely, as
 they happen.
 
+*Phase 8a — the split pointer — executed 2026-08-17 on
+claude/phase8a-userptr. The doctrine's risk asymmetry made mechanical:
+the salience pointer stays the fast, permissive, audited lane; the
+USER-FACING pointer serves /chat and advances only through the
+stricter gate (soak as the salience pointer for USER_GATE soak_s= +
+verdicts=, agreement floor, no held-out-standard creep), with
+mode=manual (default) parking the candidate as READY-with-evals for
+the owner's deliberate click in the mind tab, mode=auto for later. A
+watchdog re-audits the serving user pointer against the growing
+held-out pair set and auto-rolls-back to last_good on agreement
+decay. User checkpoints are pruning-protected; the pointer persists
+across restarts; soak clocks reset on restart, conservatively.
+LLM=LOCAL routes the agent app's chat to it - a separate deliberate
+flip, left OFF until the evals say the model deserves the traffic.
+Also fixed en route: /promote had been unreachable since the
+/shutdown endpoint landed (its path check was lost; the mind tab
+button 404ed). Verified in stub mode (full endpoint surface) and in
+real mode on the fabricated tiny base (trainer promotion -> soak ->
+READY -> manual promote -> real /chat generation -> second promotion
+sets last_good -> ring pruning spares the user checkpoints -> restart
+restores the pointer -> impossible-agreement relaunch triggers the
+watchdog's automatic rollback).*
+
 ## Sequencing rationale
 
 1 before 4: initiative needs claims to stand on. 3 before 6: the
