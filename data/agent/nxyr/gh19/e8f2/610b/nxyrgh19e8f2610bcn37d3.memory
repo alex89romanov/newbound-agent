@@ -91,5 +91,12 @@
     },
     "confidence": "high",
     "time": 1786882401513
+  },
+  {
+    "claim": "The CLAUDECODE arm (LLM=CLAUDECODE + LLM_CTL=agent:llm:claude_code) is verified end-to-end (2026-08-17): chat_llm and ask_llm both route through the Claude Code CLI bridge, so one botd flip covers the agent app chat, the dev-session chat plugin, AND salience escalations/audits at once. Verified on a disposable with real calls (chat_llm answered through the arm with cost_usd attached; ask_llm answered the same way). The CLI flags the bridge builds (-p/--output-format json/--no-session-persistence/--system-prompt/--tools/--effort/--mcp-config/--strict-mcp-config/--permission-mode) all exist in CLI 2.1.233. Two postures: cheap-oracle (default: tools off, system replaced, ~200 tokens/call) vs full-agent (SYSTEM_MODE=append + CLAUDE_CODE_MCP at newbound mcp + bypassPermissions + CWD at the checkout). Settings are live keys - read per call, no restart. Amusing verification note: the delegate REFUSED to echo the test string ESCALATION-OK (it pattern-matched an authorization-token probe) - the refusal itself proved the path; benign echoes pass.",
+    "detail": "Runbook section 8 has the recipe; CLAUDE_CODE_* keys now show in the config card. The bridge itself (agent.llm.claude_code) shipped earlier on the gpu-release-era branch with the auth/cost/process-group design notes in its source.",
+    "tags": "llm,claudecode,arm,verified",
+    "confidence": "high",
+    "time": 1786996729608
   }
 ]
