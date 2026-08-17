@@ -84,5 +84,12 @@
     "tags": "model,service,regression",
     "confidence": "high",
     "time": 1786986028499
+  },
+  {
+    "claim": "Phase 8b (2026-08-17): the personality adapter. A standing LoRA rides the USER-FACING pointer only (never the salience lane), derived inside the service from persona/persona.jsonl (rows {user,assistant} or {messages}; every 5th held out) via forward-hook LoRA on nanochat attention linears with masked assistant-token loss (render_conversation mask; ignore_index -1). USER_LORA=mode,rank,alpha,lr,steps,slack,min_gain,guard,targets (targets DOT-separated because parse_kv splits on commas). The first derivation fires automatically once a user pointer serves and the corpus has rows; after that the probe (held-out persona loss of the SERVING model, watchdog cadence) triggers background re-derivation when it slips past slack. Derivation gate: min_gain improvement on held-out persona loss AND standard-LM guard; rejection leaves serving untouched. adapter.pt persists and merges into fresh weights at every promotion/rollback/restart; the serving name grows a +lora suffix.",
+    "detail": "Verified 12/12 real-mode on the tiny base: auto first derivation (6.32->5.67 held-out), restart re-apply, probe-slip re-derivation after an owner corpus rewrite (reason=probe, 6.19->5.49), impossible-gate manual rejection with serving untouched, salience lane bare throughout.",
+    "tags": "model,lora,persona,phase8b",
+    "confidence": "high",
+    "time": 1786994899759
   }
 ]
