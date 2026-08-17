@@ -150,7 +150,16 @@ perception; binding scans claims whose source pointers name the changed
 every other sensor's *mechanism* is measured against, even when their
 bindings are soft.
 
-### Hollis (plugin; reference plugin)
+### Hollis (plugin; reference plugin) **[landed 2026-08-17]**
+
+The transcript row of the mapping below is live: the cortex's
+Transcript arm calls `emit_acoustic_perception` (home:
+`hollis.audio.inject`, which doubles as the manual test surface),
+binding via the agent's own recall on the resolved entity label and
+delivering through `perceive` by `Command::lookup` — a missing agent
+library is a counted skip, so hollis still runs standalone. The
+`emit=off` key in `system.apps.hollis.runtime` is the sensor's off
+switch. Remaining rows follow the same emit path as they are wired.
 
 Hollis's `SemanticEvent`/`EventKind` enum is ~80% of `acoustic_event`
 already; the mapping, which also retires its dead variants into

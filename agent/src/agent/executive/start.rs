@@ -362,6 +362,29 @@ std::thread::spawn(move || {
                         }
                     }
                 }
+                // per-sensor accounting - sensor-AGNOSTIC by design
+                // (owner's rule: agent never knows which sensors exist;
+                // rows are keyed by the envelope's own sensor field)
+                {
+                    let sname = if p.has("sensor") { p.get_string("sensor") } else { "unknown".to_string() };
+                    let mut sc = if ex.has("sensor_counts") { ex.get_object("sensor_counts") } else {
+                        let o2 = DataObject::new();
+                        ex.put_object("sensor_counts", o2.clone());
+                        o2
+                    };
+                    let mut row = if sc.has(&sname) { sc.get_object(&sname) } else { DataObject::new() };
+                    row.put_int("count", (if row.has("count") { row.get_int("count") } else { 0 }) + 1);
+                    row.put_int("last_time", time());
+                    if ctx.has("steer") {
+                        let st = ctx.get_string("steer");
+                        if st == "fast" {
+                            row.put_int("fast", (if row.has("fast") { row.get_int("fast") } else { 0 }) + 1);
+                        } else if st == "deep" {
+                            row.put_int("deep", (if row.has("deep") { row.get_int("deep") } else { 0 }) + 1);
+                        }
+                    }
+                    sc.put_object(&sname, row);
+                }
                 ex.put_object("last_context", ctx);
             }
             q.remove_property(0);

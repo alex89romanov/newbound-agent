@@ -95,6 +95,9 @@ if ex.has("last_act") {
 for k in ["salience_calls", "escalations", "audits", "esc_dropped", "disagreements", "fast_skips", "deep_orients"] {
     o.put_int(k, if ex.has(k) { ex.get_int(k) } else { 0 });
 }
+if ex.has("sensor_counts") {
+    o.put_object("sensor_counts", ex.get_object("sensor_counts").deep_copy());
+}
 o
 
 }
