@@ -119,7 +119,10 @@
               title="advance the user-facing pointer onto the gate's ready candidate - the deliberate approval the manual mode waits for">promote user pointer</button>
             <button class="ag-mind-btn" data-act="user-rollback" hidden
               title="revert the user-facing pointer to last_good (one step; the watchdog does this automatically on agreement decay)">roll back</button>
+            <button class="ag-mind-btn" data-act="rederive" hidden
+              title="re-derive the personality adapter from persona/persona.jsonl against the user pointer's current base - blocks through the LoRA run; the derivation gate can reject it (serving stays untouched). the probe triggers this automatically when the skin slips">re-derive persona</button>
           </span>
+          <div class="ag-kv" data-kv="persona"></div>
           <pre class="ag-mind-note lbl" data-note="judge"></pre>
         </div>
         <div class="ag-card" data-card="flywheel">

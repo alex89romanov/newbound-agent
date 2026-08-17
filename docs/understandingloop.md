@@ -487,6 +487,24 @@ sets last_good -> ring pruning spares the user checkpoints -> restart
 restores the pointer -> impossible-agreement relaunch triggers the
 watchdog's automatic rollback).*
 
+*Phase 8b — the personality adapter — executed 2026-08-17 on
+claude/phase8b-lora. The skin-on-a-growing-base design made real: a
+standing LoRA (rank/alpha/targets owner-tunable via USER_LORA) rides
+the USER-FACING pointer only, derived from the persona corpus
+(persona/persona.jsonl, every 5th row held out) by a self-contained
+trainer inside the service - forward-hook LoRA on nanochat's
+attention linears, masked assistant-token loss via
+render_conversation. Re-derivation is BACKGROUND MAINTENANCE with a
+metric-driven trigger, exactly as designed: the probe (held-out
+persona loss of the serving model) runs on the watchdog cadence and
+re-derives when it slips past slack - whether because the base grew
+underneath or the owner rewrote the persona. Every derivation faces
+its own gate (min_gain on held-out persona loss, guard on standard
+LM loss - the skin must not lobotomize the base); rejection leaves
+serving untouched. The adapter merges into fresh weights at every
+promotion/rollback/restart, persists on disk, and the salience lane
+never wears it.*
+
 ## Sequencing rationale
 
 1 before 4: initiative needs claims to stand on. 3 before 6: the

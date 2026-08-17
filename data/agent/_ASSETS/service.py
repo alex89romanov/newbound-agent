@@ -475,7 +475,7 @@ def do_user_promote(args, reason):
         return False, {"status": "err", "msg": "no candidate is ready - "
                        "the user gate has not passed (soak/agree/regress)"}
     try:
-        scorer = load_pointer_scorer(args, key)
+        scorer = apply_persona(args, load_pointer_scorer(args, key))
     except Exception as e:
         return False, {"status": "err", "msg": f"user pointer load failed: {e}"}
     with LOCK:
@@ -483,7 +483,8 @@ def do_user_promote(args, reason):
         USER_SLOT["scorer"] = scorer
         USER["last_good"] = prev
         USER["pointer"] = key
-        USER["name"] = f"user:{key}"
+        USER["name"] = ("user:" + key
+                        + ("+lora" if getattr(scorer, "name", "").endswith("+lora") else ""))
         USER["promoted_at"] = int(time.time() * 1000)
         USER["eval"] = snapshot
         USER["ready"] = None
@@ -505,13 +506,14 @@ def do_user_rollback(args, reason):
     if not target:
         return False, {"status": "err", "msg": "no last_good to roll back to"}
     try:
-        scorer = load_pointer_scorer(args, target)
+        scorer = apply_persona(args, load_pointer_scorer(args, target))
     except Exception as e:
         return False, {"status": "err", "msg": f"rollback load failed: {e}"}
     with LOCK:
         USER_SLOT["scorer"] = scorer
         USER["pointer"] = target
-        USER["name"] = f"user:{target}"
+        USER["name"] = ("user:" + target
+                        + ("+lora" if getattr(scorer, "name", "").endswith("+lora") else ""))
         USER["promoted_at"] = int(time.time() * 1000)
         USER["last_good"] = None    # one step back, deliberately - not a stack
         USER["rollbacks"] += 1
@@ -595,6 +597,45 @@ def user_gate_loop(args):
                         print(f"[user] READY: {cur} {snapshot}", flush=True)
                     if str(cfg.get("mode")) == "auto":
                         do_user_promote(args, "auto")
+            # (2b) the personality probe (8b): held-out persona loss of
+            # the SERVING model vs the derivation-time baseline; slip
+            # past slack -> re-derive in the background against the
+            # pointer's current base. Corpus but no adapter yet -> the
+            # first derivation fires on its own.
+            lcfg = parse_kv_mixed(getattr(args, "lora", ""), PERSONA_LORA_DEFAULTS)
+            if (str(lcfg.get("mode")) != "off" and user_scorer is not None
+                    and serving and not isinstance(user_scorer, StubScorer)
+                    and not PERSONA["deriving"]):
+                _tr, _ho = load_persona_corpus(args.data_dir)
+                with LOCK:
+                    PERSONA["corpus"] = len(_tr) + len(_ho)
+                if len(_tr) >= 4 and len(_ho) >= 1:
+                    needs = False
+                    if PERSONA["adapter"] is None:
+                        needs = True   # corpus exists, no skin yet
+                    else:
+                        seq2 = (user_scorer.meta["model_config"]["sequence_len"]
+                                if user_scorer.meta else 2048)
+                        probe = persona_eval(user_scorer.engine.model,
+                                             user_scorer.tokenizer, _ho,
+                                             user_scorer.engine.model.get_device(),
+                                             seq2)
+                        if probe is not None:
+                            with LOCK:
+                                PERSONA["probe"] = probe
+                                base = PERSONA["baseline"]
+                            append_metric(args.data_dir,
+                                          {"kind": "persona_probe", "probe": probe,
+                                           "baseline": base})
+                            if base is not None and probe > base * (1 + float(lcfg["slack"])):
+                                print(f"[persona] probe slipped ({probe} > "
+                                      f"{base} * 1+{lcfg['slack']}) - re-deriving",
+                                      flush=True)
+                                needs = True
+                    if needs:
+                        threading.Thread(target=derive_adapter,
+                                         args=(args, "probe" if PERSONA["adapter"] else "first"),
+                                         daemon=True).start()
             # (3) the watchdog re-audit
             if user_scorer is not None and serving:
                 fresh = user_agreement(user_scorer)
@@ -634,13 +675,312 @@ def restore_user_pointer(args):
     except Exception as e:
         print(f"[user] persisted pointer {key} failed to load: {e}", flush=True)
         return
+    scorer = apply_persona(args, scorer)
     with LOCK:
         USER_SLOT["scorer"] = scorer
         for k in ("pointer", "name", "promoted_at", "eval", "last_good"):
             USER[k] = snap.get(k)
         USER["promotions"] = int(snap.get("promotions") or 0)
         USER["rollbacks"] = int(snap.get("rollbacks") or 0)
+        if getattr(scorer, "name", "").endswith("+lora"):
+            USER["name"] = f"user:{key}+lora"
     print(f"[user] restored pointer {key}", flush=True)
+
+
+# ── Phase 8b: the personality adapter ────────────────────────────────
+# A standing LoRA on the USER-FACING pointer only - the salience lane
+# never wears it. Derived from the persona corpus
+# (persona/persona.jsonl, one {"messages": [...]} or {"user":..,
+# "assistant":..} per line; every 5th row is held out and never
+# trained on). The base grows underneath; the adapter is re-derived as
+# BACKGROUND MAINTENANCE when the probe says it slipped - the probe is
+# held-out persona loss of the SERVING model, measured on the watchdog
+# cadence, compared to the loss recorded at derivation time.
+PERSONA = {
+    "adapter": None,       # meta of the serving adapter (derived_from, at, rank)
+    "baseline": None,      # held-out persona loss at derivation time
+    "probe": None,         # latest probe of the serving model
+    "deriving": False,
+    "rederivations": 0,
+    "last_result": None,
+    "corpus": 0,
+}
+PERSONA_LORA_DEFAULTS = {"mode": "on", "rank": 8, "alpha": 16, "lr": 1e-3,
+                         "steps": 200, "slack": 0.1, "min_gain": 0.01,
+                         "guard": 0.2, "targets": "c_q.c_v"}
+
+
+def persona_dir(data_dir):
+    d = os.path.join(data_dir, "persona")
+    os.makedirs(d, exist_ok=True)
+    return d
+
+
+def load_persona_corpus(data_dir):
+    """(train_convs, heldout_convs) - every 5th row held out, never
+    trained on. Rows normalize to nanochat conversations."""
+    path = os.path.join(persona_dir(data_dir), "persona.jsonl")
+    train, heldout = [], []
+    if not os.path.exists(path):
+        return train, heldout
+    with open(path) as f:
+        for i, ln in enumerate(f):
+            ln = ln.strip()
+            if not ln:
+                continue
+            try:
+                o = json.loads(ln)
+            except Exception:
+                continue
+            if "messages" in o:
+                conv = {"messages": o["messages"]}
+            elif "user" in o and "assistant" in o:
+                conv = {"messages": [
+                    {"role": "user", "content": str(o["user"])},
+                    {"role": "assistant", "content": str(o["assistant"])}]}
+            else:
+                continue
+            (heldout if i % 5 == 4 else train).append(conv)
+    return train, heldout
+
+
+def lora_target_paths(model, targets):
+    """Module paths for the adapter, from a dot-separated target spec
+    (c_q.c_v.attn_proj.c_fc.mlp_proj -> attention and MLP linears)."""
+    names = {"c_q": "attn.c_q", "c_k": "attn.c_k", "c_v": "attn.c_v",
+             "attn_proj": "attn.c_proj", "c_fc": "mlp.c_fc",
+             "mlp_proj": "mlp.c_proj"}
+    picked = [names[t] for t in str(targets).split(".") if t in names]
+    out = []
+    n_layer = len(model.transformer.h)
+    for i in range(n_layer):
+        for sub in picked:
+            out.append(f"transformer.h.{i}.{sub}")
+    return out
+
+
+def persona_eval(model, tokenizer, convs, device, seq_len, limit=16):
+    """Held-out persona loss: masked LM loss on assistant tokens only
+    (render_conversation's mask; -1 is the model's ignore_index)."""
+    import torch
+    if not convs:
+        return None
+    was_training = model.training
+    model.eval()
+    tot, n = 0.0, 0
+    with torch.no_grad():
+        for conv in convs[:limit]:
+            try:
+                ids, mask = tokenizer.render_conversation(
+                    conv, max_tokens=min(int(seq_len), 1024))
+            except Exception:
+                continue
+            if len(ids) < 3 or sum(mask[1:]) == 0:
+                continue
+            x = torch.tensor([ids[:-1]], device=device)
+            y = torch.tensor([[t if mask[i + 1] == 1 else -1
+                               for i, t in enumerate(ids[1:])]], device=device)
+            tot += float(model(x, y))
+            n += 1
+    if was_training:
+        model.train()
+    return round(tot / n, 4) if n else None
+
+
+def plain_lm_eval(model, tokenizer, docs, device, seq_len, limit=12):
+    """The derivation's forgetting guard: plain LM loss on standard
+    docs - a personality must not lobotomize the base."""
+    import torch
+    toks = []
+    for d in docs:
+        toks.extend(tokenizer.encode(d[:4000], prepend="<|bos|>"))
+    seq_len = min(int(seq_len), 2048)
+    chunks = [toks[i:i + seq_len + 1]
+              for i in range(0, len(toks) - seq_len - 1, seq_len)][:limit]
+    if not chunks:
+        return None
+    was_training = model.training
+    model.eval()
+    tot = 0.0
+    with torch.no_grad():
+        for c in chunks:
+            x = torch.tensor([c[:-1]], device=device)
+            y = torch.tensor([c[1:]], device=device)
+            tot += float(model(x, y))
+    if was_training:
+        model.train()
+    return round(tot / len(chunks), 4)
+
+
+def adapter_path(data_dir):
+    return os.path.join(persona_dir(data_dir), "adapter.pt")
+
+
+def apply_persona(args, scorer):
+    """Merge the standing adapter into a freshly loaded user scorer's
+    weights (W += scale * B@A per target). The adapter was derived from
+    SOME base; applying it to the pointer's CURRENT base is the
+    standing-skin-on-a-moving-base design - drift is what the probe
+    watches. No-op in stub mode, with mode=off, or with no adapter."""
+    cfg = parse_kv_mixed(getattr(args, "lora", ""), PERSONA_LORA_DEFAULTS)
+    if (str(cfg.get("mode")) == "off" or isinstance(scorer, StubScorer)
+            or not os.path.exists(adapter_path(args.data_dir))):
+        return scorer
+    try:
+        import torch
+        blob = torch.load(adapter_path(args.data_dir), map_location="cpu",
+                          weights_only=False)
+        scale = float(blob["alpha"]) / float(blob["rank"])
+        model = scorer.engine.model
+        applied = 0
+        with torch.no_grad():
+            for path, ab in blob["state"].items():
+                try:
+                    w = model.get_submodule(path).weight
+                except AttributeError:
+                    continue
+                delta = (ab["B"].float() @ ab["A"].float()) * scale
+                if delta.shape == w.shape:
+                    w.add_(delta.to(w.device, w.dtype))
+                    applied += 1
+        if applied:
+            with LOCK:
+                PERSONA["adapter"] = dict(blob["meta"])
+                PERSONA["baseline"] = blob["meta"].get("heldout_adapted")
+            scorer.name = scorer.name + "+lora"
+            print(f"[persona] adapter merged into {applied} linears "
+                  f"(derived from {blob['meta'].get('derived_from')})", flush=True)
+    except Exception as e:
+        print(f"[persona] adapter apply failed (serving bare base): {e}", flush=True)
+    return scorer
+
+
+def derive_adapter(args, reason):
+    """Derive (or re-derive) the personality adapter from the persona
+    corpus against the user pointer's CURRENT base. Gate: held-out
+    persona loss must improve by min_gain over the bare base, and
+    standard LM loss must not rise past guard. Accept -> save + swap
+    the serving scorer; reject -> report and leave serving alone."""
+    cfg = parse_kv_mixed(getattr(args, "lora", ""), PERSONA_LORA_DEFAULTS)
+    with LOCK:
+        if PERSONA["deriving"]:
+            return {"status": "err", "msg": "derivation already running"}
+        key = USER["pointer"]
+        if not key:
+            return {"status": "err", "msg": "no user pointer promoted - "
+                    "the adapter rides the user lane"}
+        PERSONA["deriving"] = True
+    try:
+        return _derive_adapter_inner(args, cfg, key, reason)
+    finally:
+        with LOCK:
+            PERSONA["deriving"] = False
+
+
+def _derive_adapter_inner(args, cfg, key, reason):
+    import torch
+    if args.checkpoint == "stub":
+        return {"status": "err", "msg": "stub mode has no weights to adapt"}
+    train, heldout = load_persona_corpus(args.data_dir)
+    with LOCK:
+        PERSONA["corpus"] = len(train) + len(heldout)
+    if len(train) < 4 or len(heldout) < 1:
+        return {"status": "err",
+                "msg": f"persona corpus too small ({len(train)} train / "
+                       f"{len(heldout)} held-out; need 4/1) - add rows to "
+                       f"persona/persona.jsonl"}
+    t0 = time.time()
+    scorer = load_pointer_scorer(args, key)   # a fresh copy; never the serving one
+    model, tokenizer = scorer.engine.model, scorer.tokenizer
+    device = model.get_device()
+    seq_len = scorer.meta["model_config"]["sequence_len"] if scorer.meta else 2048
+    base_heldout = persona_eval(model, tokenizer, heldout, device, seq_len)
+    standard = load_standard_docs(args, limit=64)
+    base_std = plain_lm_eval(model, tokenizer, standard[:24], device, seq_len)
+    # attach LoRA via forward hooks: y = Wx + (alpha/rank) * B(A(x))
+    rank, alpha = int(cfg["rank"]), float(cfg["alpha"])
+    scale = alpha / rank
+    paths = lora_target_paths(model, cfg["targets"])
+    ab, hooks = {}, []
+    for path in paths:
+        try:
+            lin = model.get_submodule(path)
+        except AttributeError:
+            continue
+        A = torch.zeros(rank, lin.in_features, device=device,
+                        dtype=torch.float32).normal_(0, 0.02).requires_grad_(True)
+        Bm = torch.zeros(lin.out_features, rank, device=device,
+                         dtype=torch.float32).requires_grad_(True)
+        ab[path] = (A, Bm)
+
+        def mk_hook(A=A, Bm=Bm):
+            def hook(_mod, inputs, output):
+                x = inputs[0]
+                return output + (x.float() @ A.t() @ Bm.t()).to(output.dtype) * scale
+            return hook
+        hooks.append(lin.register_forward_hook(mk_hook()))
+    if not ab:
+        return {"status": "err", "msg": "no LoRA targets matched the model"}
+    params = [t for pair in ab.values() for t in pair]
+    opt = torch.optim.AdamW(params, lr=float(cfg["lr"]))
+    model.train()
+    import random as _random
+    steps = int(cfg["steps"])
+    for step in range(steps):
+        conv = train[_random.randrange(len(train))]
+        try:
+            ids, mask = tokenizer.render_conversation(
+                conv, max_tokens=min(int(seq_len), 1024))
+        except Exception:
+            continue
+        if len(ids) < 3 or sum(mask[1:]) == 0:
+            continue
+        x = torch.tensor([ids[:-1]], device=device)
+        y = torch.tensor([[t if mask[i + 1] == 1 else -1
+                           for i, t in enumerate(ids[1:])]], device=device)
+        loss = model(x, y)
+        opt.zero_grad()
+        loss.backward()
+        opt.step()
+    model.eval()
+    adapted_heldout = persona_eval(model, tokenizer, heldout, device, seq_len)
+    adapted_std = plain_lm_eval(model, tokenizer, standard[:24], device, seq_len)
+    for h in hooks:
+        h.remove()
+    gain_ok = (adapted_heldout is not None and base_heldout is not None
+               and adapted_heldout <= base_heldout * (1 - float(cfg["min_gain"])))
+    guard_ok = (adapted_std is None or base_std is None
+                or adapted_std <= base_std * (1 + float(cfg["guard"])))
+    report = {
+        "derived_from": key, "reason": reason, "rank": rank, "alpha": alpha,
+        "steps": steps, "train_rows": len(train), "heldout_rows": len(heldout),
+        "heldout_base": base_heldout, "heldout_adapted": adapted_heldout,
+        "std_base": base_std, "std_adapted": adapted_std,
+        "gain_ok": gain_ok, "guard_ok": guard_ok,
+        "seconds": int(time.time() - t0), "at": int(time.time() * 1000),
+    }
+    verdict = "accept" if (gain_ok and guard_ok) else "reject"
+    append_metric(args.data_dir, dict(report, kind="persona_derive",
+                                      verdict=verdict))
+    with LOCK:
+        PERSONA["last_result"] = dict(report, verdict=verdict)
+    print(f"[persona] derivation {verdict}: {report}", flush=True)
+    if verdict == "reject":
+        return {"status": "err", "msg": "derivation rejected by its gate",
+                **report}
+    torch.save({"state": {p: {"A": A.detach().cpu(), "B": B.detach().cpu()}
+                          for p, (A, B) in ab.items()},
+                "rank": rank, "alpha": alpha, "meta": report},
+               adapter_path(args.data_dir))
+    # swap serving: a fresh base + the new adapter merged
+    fresh = apply_persona(args, load_pointer_scorer(args, key))
+    with LOCK:
+        USER_SLOT["scorer"] = fresh
+        USER["name"] = f"user:{key}+lora"
+        PERSONA["rederivations"] += 1
+        PERSONA["baseline"] = adapted_heldout
+        PERSONA["probe"] = adapted_heldout
+    return {"status": "ok", **report}
 
 
 def load_standard_docs(args, limit=512):
@@ -1070,6 +1410,7 @@ class Handler(BaseHTTPRequestHandler):
                         SOAK["rings"].get(SOAK["current"])),
                     serving=USER_SLOT["scorer"] is not None,
                 ),
+                "persona": dict(PERSONA),
             })
 
     def do_POST(self):
@@ -1204,6 +1545,11 @@ class Handler(BaseHTTPRequestHandler):
         if self.path == "/user_rollback":
             ok, payload = do_user_rollback(self.server.args, "manual")
             return self._json(200 if ok else 409, payload)
+        if self.path == "/persona_rederive":
+            # manual re-derivation - blocks through the whole training
+            # run; the mind tab's button expects the full report back
+            payload = derive_adapter(self.server.args, "manual")
+            return self._json(200 if payload.get("status") == "ok" else 409, payload)
         return self._json(404, {"status": "err", "msg": "unknown path"})
 
 
@@ -1259,6 +1605,14 @@ def main():
                     help="the user pointer's stricter gate (owner call): "
                          "mode=manual|auto, soak_s/verdicts on the fast "
                          "lane, agree floor, regress slack, check cadence")
+    ap.add_argument("--lora",
+                    default="mode=on,rank=8,alpha=16,lr=1e-3,steps=200,"
+                            "slack=0.1,min_gain=0.01,guard=0.2,targets=c_q.c_v",
+                    help="the personality adapter (8b, owner call): "
+                         "mode=on|off, LoRA rank/alpha/lr/steps, probe "
+                         "slack that triggers re-derivation, min held-out "
+                         "gain + standard-loss guard for the derivation "
+                         "gate, dot-separated targets")
     args = ap.parse_args()
     for sub in ("checkpoints", "ingest", "ingested"):
         os.makedirs(os.path.join(args.data_dir, sub), exist_ok=True)

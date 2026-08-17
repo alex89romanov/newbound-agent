@@ -677,6 +677,25 @@ async function init(host) {
     upBtn.hidden = !u.ready;
     urBtn.hidden = !u.last_good;
 
+    // the personality adapter (8b)
+    const p = sv.persona || {};
+    const pa = p.adapter || {};
+    const drift = (p.probe != null && p.baseline != null && p.baseline > 0)
+      ? ((p.probe / p.baseline - 1) * 100) : null;
+    kv("persona").innerHTML = mKv([
+      ["persona corpus", p.corpus ? `${p.corpus} rows` : "none (persona/persona.jsonl)"],
+      ["adapter", p.deriving ? "deriving…"
+        : (p.adapter ? `on ${pa.derived_from} (rank ${pa.rank ?? "—"})` : "none")],
+      ["probe / baseline", p.probe != null
+        ? `${p.probe} / ${p.baseline ?? "—"}` + (drift != null ? ` (${drift >= 0 ? "+" : ""}${drift.toFixed(1)}%)` : "")
+        : "—", drift != null && drift > 10 ? "warn" : ""],
+      ["re-derivations", p.rederivations ?? 0],
+      ["last derivation", p.last_result
+        ? `${p.last_result.verdict} · persona ${p.last_result.heldout_base ?? "—"} → ${p.last_result.heldout_adapted ?? "—"} · ${p.last_result.seconds ?? "—"}s`
+        : "never"],
+    ]);
+    host.querySelector('[data-act="rederive"]').hidden = !(u.serving && p.corpus >= 5 && !p.deriving);
+
     // the flywheel
     const t = sv.trainer || {};
     kv("flywheel").innerHTML =
@@ -840,6 +859,14 @@ async function init(host) {
     act("user-promote").addEventListener("click", async () => {
       const r = mEnv(await invoke("agent", "model", "user_promote", {}));
       mindNote("judge", r ? JSON.stringify(r) : "user promote: no reply", !(r && r.status === "ok"));
+      loadMind();
+    });
+    act("rederive").addEventListener("click", async (ev) => {
+      ev.currentTarget.disabled = true;
+      mindNote("judge", "deriving the personality adapter — a LoRA training run; this can take a few minutes…");
+      const r = mEnv(await invoke("agent", "model", "persona_rederive", {}));
+      ev.currentTarget.disabled = false;
+      mindNote("judge", r ? JSON.stringify(r, null, 1) : "re-derive: no reply", !(r && r.status === "ok"));
       loadMind();
     });
     act("user-rollback").addEventListener("click", async () => {
