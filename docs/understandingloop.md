@@ -308,6 +308,27 @@ perception. Cursor is runtime state (resets to now on start, no
 history replay); the persisted cursor arrives with sensor-state
 records later.*
 
+*Phase 9 — the first PLUGIN sensor — executed 2026-08-17 on
+claude/phase9-hollis (agent repo) + the hollis repo's matching branch.
+Hollis's cortex now proposes every resolved transcript as an
+`acoustic_event` envelope through `agent.executive.perceive`
+(`Command::lookup`, fire-and-forget on a thread), with binding done
+through the agent's own recall — the claims naming the resolved
+speaker ride the envelope. The dependency arrow is one-way by the
+owner's rule: hollis knows agent; agent's only new code is
+sensor-AGNOSTIC per-sensor accounting (rows keyed by the envelope's
+`sensor` field) surfacing in executive status and the mind tab.
+`hollis.audio` gained `inject` (the no-microphone test surface,
+home of the shared emit path), `status`, and `transcripts`; the
+`emit=off` botd key silences the sensor without stopping the ears; a
+missing agent library is a counted skip (verified agent-less). The
+hollis app UI — previously empty facets — was created in the
+agent-app idiom: chips, cortex toggle, inject form, counters,
+transcripts. Battery on a disposable: 3 marker injects steered
+fast/normal/deep, per-sensor counts rendered in both UIs, gate
+off/on cycled, named-entity inject arrived with `bound: 1` and the
+seeded claim as `bound_top`.*
+
 ### Phase 3 — Narrative engine deposits into kb
 Fact extraction produces claims (provenance, confidence) instead of
 private graph nodes; adjudication updates/supersedes claims under the

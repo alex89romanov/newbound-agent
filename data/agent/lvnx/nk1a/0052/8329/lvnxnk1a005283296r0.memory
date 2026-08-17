@@ -29,5 +29,12 @@
     "tags": "phase7",
     "confidence": "high",
     "time": 1786973023043
+  },
+  {
+    "claim": "Per-sensor accounting (Phase 9) is sensor-AGNOSTIC by the owner's rule: executive start keys rows in the AGENT_EXECUTIVE sensor_counts object by each envelope's own sensor field (count/last_time plus fast/deep steer tallies); status passes sensor_counts through; the mind tab renders one row per sensor plus the perception-rate and frontier-calls stats (the last two Phase 6 stubs). The agent never names or references any specific plugin sensor - a new sensor appears in the accounting the moment its envelopes arrive.",
+    "detail": "Verified in the Phase 9 battery: sensor_counts.hollis {count:3, fast:1, deep:1} from three marker injects, rendered in the mind tab sensors card.",
+    "tags": "executive,sensors,phase9",
+    "confidence": "high",
+    "time": 1786980001043
   }
 ]

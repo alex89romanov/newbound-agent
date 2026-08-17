@@ -725,6 +725,18 @@ async function init(host) {
         ? `${mt.gate_pass}/${mt.gate_total} promoted · ` +
           (mt.gates || []).slice(-12).map((g2) => g2.verdict === "promote" ? "▲" : "·").join("")
         : "no gates yet";
+      // the last two stubs, real: perception rate from the verdict
+      // journal's span, frontier spend from the executive's counters,
+      // and per-sensor rows keyed by whatever sensors have reported
+      const hrs = (mt.span_ms || 0) / 3600000;
+      const sc = ex.sensor_counts || {};
+      kv("sensors").innerHTML = mKv([
+        ["perception rate", hrs > 0.01 ? `${(mt.verdict_total / hrs).toFixed(1)}/hr` : "—"],
+        ["frontier calls (esc + audit)", `${(ex.escalations ?? 0) + (ex.audits ?? 0)}` +
+          (hrs > 0.01 ? ` · ${(((ex.escalations ?? 0) + (ex.audits ?? 0)) / hrs).toFixed(1)}/hr` : "")],
+        ...Object.entries(sc).map(([n2, r2]) =>
+          [`sensor ${n2}`, `${r2.count ?? 0} perceived · ${r2.fast ?? 0} fast · ${r2.deep ?? 0} deep`]),
+      ]);
     }
 
     // configuration
