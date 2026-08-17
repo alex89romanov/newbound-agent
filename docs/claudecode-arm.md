@@ -73,6 +73,42 @@ A chat turn in the agent app is then a genuine Claude session that
 can read controls, run store commands, and edit code — and it
 returns when the work is done.
 
+## What the delegate knows (the CLAUDE.md question)
+
+A dev session working ON this codebase gets its environment knowledge
+from CLAUDE.md and docs/interim-process.md. The inside delegate gets
+the equivalent from FOUR store-resident layers, all of which already
+ride every chat turn as the system prompt — nothing needs copying
+into files:
+
+1. **The platform curriculum** — the `agent.prompts` control's
+   `prompt` facet (docs/prompting.md): the journaled platform
+   knowledge both chat surfaces share. Teach the platform here.
+2. **The venue shell + memory index** — each surface's own framing;
+   the notebook injects the live memory index (domains, staleness
+   marks, entries relevant to the open surface) automatically.
+3. **The owner addendum** — the `agentprompt` control's js facet:
+   YOUR standing instructions, appended to every ask. Extend the
+   delegate's rules here, not in a file.
+4. **The resident context** — injected by this bridge itself whenever
+   `CLAUDE_CODE_MCP` is set (`CLAUDE_CODE_CONTEXT=off` suppresses
+   it): where the delegate is (a LIVE instance), what its hands are
+   (store commands as MCP tools, every param required), the write
+   rules (journaled commands only, never `data/*` by hand,
+   destructive experiments belong in a disposable), the memory ritual
+   (orient via `agent-archivist-recall`, deposit only for the user's
+   asks or durable lessons from requested work), and where the deep
+   docs live. It also explicitly overrides the native tool-loop
+   instructions (find_tools/call_command), which describe a harness
+   this delegate does not have. Environment knowledge attaches at the
+   layer that knows the environment.
+
+Verified live: asked to look up a command and state its rules, the
+delegate called the store through MCP, quoted the command's real
+desc, and answered "writes must never touch data/* files by hand and
+must go through the journaled dev.code commands, with mutating
+experiments confined to a disposable checkout" — the rules arrived.
+
 ## Why this is not a drop-in model provider
 
 chat_llm's other arms answer ONE model turn and hand tool calls back
@@ -134,6 +170,11 @@ arm with judgment is, after all, what the escalation lane is for.
 
 - **"could not run `claude`"** — the CLI is not on the server
   process's PATH; set `CLAUDE_CODE_BIN` to the full path.
+- **"--dangerously-skip-permissions cannot be used with root/sudo"**
+  — `bypassPermissions` is refused when the server runs as root. Run
+  the instance as a normal user (the right answer), or grant just the
+  store tools instead: `CLAUDE_CODE_PERMISSION_MODE=` (empty) plus
+  `CLAUDE_CODE_ARGS=--allowedTools mcp__newbound`.
 - **"returned no JSON"** — usually a login prompt or usage-limit
   notice; the error includes stderr's tail, which says which. Run
   `claude` interactively once on the box to log in.
