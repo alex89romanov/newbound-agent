@@ -43,6 +43,7 @@ let known: &[(&str, &str, &str)] = &[
     ("MODEL_GATE", "every=50,regress=0.02,fails=3", "next service relaunch"),
     ("MODEL_TRAIN_INTERVAL", "10", "next service relaunch"),
     ("USER_GATE", "mode=manual,soak_s=21600,verdicts=100,agree=0.75,regress=0.05,check_s=300", "next service relaunch"),
+    ("USER_LORA", "mode=on,rank=8,alpha=16,lr=1e-3,steps=200,slack=0.1,min_gain=0.01,guard=0.2,targets=c_q.c_v", "next service relaunch"),
     ("NANOCHAT_TRAIN_ARGS", "--depth=20 --device-batch-size=8 --window-pattern=L", "next base training"),
     ("NANOCHAT_REPO", "https://github.com/karpathy/nanochat.git", "next env install"),
     ("NANOCHAT_DIST", "", "next base training"),

@@ -83,8 +83,30 @@ d20-scale quality, leave `LLM` on your frontier arm and let the
 machinery run ahead of its passenger - that is the point of gating it
 separately.
 
-Still out of scope (Phase 8b+): LoRA personality re-derivation (it
-will ride the user pointer, not the salience one).
+**Phase 8b is in (2026-08-17): the personality adapter.** A standing
+LoRA rides the USER-FACING pointer only - the salience lane never
+wears it. Feed it a persona corpus at
+`runtime/agent/model/persona/persona.jsonl` (one JSON row per line:
+`{"user": "...", "assistant": "..."}` or a full `{"messages": [...]}`
+conversation; every 5th row is held out and never trained on). Once a
+user pointer is serving and the corpus has >=5 rows, the FIRST
+derivation fires on its own; after that the **probe** - held-out
+persona loss of the serving model, measured on the watchdog cadence -
+triggers background re-derivation whenever the skin slips past
+`slack=` (the base grew underneath, or you rewrote the persona). Every
+derivation faces its own gate: held-out persona loss must improve by
+`min_gain=` over the bare base AND standard LM loss must not rise past
+`guard=` (a personality must not lobotomize the base); rejection
+leaves serving untouched. The mind tab's judge card shows corpus size,
+probe/baseline drift, and a **re-derive persona** button
+(`agent-model-persona_rederive` - blocks through the run, returns the
+full report). The adapter persists (`persona/adapter.pt`) and
+re-applies on every user promotion, rollback, and restart.
+
+    USER_LORA=mode=on,rank=8,alpha=16,lr=1e-3,steps=200,slack=0.1,min_gain=0.01,guard=0.2,targets=c_q.c_v
+
+(`targets` is dot-separated: c_q.c_k.c_v.attn_proj.c_fc.mlp_proj;
+`mode=off` disables the whole subsystem.)
 
 ## Settings (runtime/agent/botd.properties)
 
