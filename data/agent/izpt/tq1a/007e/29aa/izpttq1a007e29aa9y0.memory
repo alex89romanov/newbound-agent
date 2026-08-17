@@ -91,5 +91,12 @@
     "tags": "model,lora,persona,phase8b",
     "confidence": "high",
     "time": 1786994899759
+  },
+  {
+    "claim": "The persona corpus has an owner-facing editor in the mind tab (persona card): agent-model-persona_read returns the corpus as parsed rows - or, when nothing is saved, the SHIPPED DEFAULT SEED (data/agent/_ASSETS/persona-seed.jsonl, 28 exchanges in the resident model's voice, nanochat-identity style adapted to this platform) flagged seed:true; adoption is a deliberate save, never a side effect. agent-model-persona_write validates every JSONL line ({user,assistant} or {messages}) and rejects the WHOLE write with the offending line number - a typo can never truncate the corpus - then writes atomically (tmp+rename). The editor loads once per session (the 5s status poll never stomps edits), renders pair rows as two textareas and messages rows as raw JSON, and the service picks saves up on its own at the next gate tick.",
+    "detail": "Verified on a disposable with Playwright: 28 seed rows render with the seed label, edit+delete+add+save round-trips to disk with the held-out count, reload reads from disk, a bad line rejects with 'line 2' and leaves the corpus untouched.",
+    "tags": "model,persona,editor,ui",
+    "confidence": "high",
+    "time": 1786995859353
   }
 ]

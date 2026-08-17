@@ -88,7 +88,13 @@ LoRA rides the USER-FACING pointer only - the salience lane never
 wears it. Feed it a persona corpus at
 `runtime/agent/model/persona/persona.jsonl` (one JSON row per line:
 `{"user": "...", "assistant": "..."}` or a full `{"messages": [...]}`
-conversation; every 5th row is held out and never trained on). Once a
+conversation; every 5th row is held out and never trained on). The
+**mind tab's persona card is the editor**: when nothing is saved it
+opens pre-loaded with the SHIPPED DEFAULT SEED (28 exchanges in the
+resident model's voice - nanochat-identity style, adapted to this
+platform); edit to taste and save to adopt. Saves are validated
+whole-file (a bad row rejects with its line number, never truncates)
+and the service picks them up on its own. Once a
 user pointer is serving and the corpus has >=5 rows, the FIRST
 derivation fires on its own; after that the **probe** - held-out
 persona loss of the serving model, measured on the watchdog cadence -
