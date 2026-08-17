@@ -256,6 +256,48 @@ verdict, `salience_log` totals after an hour, the trainer drain lines
 from `runtime/agent/model/service.log`. Anything odd, include the log —
 diagnosis happens from the web session.
 
+## 8. Claude inside the agent (the CLAUDECODE arm)
+
+The frontier arm can be Claude itself, drawing on a Pro/Max
+subscription's OAuth login instead of metered API credits, through the
+Claude Code CLI. One flip covers **every** frontier surface at once -
+the agent app's chat, the dev-session chat plugin, AND the salience
+escalations + epsilon audits (`ask_llm` IS `chat_llm`):
+
+    LLM=CLAUDECODE
+    LLM_CTL=agent:llm:claude_code
+
+Prerequisite on the box: Claude Code installed and logged in
+(`claude` on PATH; `CLAUDE_CODE_BIN=` if elsewhere). Live keys - the
+arm re-reads botd on every call, no restart needed.
+
+**Two postures**, chosen by how much you give the delegate:
+
+- *Cheap oracle* (the default): built-in tools off, system prompt
+  REPLACED by the agent's own - ~200 tokens per call instead of the
+  ~38k Claude Code's full prompt costs. Right for salience
+  escalations and plain chat.
+- *Full agent*: hand the delegate the whole store -
+
+      CLAUDE_CODE_SYSTEM_MODE=append
+      CLAUDE_CODE_MCP={"mcpServers":{"newbound":{"command":"./target/release/newbound","args":["mcp"]}}}
+      CLAUDE_CODE_CWD=/path/to/your/newbound/checkout
+      CLAUDE_CODE_PERMISSION_MODE=bypassPermissions
+
+  Now a chat turn can read controls, run store commands, and edit
+  code - a real Claude session living inside the agent's chat. Note
+  the arm always returns finished text (Claude Code runs its own
+  loop; newbound's tool_loop terminates on it), and each answer
+  carries `cost_usd` - what the turn notionally cost against the
+  plan's allowance.
+
+Escalation traffic note: with this arm on, every band escalation
+(capped at one per 5s) spawns a CLI call. Cheap in replace mode, but
+if the escalation log runs hot you are spending plan allowance on
+judgment calls a vLLM box could make - the trade is yours to pick per
+box. `CLAUDE_CODE_MODEL=` / `CLAUDE_CODE_EFFORT=` tune the delegate;
+`CLAUDE_CODE_TIMEOUT=` (default 600s) bounds a stuck call.
+
 ## Troubleshooting
 
 - **No verdicts, `SALIENCE=on`**: check `service_status`; then
