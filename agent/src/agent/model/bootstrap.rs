@@ -273,11 +273,13 @@ if was_stale || !probe() {
     let lr = prop("MODEL_TRAIN_LR", "2e-5");
     let gate = prop("MODEL_GATE", "every=50,regress=0.02,fails=3");
     let interval = prop("MODEL_TRAIN_INTERVAL", "10");
+    let user_gate = prop("USER_GATE",
+        "mode=manual,soak_s=21600,verdicts=100,agree=0.75,regress=0.05,check_s=300");
     let mut cmd = "cd ".to_string();
     cmd += &root.display().to_string();
     cmd += &format!(
-        "; {}nohup '{}' runtime/agent/model/service.py --data-dir runtime/agent/model --port {} --checkpoint '{}' --train {} --mix '{}' --lr {} --gate '{}' --train-interval {} >> runtime/agent/model/service.log 2>&1 &",
-        envprefix, py, port, checkpoint, train, mix, lr, gate, interval);
+        "; {}nohup '{}' runtime/agent/model/service.py --data-dir runtime/agent/model --port {} --checkpoint '{}' --train {} --mix '{}' --lr {} --gate '{}' --train-interval {} --user-gate '{}' >> runtime/agent/model/service.log 2>&1 &",
+        envprefix, py, port, checkpoint, train, mix, lr, gate, interval, user_gate);
     let mut x = DataArray::new();
     x.push_string("bash");
     x.push_string("-c");

@@ -14,14 +14,34 @@ GPU ever gets involved.
         --checkpoint /path/to/nanochat/checkpoint
 
 Endpoints:
-    POST /salience  {perception, context} -> {salient, reasoning, pointer, ms}
-    GET  /status    -> mode, live slot, counters, ingest/checkpoint state
-    POST /ingest    (JSONL body) -> queued into the ingest directory
-    POST /promote   load newest checkpoint into the INACTIVE slot, swap live
+    POST /salience      {perception, context} -> {salient, reasoning, pointer, ms}
+    GET  /status        -> mode, live slot, counters, trainer + user blocks
+    POST /ingest        (JSONL body) -> queued into the ingest directory
+    POST /promote       load newest checkpoint into the INACTIVE slot, swap live
+    POST /chat          {messages} -> {text, pointer, ms}  (the USER pointer)
+    POST /user_promote  advance the user pointer onto the gate's ready candidate
+    POST /user_rollback revert the user pointer to last_good
+    POST /shutdown      clean exit (the GPU off switch)
 
 The live pointer is double-buffered from day one: /promote loads into the
 slot not being served and swaps under a lock, so serving never waits on a
 load.
+
+Phase 8a: the pointer splits in two. The SALIENCE pointer is the fast
+lane above - permissive gate, cheap failures, every verdict audited.
+The USER pointer serves /chat and only advances through a stricter,
+slower gate: the candidate must have SOAKED as the salience pointer
+(--user-gate soak_s= seconds and verdicts= served verdicts on the fast
+lane - the fast lane is the slow lane's canary), the last agreement
+measurement must clear agree=, and held-out standard loss must not have
+crept past the last user promotion by regress=. mode=manual (default)
+stops there: the candidate is marked READY and waits for a deliberate
+/user_promote (the mind tab's button); mode=auto promotes on its own.
+A watchdog re-audits the serving user pointer against the GROWING
+held-out pair set every check_s= seconds and auto-rolls-back to
+last_good if its agreement decays - and both user checkpoints are
+protected from ring pruning. Restart resets soak clocks (conservative)
+but the user pointer itself persists in user_pointer.json.
 
 Phase 6: the trainer is REAL. When a nanochat checkpoint is serving and
 --train is on, a candidate copy of the live model steps continuously on
@@ -98,6 +118,66 @@ STATE = {
     "ingested_samples": 0,
     "promotions": 0,
 }
+# ── Phase 8a: the user-facing pointer ────────────────────────────────
+# Soak ledger: how long each pointer has served the salience lane and
+# how many verdicts it answered there. Keys: "stub", "base:<src>" (the
+# birth checkpoint), or a ring dir basename ("cpt-<stamp>-<steps>").
+# In-memory only - a restart resets the clocks, deliberately.
+SOAK = {"current": None, "rings": {}}
+USER = {
+    "pointer": None,      # soak key currently serving /chat
+    "name": None,         # display name (user:<key>)
+    "promoted_at": None,
+    "eval": None,         # snapshot that justified the promotion
+    "ready": None,        # soak key that passed the gate, awaiting approval
+    "ready_eval": None,
+    "last_good": None,    # previous pointer, the rollback target
+    "promotions": 0,
+    "rollbacks": 0,
+}
+USER_SLOT = {"scorer": None}
+USER_GATE_DEFAULTS = {"mode": "manual", "soak_s": 21600, "verdicts": 100,
+                      "agree": 0.75, "regress": 0.05, "check_s": 300}
+
+
+def set_soak(key):
+    """The salience pointer changed: start (or resume) its soak ledger.
+    Called with None when the serving pointer has no loadable twin on
+    disk (a ring save failed) - such a pointer can never qualify."""
+    with LOCK:
+        SOAK["current"] = key
+        if key is not None and key not in SOAK["rings"]:
+            SOAK["rings"][key] = {"since": time.time(), "verdicts": 0}
+
+
+def soak_key_for(scorer):
+    """The soak-ledger key for a freshly loaded scorer (load_initial and
+    /promote paths; trainer promotions key by the ring dir they saved)."""
+    name = getattr(scorer, "name", "stub")
+    if name == "stub" or isinstance(scorer, StubScorer):
+        return "stub"
+    if name.startswith("nanochat:cpt-"):
+        return name.split(":", 1)[1]
+    if name.startswith("nanochat:"):
+        return "base:" + name.split(":", 1)[1]
+    return None
+
+
+def user_state_path(data_dir):
+    return os.path.join(data_dir, "user_pointer.json")
+
+
+def save_user_state(data_dir):
+    with LOCK:
+        snap = {k: USER[k] for k in ("pointer", "name", "promoted_at", "eval",
+                                     "last_good", "promotions", "rollbacks")}
+    try:
+        tmp = user_state_path(data_dir) + ".tmp"
+        with open(tmp, "w") as f:
+            json.dump(snap, f)
+        os.replace(tmp, user_state_path(data_dir))
+    except Exception as e:
+        print(f"[user] state save failed: {e}", flush=True)
 
 
 class StubScorer:
@@ -333,6 +413,236 @@ def parse_kv(spec, defaults):
     return out
 
 
+def parse_kv_mixed(spec, defaults):
+    """parse_kv that keeps non-numeric values as strings (the user
+    gate's mode= rides beside its numeric thresholds)."""
+    out = dict(defaults)
+    for part in (spec or "").split(","):
+        if "=" in part:
+            k, v = part.split("=", 1)
+            k, v = k.strip(), v.strip()
+            try:
+                out[k] = float(v)
+            except ValueError:
+                out[k] = v
+    return out
+
+
+def load_pointer_scorer(args, key):
+    """A scorer for a soak-ledger key - how the user pointer material-
+    izes weights. stub -> StubScorer; base:<src> -> the birth checkpoint
+    from the base dir; cpt-* -> that ring checkpoint."""
+    if key == "stub" or args.checkpoint == "stub":
+        return StubScorer(tag=f"user:{key}")
+    if key.startswith("base:"):
+        return NanochatScorer(args.checkpoint)
+    ring_dir = os.path.join(args.data_dir, "checkpoints", key)
+    return NanochatScorer.from_ring(args.checkpoint, ring_dir)
+
+
+def user_agreement(scorer, n=8):
+    """The watchdog's re-audit: the USER pointer's generated-verdict
+    agreement against the newest held-out frontier pairs - the same
+    measurement the trainer's gate makes, on the same prompts. None
+    when there is nothing to measure (stub, or too few pairs)."""
+    if isinstance(scorer, StubScorer) or len(HELDOUT_PAIRS) < 4:
+        return None
+    pairs = HELDOUT_PAIRS[-int(n):]
+    total = 0.0
+    for pr in pairs:
+        conversation = {"messages": [
+            {"role": "user", "content": salience_prompt("?", pr["input"], 0, 0)},
+            {"role": "assistant", "content": ""},
+        ]}
+        ids = scorer.tokenizer.render_for_completion(conversation)
+        results, _m = scorer.engine.generate_batch(
+            ids, num_samples=1, max_tokens=64, temperature=0.01, top_k=1)
+        sal, _why = parse_salience(scorer.tokenizer.decode(results[0][len(ids):]))
+        if sal is None:
+            sal = 0.5
+        total += min(1.0, abs(sal - float(pr["target"])))
+    return round(1.0 - total / len(pairs), 4)
+
+
+def do_user_promote(args, reason):
+    """Advance the user pointer onto the gate's READY candidate: load
+    its weights fresh (never shared with the salience slots), swap, and
+    persist. Returns (ok, payload)."""
+    with LOCK:
+        key = USER["ready"]
+        snapshot = USER["ready_eval"]
+    if not key:
+        return False, {"status": "err", "msg": "no candidate is ready - "
+                       "the user gate has not passed (soak/agree/regress)"}
+    try:
+        scorer = load_pointer_scorer(args, key)
+    except Exception as e:
+        return False, {"status": "err", "msg": f"user pointer load failed: {e}"}
+    with LOCK:
+        prev = USER["pointer"]
+        USER_SLOT["scorer"] = scorer
+        USER["last_good"] = prev
+        USER["pointer"] = key
+        USER["name"] = f"user:{key}"
+        USER["promoted_at"] = int(time.time() * 1000)
+        USER["eval"] = snapshot
+        USER["ready"] = None
+        USER["ready_eval"] = None
+        USER["promotions"] += 1
+    save_user_state(args.data_dir)
+    append_metric(args.data_dir, {"kind": "user_promote", "pointer": key,
+                                  "prev": prev, "reason": reason,
+                                  "eval": snapshot})
+    print(f"[user] pointer -> {key} ({reason})", flush=True)
+    return True, {"status": "ok", "pointer": key, "prev": prev,
+                  "reason": reason, "eval": snapshot}
+
+
+def do_user_rollback(args, reason):
+    with LOCK:
+        prev = USER["pointer"]
+        target = USER["last_good"]
+    if not target:
+        return False, {"status": "err", "msg": "no last_good to roll back to"}
+    try:
+        scorer = load_pointer_scorer(args, target)
+    except Exception as e:
+        return False, {"status": "err", "msg": f"rollback load failed: {e}"}
+    with LOCK:
+        USER_SLOT["scorer"] = scorer
+        USER["pointer"] = target
+        USER["name"] = f"user:{target}"
+        USER["promoted_at"] = int(time.time() * 1000)
+        USER["last_good"] = None    # one step back, deliberately - not a stack
+        USER["rollbacks"] += 1
+    save_user_state(args.data_dir)
+    append_metric(args.data_dir, {"kind": "user_rollback", "from": prev,
+                                  "to": target, "reason": reason})
+    print(f"[user] ROLLED BACK {prev} -> {target} ({reason})", flush=True)
+    return True, {"status": "ok", "pointer": target, "from": prev,
+                  "reason": reason}
+
+
+def user_gate_loop(args):
+    """The stricter, slower lane. Every check_s: (1) decide whether the
+    soaking salience pointer qualifies as the READY candidate - soak
+    time and verdicts served on the fast lane, agreement from the
+    trainer's last gate, no held-out-standard creep past the last user
+    promotion; (2) in auto mode, promote it; (3) re-audit the SERVING
+    user pointer against the newest held-out pairs and roll back to
+    last_good if its agreement has decayed below agree - regress."""
+    cfg = parse_kv_mixed(args.user_gate, USER_GATE_DEFAULTS)
+    print(f"[user] gate: {cfg}", flush=True)
+    # the watchdog's data must not depend on the trainer being on:
+    # load persisted held-out pairs if nobody has yet
+    pairs_path = os.path.join(args.data_dir, "heldout_pairs.jsonl")
+    if os.path.exists(pairs_path) and not HELDOUT_PAIRS:
+        try:
+            with open(pairs_path) as f:
+                for ln in f:
+                    ln = ln.strip()
+                    if ln:
+                        try:
+                            HELDOUT_PAIRS.append(json.loads(ln))
+                        except Exception:
+                            pass
+        except Exception:
+            pass
+    while True:
+        time.sleep(max(float(cfg["check_s"]), 1.0))
+        try:
+            with LOCK:
+                cur = SOAK["current"]
+                soak = dict(SOAK["rings"].get(cur) or {})
+                serving = USER["pointer"]
+                lg = dict(TRAINER.get("last_gate") or {})
+                user_scorer = USER_SLOT["scorer"]
+                prev_eval = dict(USER["eval"] or {})
+            # a READY candidate that lost the fast lane (a newer
+            # promotion took it) is stale: it qualifies only while it
+            # IS the canary. Clear it; the new pointer soaks fresh.
+            with LOCK:
+                if USER["ready"] and USER["ready"] != cur:
+                    print(f"[user] ready candidate {USER['ready']} superseded "
+                          f"by {cur} on the fast lane - cleared", flush=True)
+                    USER["ready"] = None
+                    USER["ready_eval"] = None
+            # (1) candidacy
+            if cur and cur != serving:
+                soaked = time.time() - soak.get("since", time.time())
+                verdicts = int(soak.get("verdicts", 0))
+                agree = lg.get("live_agree")
+                std = lg.get("live_std")
+                prev_std = prev_eval.get("std")
+                soak_ok = (soaked >= float(cfg["soak_s"])
+                           and verdicts >= int(cfg["verdicts"]))
+                agree_ok = agree is None or agree >= float(cfg["agree"])
+                std_ok = (std is None or prev_std is None
+                          or std <= prev_std * (1 + float(cfg["regress"])))
+                if soak_ok and agree_ok and std_ok:
+                    snapshot = {"soak_s": int(soaked), "verdicts": verdicts,
+                                "agree": agree, "std": std,
+                                "at": int(time.time() * 1000)}
+                    newly = False
+                    with LOCK:
+                        if USER["ready"] != cur:
+                            USER["ready"] = cur
+                            USER["ready_eval"] = snapshot
+                            newly = True
+                    if newly:
+                        append_metric(args.data_dir, dict(
+                            snapshot, kind="user_ready", pointer=cur))
+                        print(f"[user] READY: {cur} {snapshot}", flush=True)
+                    if str(cfg.get("mode")) == "auto":
+                        do_user_promote(args, "auto")
+            # (3) the watchdog re-audit
+            if user_scorer is not None and serving:
+                fresh = user_agreement(user_scorer)
+                if fresh is not None:
+                    with LOCK:
+                        USER["eval"] = dict(prev_eval, watch_agree=fresh,
+                                            watch_at=int(time.time() * 1000))
+                    if fresh < float(cfg["agree"]) - float(cfg["regress"]):
+                        ok, _p = do_user_rollback(
+                            args, f"watchdog: agreement {fresh} < "
+                            f"{cfg['agree']} - {cfg['regress']}")
+                        if not ok:
+                            print(f"[user] watchdog wants rollback "
+                                  f"(agree {fresh}) but has no last_good",
+                                  flush=True)
+        except Exception as e:
+            print(f"[user] gate loop error: {e}", flush=True)
+
+
+def restore_user_pointer(args):
+    """Startup: the user pointer survives restarts. Load whatever
+    user_pointer.json names, in the background, non-fatally."""
+    path = user_state_path(args.data_dir)
+    if not os.path.exists(path):
+        return
+    try:
+        with open(path) as f:
+            snap = json.load(f)
+    except Exception as e:
+        print(f"[user] state file unreadable: {e}", flush=True)
+        return
+    key = snap.get("pointer")
+    if not key:
+        return
+    try:
+        scorer = load_pointer_scorer(args, key)
+    except Exception as e:
+        print(f"[user] persisted pointer {key} failed to load: {e}", flush=True)
+        return
+    with LOCK:
+        USER_SLOT["scorer"] = scorer
+        for k in ("pointer", "name", "promoted_at", "eval", "last_good"):
+            USER[k] = snap.get(k)
+        USER["promotions"] = int(snap.get("promotions") or 0)
+        USER["rollbacks"] = int(snap.get("rollbacks") or 0)
+    print(f"[user] restored pointer {key}", flush=True)
+
+
 def load_standard_docs(args, limit=512):
     """Standard pretraining data for the replay mix: the base-dir's own
     parquet shards when pyarrow can read them, else standard.txt in the
@@ -387,7 +697,8 @@ def trainer_real(args):
         if os.path.exists(path):
             with open(path) as f:
                 dest.extend(ln.strip() for ln in f if ln.strip())
-    if os.path.exists(pairs_path):
+    if os.path.exists(pairs_path) and not HELDOUT_PAIRS:
+        # (the user gate loop may have loaded them already)
         with open(pairs_path) as f:
             for ln in f:
                 ln = ln.strip()
@@ -570,6 +881,7 @@ def trainer_real(args):
             TRAINER["last_gate"] = gate_row
         append_metric(args.data_dir, dict(gate_row, kind="gate"))
         if verdict == "promote":
+            saved_key = None
             try:
                 from nanochat.checkpoint_manager import save_checkpoint
                 ckdir = os.path.join(args.data_dir, "checkpoints",
@@ -577,8 +889,15 @@ def trainer_real(args):
                 save_checkpoint(ckdir, steps,
                                 {k: v.detach().cpu() for k, v in candidate.state_dict().items()},
                                 None, {"model_config": dict(live.meta["model_config"])})
+                saved_key = os.path.basename(ckdir)
+                # ring pruning - but never the user pointer's checkpoints
+                with LOCK:
+                    protected = {v for v in (USER["pointer"], USER["last_good"],
+                                             USER["ready"]) if v}
                 ring = sorted(os.listdir(os.path.join(args.data_dir, "checkpoints")))
                 for old in ring[:-5]:
+                    if old in protected:
+                        continue
                     shutil.rmtree(os.path.join(args.data_dir, "checkpoints", old),
                                   ignore_errors=True)
             except Exception as e:
@@ -595,6 +914,9 @@ def trainer_real(args):
                 STATE["promotions"] += 1
                 TRAINER["promotions"] += 1
             live = scorer
+            # the new salience pointer starts its soak on the SLOW lane's
+            # clock; an unsaved (memory-only) promotion can never qualify
+            set_soak(saved_key)
             live_std = eval_loss(live.engine.model, heldout_std_chunks)
             live_fresh = None
             live_agree = None
@@ -675,8 +997,13 @@ def trainer_loop(args):
                     os.makedirs(mark, exist_ok=True)
                     with open(os.path.join(mark, "MARKER"), "w") as f:
                         f.write(f"skeleton checkpoint after {name} ({n} samples)\n")
+                    with LOCK:
+                        protected = {v for v in (USER["pointer"], USER["last_good"],
+                                                 USER["ready"]) if v}
                     ring = sorted(os.listdir(ckdir))
                     for old in ring[:-5]:
+                        if old in protected:
+                            continue
                         shutil.rmtree(os.path.join(ckdir, old), ignore_errors=True)
         except Exception as e:
             print(f"[trainer] error: {e}", flush=True)
@@ -735,6 +1062,14 @@ class Handler(BaseHTTPRequestHandler):
                 "checkpoints": sorted(os.listdir(ck)) if os.path.isdir(ck) else [],
                 "uptime_s": int(time.time() - START),
                 "trainer": dict(TRAINER),
+                "user": dict(
+                    USER,
+                    soaking=SOAK["current"],
+                    soak=(lambda s: {"since_s": int(time.time() - s["since"]),
+                                     "verdicts": s["verdicts"]} if s else None)(
+                        SOAK["rings"].get(SOAK["current"])),
+                    serving=USER_SLOT["scorer"] is not None,
+                ),
             })
 
     def do_POST(self):
@@ -759,6 +1094,9 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(500, {"status": "err", "msg": f"scorer failed: {e}"})
             with LOCK:
                 STATE["scored"] += 1
+                cur = SOAK["current"]
+                if cur and cur in SOAK["rings"]:
+                    SOAK["rings"][cur]["verdicts"] += 1
             append_metric(self.server.args.data_dir,
                           {"kind": "verdict", "sal": round(float(sal), 3)})
             return self._json(200, {
@@ -777,13 +1115,14 @@ class Handler(BaseHTTPRequestHandler):
         if self.path == "/shutdown":
             # The GPU off-switch: answer, then exit cleanly. Everything
             # durable survives on disk (ring checkpoints, replay,
-            # held-out sets, metrics); the in-memory candidate's steps
-            # since its last promotion are the only loss. Bootstrap
-            # relaunches on demand and resumes at the newest ring
-            # checkpoint via make_scorer.
+            # held-out sets, metrics, the user pointer); the in-memory
+            # candidate's steps since its last promotion are the only
+            # loss. Bootstrap relaunches on demand and resumes at the
+            # newest ring checkpoint via make_scorer.
             self._json(200, {"status": "ok", "msg": "shutting down"})
             threading.Timer(0.3, lambda: os._exit(0)).start()
             return
+        if self.path == "/promote":
             # double-buffer: load into the slot NOT being served, then swap.
             args2 = self.server.args
             newest = (newest_ring(args2.data_dir)
@@ -802,10 +1141,69 @@ class Handler(BaseHTTPRequestHandler):
                 STATE["live"] = inactive
                 STATE["promotions"] += 1
                 live = STATE["live"]
+            set_soak(soak_key_for(scorer))
             return self._json(200, {
                 "status": "ok", "live_slot": live,
                 "loaded": newest or "stub", "pointer": f"{live}:{scorer.name}",
             })
+        if self.path == "/chat":
+            # the USER pointer's face - never the salience slots
+            try:
+                req = json.loads(raw) if raw else {}
+            except Exception:
+                return self._json(400, {"status": "err", "msg": "body must be JSON"})
+            with LOCK:
+                scorer = USER_SLOT["scorer"]
+                pointer = USER["name"]
+            if scorer is None:
+                return self._json(503, {
+                    "status": "err",
+                    "msg": "no user pointer promoted yet - the user gate "
+                           "(soak + evals) has not advanced it"})
+            t0 = time.time()
+            messages = req.get("messages") or []
+            if not messages and req.get("prompt"):
+                messages = [{"role": "user", "content": str(req["prompt"])}]
+            if not messages:
+                return self._json(400, {"status": "err",
+                                        "msg": "messages (or prompt) required"})
+            if isinstance(scorer, StubScorer):
+                last = str(messages[-1].get("content", ""))[:120]
+                return self._json(200, {
+                    "status": "ok",
+                    "text": f"[stub user pointer] heard: {last}",
+                    "pointer": pointer, "ms": int((time.time() - t0) * 1000)})
+            # nanochat's chat template knows user/assistant only - fold
+            # any system content into the first user turn
+            sys_txt = "\n".join(str(m.get("content", "")) for m in messages
+                                if m.get("role") == "system").strip()
+            messages = [m for m in messages if m.get("role") != "system"]
+            if sys_txt and messages:
+                m0 = dict(messages[0])
+                m0["content"] = f"[system]\n{sys_txt}\n\n{m0.get('content', '')}"
+                messages = [m0] + messages[1:]
+            try:
+                conversation = {"messages": list(messages)
+                                + [{"role": "assistant", "content": ""}]}
+                ids = scorer.tokenizer.render_for_completion(conversation)
+                max_tokens = min(int(req.get("max_tokens") or 256), 1024)
+                temp = float(req.get("temperature") or 0.7)
+                results, _m = scorer.engine.generate_batch(
+                    ids, num_samples=1, max_tokens=max_tokens,
+                    temperature=temp, top_k=50)
+                text = scorer.tokenizer.decode(results[0][len(ids):])
+            except Exception as e:
+                return self._json(500, {"status": "err",
+                                        "msg": f"generation failed: {e}"})
+            return self._json(200, {"status": "ok", "text": text,
+                                    "pointer": pointer,
+                                    "ms": int((time.time() - t0) * 1000)})
+        if self.path == "/user_promote":
+            ok, payload = do_user_promote(self.server.args, "manual")
+            return self._json(200 if ok else 409, payload)
+        if self.path == "/user_rollback":
+            ok, payload = do_user_rollback(self.server.args, "manual")
+            return self._json(200 if ok else 409, payload)
         return self._json(404, {"status": "err", "msg": "unknown path"})
 
 
@@ -826,6 +1224,7 @@ def load_initial(args):
                 STATE["slots"]["A"] = scorer
                 STATE["loading"] = False
                 STATE["boot_error"] = None
+            set_soak(soak_key_for(scorer))
             print(f"[service] scorer ready: {scorer.name}", flush=True)
             return
         except Exception as e:
@@ -854,6 +1253,12 @@ def main():
                     help="gate cadence + thresholds (owner call)")
     ap.add_argument("--train-interval", default="10",
                     help="seconds between training steps")
+    ap.add_argument("--user-gate",
+                    default="mode=manual,soak_s=21600,verdicts=100,"
+                            "agree=0.75,regress=0.05,check_s=300",
+                    help="the user pointer's stricter gate (owner call): "
+                         "mode=manual|auto, soak_s/verdicts on the fast "
+                         "lane, agree floor, regress slack, check cadence")
     args = ap.parse_args()
     for sub in ("checkpoints", "ingest", "ingested"):
         os.makedirs(os.path.join(args.data_dir, sub), exist_ok=True)
@@ -861,6 +1266,8 @@ def main():
     threading.Thread(target=trainer_loop, args=(args,), daemon=True).start()
     if args.train == "on" and args.checkpoint != "stub":
         threading.Thread(target=trainer_real, args=(args,), daemon=True).start()
+    threading.Thread(target=restore_user_pointer, args=(args,), daemon=True).start()
+    threading.Thread(target=user_gate_loop, args=(args,), daemon=True).start()
     srv = ThreadingHTTPServer(("127.0.0.1", args.port), Handler)
     srv.args = args
     print(f"[service] serving on 127.0.0.1:{args.port} (scorer loading) "

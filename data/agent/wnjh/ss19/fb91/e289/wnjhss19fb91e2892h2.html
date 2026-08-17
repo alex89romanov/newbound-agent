@@ -112,6 +112,14 @@
             <button class="ag-mind-btn" data-act="release"
               title="stop the service and free ALL of the agent's GPU memory; ring checkpoints, replay, and metrics survive - resume with bootstrap (loads the newest ring checkpoint). set SALIENCE=off too if you want it to stay off across executive restarts">release GPU</button>
           </span>
+          <p class="ag-card-t lbl">the user-facing pointer — stricter lane (8a)</p>
+          <div class="ag-kv" data-kv="userptr"></div>
+          <span class="ag-btnrow">
+            <button class="ag-mind-btn" data-act="user-promote" hidden
+              title="advance the user-facing pointer onto the gate's ready candidate - the deliberate approval the manual mode waits for">promote user pointer</button>
+            <button class="ag-mind-btn" data-act="user-rollback" hidden
+              title="revert the user-facing pointer to last_good (one step; the watchdog does this automatically on agreement decay)">roll back</button>
+          </span>
           <pre class="ag-mind-note lbl" data-note="judge"></pre>
         </div>
         <div class="ag-card" data-card="flywheel">
