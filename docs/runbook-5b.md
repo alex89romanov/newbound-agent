@@ -258,6 +258,8 @@ diagnosis happens from the web session.
 
 ## 8. Claude inside the agent (the CLAUDECODE arm)
 
+**Full manual: docs/claudecode-arm.md** — this section is the recap.
+
 The frontier arm can be Claude itself, drawing on a Pro/Max
 subscription's OAuth login instead of metered API credits, through the
 Claude Code CLI. One flip covers **every** frontier surface at once -
