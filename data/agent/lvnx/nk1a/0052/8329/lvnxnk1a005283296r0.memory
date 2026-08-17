@@ -23,5 +23,11 @@
     "tags": "phase5b",
     "confidence": "high",
     "time": 1786842118178
+  },
+  {
+    "claim": "Phase 7 steering (2026-08-17, owner go-ahead): the executive computes the salience verdict FIRST on bound-claims-only context (matching the agreement gates measurement conditions - matched is 0 at verdict time), then steers orientation: sal < SALIENCE_BANDS low= (0.2) takes the fast path - recall skipped entirely, no escalation exposure, epsilon audit RETAINED so the fast lane stays observed; sal > high= (0.8) earns deep recall (deep=6 instead of 3); between = old behavior; the 0.35-0.65 escalation band is unchanged and separate. SALIENCE_STEER=off (live key) reverts to record-dont-act; counters fast_skips/deep_orients in executive status (which maps fields EXPLICITLY - new ex fields must be added to its list or they silently read as absent). Verified: fast skipped recall (top_claim absent) while deep matched 105 claims on the same query; escalation+disagreement intact; off-switch reverts live.",
+    "tags": "phase7",
+    "confidence": "high",
+    "time": 1786973023043
   }
 ]

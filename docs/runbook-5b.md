@@ -43,8 +43,20 @@ pairs). Feed it: `agent-model-curriculum_export` into
 lineage: `nanochat:sft` at birth, `nanochat:cpt-<step>` once its own
 training has passed a gate.
 
-Still out of scope (Phase 7+): salience steering behavior (verdicts
-are still recorded, not acted on), the separately-gated user-facing
+**Phase 7 is in (2026-08-17): salience steers.** The verdict is
+computed FIRST, on bound-claims-only context (the same conditions the
+agreement gate measures under), then steers orientation: below
+`SALIENCE_BANDS low=` the perception takes the fast path (no recall,
+no escalation exposure - the epsilon audit still applies, so the fast
+lane stays observed); above `high=` it earns deep recall (`deep=`
+limit instead of 3); between, exactly the old behavior. Counters
+`fast_skips` / `deep_orients` ride executive status and the mind tab.
+
+    SALIENCE_STEER=on                    # off = record-don't-act (live)
+    SALIENCE_BANDS=low=0.2,high=0.8,deep=6   # keep low/high outside
+                                             # the 0.35-0.65 escalation band
+
+Still out of scope (Phase 8+): the separately-gated user-facing
 pointer, LoRA personality re-derivation, frontier-spend and
 perception-rate stats.
 

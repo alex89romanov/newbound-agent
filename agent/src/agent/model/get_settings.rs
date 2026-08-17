@@ -69,6 +69,8 @@ fn agent_root() -> Result<std::path::PathBuf, String> {
 
 let known: &[(&str, &str, &str)] = &[
     ("SALIENCE", "off", "immediately (service launch: next bootstrap)"),
+    ("SALIENCE_STEER", "on", "immediately"),
+    ("SALIENCE_BANDS", "low=0.2,high=0.8,deep=6", "immediately"),
     ("LLM", "VLLM", "next frontier call"),
     ("VLLM_URL", "", "next frontier call"),
     ("VLLM_MODEL", "", "next frontier call"),

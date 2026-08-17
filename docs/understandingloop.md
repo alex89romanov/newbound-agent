@@ -391,7 +391,14 @@ training pairs; the epsilon-audit samples non-escalated verdicts.
 *Verify:* tick-rate orientation runs without frontier calls;
 escalation log fills with (input, nanochat-call, frontier-call) rows.
 *Unblocks:* the loop runs hot without cost explosion; the curriculum
-writes itself.
+writes itself. **[2026-08-17: STEERING is live (Phase 7, owner
+go-ahead) - the verdict is computed first (bound-claims-only context,
+matching the agreement gate's conditions) and gates orientation depth:
+fast path below SALIENCE_BANDS low= (no recall; epsilon audit
+retained), deep recall above high=, unchanged between.
+SALIENCE_STEER=off reverts live. The founding restraint - verdicts
+recorded, not acted on - is hereby lifted for orientation; acts remain
+drive-budgeted and decay-only.]**
 
 *Executed (5a, the architecture half) 2026-08-15 on
 claude/phase5a-salience. `SALIENCE_CTL` is a REAL seam under the
