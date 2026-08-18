@@ -211,11 +211,20 @@ code change. Multi-node shard placement follows the existing
 the runbook's.
 
 **The anchor rule** rides here: every model record names the dataset
-its forgetting guard measures against. A model born here anchors to
-its own pretraining shards — that is what makes today's regression
-gate meaningful — and an import must be *given* an anchor at the door
-(proposal: a shipped fineweb-edu sample recipe). A model without an
-anchor cannot pass a gate; refusing to measure is not passing.
+its forgetting guard measures against, resolved by lineage (owner
+ruling, 2026-08-18). A model born here — nanochat today, any
+recipe-trained model tomorrow — anchors to a held-out slice of its
+own training datasets, automatically and exactly: the recipe records
+what trained it, so the anchor problem exists only for imports. An
+import arrives without its data, so the import door MINTS one:
+sample the model itself at import time (a few hundred generations
+from varied prompts, frozen), measuring drift from its imported self
+— distribution-free, offline, right for any model on the spectrum,
+and frozen at import: what we teach it afterward is the standing
+gates' business. An explicit anchor always overrides (an open-data
+model whose corpus is public; the fineweb-edu sample ships as an
+optional dataset recipe, not a default). A model without an anchor
+cannot pass a gate; refusing to measure is not passing.
 
 **The feed contract — the agent feeds its own lab.** Doing its agent
 thing, the agent already throws off trainable residue on every
@@ -441,9 +450,14 @@ a different scale.
    doesn't need a dedicated library. Settings: `MODEL=` names a
    registry record; `MODEL_CHECKPOINT` stays as the
    unregistered-directory alias (S1/S2/S4/S6).
-2. Anchor default for imports (proposal: shipped fineweb-edu sample
-   recipe via the dataset manager; stated honestly as a proxy — an
-   import's true pretraining distribution is unavailable) (S2).
+2. **RULED (owner, 2026-08-18) — anchor by lineage.** Born-here
+   models of any architecture anchor to a held-out slice of their own
+   training datasets — the recipe knows what trained them, so this is
+   automatic and exact, and the anchor problem exists only for
+   imports. The import door mints a self-generated anchor by default
+   (sample the model at import, freeze it); an explicit anchor always
+   overrides; the fineweb-edu sample ships as an optional dataset
+   recipe, not a default (S2).
 3. Adapter stacking: may several adapters ride one pointer?
    (proposal: yes — ordered, each gated in the presence of the stack
    beneath it, the whole stack re-probed on base movement like
