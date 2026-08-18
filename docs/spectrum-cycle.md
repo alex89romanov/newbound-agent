@@ -323,7 +323,10 @@ reads the anchor; promote applies the delta (in-memory flip where the
 model lives in-process); hold and reset discard it; the ring stores
 deltas with base refs and prunes by a byte budget rather than a count
 (five full d20 deltas are cheap; five full 8B deltas are 80GB;
-adapters are noise). Today's ring layout is the `full` posture's disk
+adapters are noise), with two floors that hold regardless of budget:
+the protected user-pointer set never prunes, and neither does the
+newest entry — the ring is the restart-recovery path and never
+empties. Today's ring layout is the `full` posture's disk
 form, unchanged — a live instance upgrades in place.
 
 One design question this phase must answer in writing before code:
@@ -480,8 +483,13 @@ a different scale.
    does not fit refuses at launch with the arithmetic shown — the
    trainer's step-OOM skip stays the runtime backstop, never the
    plan (S5).
-5. Ring byte budget (proposal: 100GB default, user-pointer
-   checkpoints protected as today) (S5).
+5. **RULED (owner, 2026-08-18) — ring prunes by byte budget.** 100GB
+   default, a tunable setting, with two floors that hold regardless:
+   the protected set (user pointer, last_good, ready) never prunes,
+   and the newest ring entry never prunes — the ring is the
+   restart-recovery path and must never empty. Disk is a
+   resource-map fact: the solver warns when the budget exceeds free
+   disk (S5).
 6. One resident or two: may the user lane ride a different lineage
    than the salience lane on one instance, with shadow-soak as its
    evidence? (proposal: yes — the split pointer was always two jobs)
