@@ -75,11 +75,17 @@ same direction as the standing proposals.
    promotion; it may never change what the gate measures or who is
    allowed to pass. The bench (S6) measures with the same instruments
    the gates enforce with — one vocabulary of quality, everywhere.
-3. **Weights and datasets under management are instance-owned**, like
-   the brain: records ship as skeleton, bytes never commit. Imports
-   are deliberate commands; nothing acquires data or weights on its
-   own. Every imported artifact carries provenance (source, revision,
-   hash) from the moment it enters.
+3. **Models, datasets, recipes, and adapters are products of the
+   system — user data, never shipped** (owner ruling, 2026-08-18).
+   The app ships mechanism and compiled-in defaults only, and
+   bootstraps its own model; users import their own weights and grow
+   their own datasets. User data lives where user data already lives:
+   records in the runtime library (user settings and state, beside
+   `salience_log`), files under the runtime folder. Nothing in the
+   agent library, nothing in git. Imports are deliberate commands;
+   nothing acquires data or weights on its own, and every imported
+   artifact carries provenance (source, revision, hash) from the
+   moment it enters.
 4. **Every posture is published.** The solver's arithmetic, the chosen
    training posture, the placement, the anchor in use — all land in
    `service_status`, `metrics.jsonl`, and the mind tab. An override
@@ -173,8 +179,11 @@ battery, and a merge word — the established rhythm.
 Models become records: backend, source and lineage (born here vs
 imported; `nanochat:cpt-…` vs `qwen3-8b:cpt-…` — the pointer-name
 lineage story, generalized), tokenizer/template facts, footprint
-(params, dtype, bytes), anchor dataset ref, provenance. Instance-owned
-(kb posture). `agent-model-import` is the deliberate door: bring an HF
+(params, dtype, bytes), anchor dataset ref, provenance. The records
+live in the runtime library — user settings and state, beside
+`salience_log` — never in the agent library, never in git; the
+commands that manage them are the shipped code.
+`agent-model-import` is the deliberate door: bring an HF
 snapshot or a nanochat base dir under management, hash it, demand an
 anchor (S2). `MODEL_CHECKPOINT` survives as the degenerate alias — one
 unregistered nanochat dir, exactly today's behavior.
@@ -187,9 +196,10 @@ one card and can now be sized from the map.
 
 ### S2 — The dataset manager
 
-Named datasets as instance-owned records: kind (`cpt` / `sft` / `eval`
-/ `persona` / `anchor`), provenance, hash, row counts, held-out
-policy, mix weight. Bytes under `runtime/agent/model/datasets/`.
+Named datasets as records in the runtime library: kind (`cpt` / `sft`
+/ `eval` / `persona` / `anchor`), provenance, hash, row counts,
+held-out policy, mix weight. Bytes under
+`runtime/agent/model/datasets/` — the runtime folder, user files.
 Commands in the `curriculum_export` idiom: `dataset_add` (local file
 or HF hub — deliberate, never automatic), `dataset_list`,
 `dataset_inspect`. The trainer's three hardcoded pools generalize to
@@ -271,7 +281,8 @@ LoRA → gate (must improve its subject by `min_gain`, must not
 lobotomize the base past `guard`) → apply — welded to one corpus and
 one lane. Promote it to a general organ: **adapters become named
 records** (purpose, dataset ref, base ref, targets, rank, gate
-report), derived by one command against any managed base —
+report — in the runtime library, like every registry record),
+derived by one command against any managed base —
 
     agent-model-adapter_derive name:<n> dataset:<d> base:<model> ...
 
@@ -418,11 +429,18 @@ a different scale.
 
 ## Owner calls collected
 
-1. Registry shape: homes for model, dataset, recipe, and adapter
-   records (proposal: `agent.models` / `agent.datasets` /
-   `agent.recipes` controls, kb posture) and the settings key
-   (`MODEL=` naming a record, `MODEL_CHECKPOINT` kept as the
-   degenerate alias) (S1/S2/S4/S6).
+1. **RULED (owner, 2026-08-18) — registry shape.** Models, datasets,
+   recipes, and adapters are products of the system — user data —
+   and live where user data already lives: records in the runtime
+   library (user settings and state), bytes in the runtime folder
+   (user files). Never in the agent library, never shipped: the app
+   ships mechanism plus compiled-in defaults (the persona-seed
+   precedent; the nanochat birth recipe ships the same way), and a
+   fresh install bootstraps its own model. Rule of thumb for housing
+   user data (owner): unless it needs table scans, it probably
+   doesn't need a dedicated library. Settings: `MODEL=` names a
+   registry record; `MODEL_CHECKPOINT` stays as the
+   unregistered-directory alias (S1/S2/S4/S6).
 2. Anchor default for imports (proposal: shipped fineweb-edu sample
    recipe via the dataset manager; stated honestly as a proxy — an
    import's true pretraining distribution is unavailable) (S2).
