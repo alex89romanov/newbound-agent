@@ -56,6 +56,19 @@ limit instead of 3); between, exactly the old behavior. Counters
     SALIENCE_BANDS=low=0.2,high=0.8,deep=6   # keep low/high outside
                                              # the 0.35-0.65 escalation band
 
+**[2026-08-17: unparseable escalates.]** A local reply the parser
+cannot read (`parsed:false` on the verdict; the mind tab counts them
+as "unparseable verdicts") is treated as UNCERTAINTY, not a verdict:
+the salvaged number never steers, and the perception always
+escalates - a judge that cannot state its verdict is exactly what the
+frontier should adjudicate, and each one lands a pair that teaches
+the format back. Without this, a format-drifted checkpoint salvages
+0s, routes everything to the fast path, and starves its own
+correction loop (first observed live: cpt-450's first two real
+verdicts). Salience-pair curriculum now also renders as THE SERVING
+PROMPT + the JSON answer - training, serving, and the agreement gate
+speak one dialect.
+
 **Phase 8a is in (2026-08-17): the pointer splits in two.** The
 salience pointer stays the fast lane above. A **user-facing pointer**
 now serves `/chat` and only advances through a stricter, slower gate:
