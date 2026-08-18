@@ -313,7 +313,11 @@ one is today's persona behavior, unchanged.
 
 The heart. The candidate becomes base + delta; the solver walks the
 fidelity ladder against the resource map and publishes its choice and
-its arithmetic. Gates keep their meaning: the agreement measure runs
+its arithmetic. "Fits" is defined (owner ruling, 2026-08-18): free
+VRAM minus the computed serving reservation (weights + KV at serving
+context + activation room) minus a 15% margin (a setting);
+`MODEL_POSTURE=` forces a rung, published, and a forced posture that
+does not fit refuses at launch with the arithmetic shown. Gates keep their meaning: the agreement measure runs
 on generated verdicts whatever the delta type; the forgetting guard
 reads the anchor; promote applies the delta (in-memory flip where the
 model lives in-process); hold and reset discard it; the ring stores
@@ -468,8 +472,14 @@ a different scale.
    re-runs every member's subject probe with the full stack applied,
    plus one standard-loss guard for the stack. A stack of one is
    persona's shipped behavior, unchanged (S4).
-4. Solver headroom and override (proposal: serving KV reservation
-   plus 15% margin; `MODEL_POSTURE=` override, published) (S5).
+4. **RULED (owner, 2026-08-18) — solver headroom as proposed.** The
+   serving reservation is computed from the model record and serving
+   context (weights + KV + activation room); a 15% margin rides on
+   top as a tunable setting. `MODEL_POSTURE=` forces a rung and is
+   published as loudly as a solver choice; a forced posture that
+   does not fit refuses at launch with the arithmetic shown — the
+   trainer's step-OOM skip stays the runtime backstop, never the
+   plan (S5).
 5. Ring byte budget (proposal: 100GB default, user-pointer
    checkpoints protected as today) (S5).
 6. One resident or two: may the user lane ride a different lineage
