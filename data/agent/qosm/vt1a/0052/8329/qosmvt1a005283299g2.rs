@@ -208,8 +208,20 @@ std::thread::spawn(move || {
                             ex.put_int("salience_calls", n + 1);
                             ctx.put_float("salience", sal);
                             if a.has("reasoning") { ctx.put_string("salience_why", &a.get_string("reasoning")); }
+                            // An unparseable local reply is UNCERTAINTY, not a
+                            // verdict: a salvaged number must not steer (a
+                            // format-drifted judge would route everything to
+                            // the fast path and starve its own correction),
+                            // and it always qualifies for escalation - each
+                            // one lands a pair that teaches the format back.
+                            let unparsed = a.has("parsed") && !a.get_boolean("parsed");
+                            if unparsed {
+                                ctx.put_boolean("salience_unparsed", true);
+                                let c = if ex.has("unparsed_verdicts") { ex.get_int("unparsed_verdicts") } else { 0 };
+                                ex.put_int("unparsed_verdicts", c + 1);
+                            }
                             let (steer_on, lo, hi, deep) = steer_cfg();
-                            if steer_on {
+                            if steer_on && !unparsed {
                                 if sal < lo {
                                     // the fast path: noise earns no recall
                                     ctx.put_string("steer", "fast");
@@ -226,7 +238,7 @@ std::thread::spawn(move || {
                                     ctx.put_string("steer", "normal");
                                 }
                             }
-                            let band = sal >= 0.35 && sal <= 0.65;
+                            let band = unparsed || (sal >= 0.35 && sal <= 0.65);
                             // Deterministic epsilon: hash of query +
                             // perception time - reproducible sampling,
                             // no rand dependency.

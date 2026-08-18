@@ -233,22 +233,25 @@ def salience_prompt(kind, text, matched, bound):
 
 
 def parse_salience(completion):
-    """{salient, reasoning} out of a model reply, salvaging a bare
-    number; (None, why) when nothing parseable is there."""
+    """(salient, reasoning, parsed) out of a model reply. parsed=False
+    marks a salvaged number or a total parse failure - the executive
+    treats an unparseable verdict as UNCERTAINTY and escalates it (a
+    judge that cannot state its verdict is exactly what the frontier
+    should adjudicate; each one becomes a format-teaching pair)."""
     s0, e0 = completion.find("{"), completion.rfind("}")
     if 0 <= s0 < e0:
         try:
             d = json.loads(completion[s0:e0 + 1])
             sal = float(d.get("salient"))
             why = str(d.get("reasoning") or "")[:300]
-            return max(0.0, min(1.0, sal)), (why or "model gave no reasoning")
+            return max(0.0, min(1.0, sal)), (why or "model gave no reasoning"), True
         except Exception:
             pass
     m = re.search(r"(?<![\w.])(?:0?\.\d+|[01](?:\.\d+)?)(?![\w.])", completion)
     if m:
         return (max(0.0, min(1.0, float(m.group(0)))),
-                f"unparseable reply, salvaged number: {completion[:120]!r}")
-    return None, f"unparseable reply: {completion[:120]!r}"
+                f"unparseable reply, salvaged number: {completion[:120]!r}", False)
+    return None, f"unparseable reply: {completion[:120]!r}", False
 
 
 class NanochatScorer:
@@ -341,10 +344,10 @@ class NanochatScorer:
         results, _masks = self.engine.generate_batch(
             ids, num_samples=1, max_tokens=96, temperature=0.2, top_k=50)
         completion = self.tokenizer.decode(results[0][len(ids):])
-        sal, why = parse_salience(completion)
+        sal, why, parsed = parse_salience(completion)
         if sal is None:
-            return 0.5, "defaulting uncertain - " + why
-        return sal, why
+            return 0.5, "defaulting uncertain - " + why, False
+        return sal, why, parsed
 
 
 def newest_ring(data_dir):
@@ -382,11 +385,20 @@ def render_sample(o):
     k = o.get("kind", "")
     try:
         if k == "salience_pair":
+            # the serving prompt + the serving answer format, exactly as
+            # the scorer serves and the agreement gate measures - training
+            # in any other dialect teaches the parser's failure mode
             r = o.get("row") or {}
             target = r.get("frontier", r.get("local", ""))
-            why = r.get("frontier_why", "")
-            return (f"PERCEPTION: {r.get('input', '')}\n"
-                    f"SALIENCE VERDICT: {target}\nREASONING: {why}")
+            why = str(r.get("frontier_why", "") or "")[:200]
+            try:
+                tval = round(float(target), 2)
+            except Exception:
+                tval = 0.5
+            ans = json.dumps({"salient": tval,
+                              "reasoning": why or "no reasoning recorded"})
+            return (salience_prompt("?", str(r.get("input", ""))[:600], 0, 0)
+                    + "\n" + ans)
         if k == "claim":
             e = o.get("entry") or {}
             return (f"MEMORY [{o.get('home', '')}]: {e.get('claim', '')} "
@@ -457,7 +469,7 @@ def user_agreement(scorer, n=8):
         ids = scorer.tokenizer.render_for_completion(conversation)
         results, _m = scorer.engine.generate_batch(
             ids, num_samples=1, max_tokens=64, temperature=0.01, top_k=1)
-        sal, _why = parse_salience(scorer.tokenizer.decode(results[0][len(ids):]))
+        sal, _why, _parsed = parse_salience(scorer.tokenizer.decode(results[0][len(ids):]))
         if sal is None:
             sal = 0.5
         total += min(1.0, abs(sal - float(pr["target"])))
@@ -1102,7 +1114,7 @@ def trainer_real(args):
             ids = live.tokenizer.render_for_completion(conversation)
             results, _m2 = eng.generate_batch(ids, num_samples=1, max_tokens=64,
                                               temperature=0.01, top_k=1)
-            sal, _why = parse_salience(live.tokenizer.decode(results[0][len(ids):]))
+            sal, _why, _parsed = parse_salience(live.tokenizer.decode(results[0][len(ids):]))
             if sal is None:
                 sal = 0.5
             total += min(1.0, abs(sal - float(pr["target"])))
@@ -1429,8 +1441,9 @@ class Handler(BaseHTTPRequestHandler):
                 msg = STATE["boot_error"] or "scorer still loading"
                 return self._json(503, {"status": "err", "msg": msg})
             try:
-                sal, why = scorer.score(
+                res = scorer.score(
                     req.get("perception") or {}, req.get("context") or {})
+                sal, why, parsed = res if len(res) == 3 else (res[0], res[1], True)
             except Exception as e:
                 return self._json(500, {"status": "err", "msg": f"scorer failed: {e}"})
             with LOCK:
@@ -1439,10 +1452,12 @@ class Handler(BaseHTTPRequestHandler):
                 if cur and cur in SOAK["rings"]:
                     SOAK["rings"][cur]["verdicts"] += 1
             append_metric(self.server.args.data_dir,
-                          {"kind": "verdict", "sal": round(float(sal), 3)})
+                          {"kind": "verdict", "sal": round(float(sal), 3),
+                           "parsed": bool(parsed)})
             return self._json(200, {
                 "status": "ok",
                 "salient": round(float(sal), 4),
+                "parsed": bool(parsed),
                 "reasoning": why,
                 "pointer": f"{live}:{scorer.name}",
                 "ms": int((time.time() - t0) * 1000),

@@ -98,5 +98,12 @@
     "tags": "model,persona,editor,ui",
     "confidence": "high",
     "time": 1786995859353
+  },
+  {
+    "claim": "Unparseable-escalates (2026-08-17): a local verdict the parser cannot read is UNCERTAINTY, not a verdict. The service marks it (parse_salience returns a parsed flag; /salience responses and verdict metrics carry parsed:false for salvaged numbers and total failures); the executive then refuses to steer on it (the salvaged number would route everything fast and starve the correction loop), counts it (unparsed_verdicts, on status and the mind tab loop card), and ALWAYS escalates it under the normal 5s cooldown - each one lands a disagreement pair. Root cause also fixed: render_sample was training salience pairs in a PLAIN-TEXT dialect (PERCEPTION:/SALIENCE VERDICT:/REASONING:) while serving demanded JSON - the flywheel was teaching the parsers failure mode. Curriculum now renders the serving prompt + the JSON answer, so training, serving, and the agreement gate speak one dialect.",
+    "detail": "Found live on the owners box: cpt-450s first two real verdicts salvaged to 0, both fast-steered, zero escalations - the drift routed around its own correction. Verified: tinybase /salience reports parsed:false and replay.jsonl carries the serving-format doc; executive half with a pinned fake (salient 0.9, parsed false): no steer, counted, escalated, pair landed - 0.9 would otherwise deep-steer and never escalate, so the test discriminates.",
+    "tags": "model,salience,format-drift,escalation",
+    "confidence": "high",
+    "time": 1787014898796
   }
 ]

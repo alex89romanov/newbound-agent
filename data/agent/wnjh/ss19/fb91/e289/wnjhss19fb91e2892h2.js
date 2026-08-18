@@ -713,6 +713,7 @@ async function init(host) {
         ["salience calls", ex.salience_calls ?? "—"],
         ["escalations / audits", `${ex.escalations ?? 0} / ${ex.audits ?? 0}`],
         ["disagreements", ex.disagreements ?? 0, (ex.disagreements ?? 0) > 0 ? "warn" : ""],
+        ["unparseable verdicts", ex.unparsed_verdicts ?? 0, (ex.unparsed_verdicts ?? 0) > 0 ? "warn" : ""],
         ["drive (acts/hr)", ex.drive ?? "—"],
         ["epistemic acts", ex.acts_total ?? "—"],
         ["steer fast / deep", `${ex.fast_skips ?? 0} / ${ex.deep_orients ?? 0}`],
