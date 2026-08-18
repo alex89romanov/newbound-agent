@@ -50,7 +50,12 @@ different sizes and across different architectures; to snap the parts
 together like bricks — and, when a variant wins, to say *why*: was it
 the training data or the architecture? Deriving purpose-built LoRAs
 on demand is a first-class product of the subsystem, not a
-persona-only trick. And above everything else: every function the
+persona-only trick. And the agent is its own richest supplier
+(owner, same day): doing its agent thing, it throws off trainable
+data continuously — and could throw off far more — including
+material whose best use is seeding synthetic generation; all of it
+must have an easy path into the same dataset interface (the feed
+contract, S2). And above everything else: every function the
 subsystem serves today keeps serving, and every phase pulls in the
 same direction as the standing proposals.
 
@@ -202,8 +207,48 @@ gate meaningful — and an import must be *given* an anchor at the door
 (proposal: a shipped fineweb-edu sample recipe). A model without an
 anchor cannot pass a gate; refusing to measure is not passing.
 
-H6's export-v2 sweeps into named datasets rather than loose files;
-H1's SFT bank becomes a dataset like any other, waiting for S8.
+**The feed contract — the agent feeds its own lab.** Doing its agent
+thing, the agent already throws off trainable residue on every
+channel the harvest cycle inventories. Each channel, live or
+chartered, terminates in a named dataset — and a channel that does
+not exist yet is chartered to land there the day it does:
+
+| Channel (harvest ref) | Dataset (kind) |
+| :-- | :-- |
+| salience escalations + audits (live) | `salience-pairs` (cpt) |
+| claims + curation traces, incl. rumination's (live, H5) | `memory` (cpt) |
+| persona corpus (live) | `persona` (persona) |
+| captured frontier traffic (H1) | `chat-bank` (sft) |
+| why-harvest, procedural + distilled (H3) | `code-why` (cpt + sft) |
+| hollis transcripts + acoustic claims (H4) | `room` (cpt) |
+
+**No orphan banks**: once this phase lands, a channel writing
+trainable text anywhere but a managed dataset is a bug. H6's
+export-v2 IS the sweep into datasets; the trainer drains datasets
+rather than loose ingest files; H1's SFT bank is a dataset like any
+other, waiting for S8.
+
+**Streams and snapshots**: a live channel feeds a *stream* dataset —
+append-only, rolling counts. The standing CPT loop may ride streams
+(today's behavior, unchanged); an experiment or an SFT run pins a
+*snapshot* — a frozen, hashed cut — so the bench compares like
+against like and a result stays reproducible after the stream has
+moved on.
+
+**Derivation — synthetic data is a dataset operation.**
+`dataset_derive` produces a new dataset from managed sources through
+a declared generator: a procedural transform (the serving-dialect
+rendering `render_sample` does today is exactly one), or a model —
+the frontier arm or the resident itself — prompted over source rows:
+distilled QA from why-harvest raw pairs (H3's distilled channel IS a
+derivation), claim-grounded question synthesis, format augmentation.
+A derived dataset records its lineage — source datasets and
+revisions, the generator as a provenance tag (the harvest standing
+rule: a tag, never a branch), the transform recipe — so "did the win
+come from the raw data or the synthetic expansion?" is an ordinary
+one-brick bench question between a dataset and its derived sibling.
+Model-driven derivation spends tokens: it runs by deliberate command
+or under a drive budget like rumination, never ambiently.
 
 ### S3 — The backend seam
 
@@ -286,7 +331,9 @@ honestly, never refuses — when more than one brick moved. Size sweeps
 are the same mechanism, not a feature: one recipe, a list of depths,
 the solver sizing each run to the map — a d10/d20/d26 sweep is one
 command on any box that fits, and an architecture comparison is the
-same sweep with the base brick swapped.
+same sweep with the base brick swapped. A raw-vs-synthetic
+comparison is the same discipline again, applied to a dataset and
+its derived sibling (S2).
 
 The birth path folds in rather than duplicating: today's speedrun IS
 the shipped recipe (`NANOCHAT_TRAIN_ARGS` becomes its knobs), and
@@ -401,3 +448,8 @@ a different scale.
 9. Network posture for acquisition: HF hub fetches happen only inside
    the deliberate import/dataset commands; offline boxes use local
    paths (S1/S2).
+10. Derivation governance and stream defaults: who may spend model
+    tokens generating synthetic datasets (proposal: deliberate
+    command always; drive-budgeted under the rumination budget once
+    H5 lands), and stream-vs-snapshot policy (proposal: the live loop
+    rides streams; the bench and SFT runs pin snapshots) (S2/S6).
