@@ -27,12 +27,19 @@ Two observations from first live contact set this cycle's direction:
    carry evaporates.
 
 2. **We pour trainable text on the floor.** Every frontier
-   request/response — now potentially Claude-quality, in-domain,
-   answering about THIS system — is discarded after use. Every facet
-   edit invites the question "why?" and its answer, and the store
-   journals every one of them with labels and authors; nobody asks.
-   The raw and synthetic capture channels are the cheapest
-   high-value work available.
+   request/response — in-domain, answering about THIS system — is
+   discarded after use. Every facet edit invites the question "why?"
+   and its answer, and the store journals every one of them with
+   labels and authors; nobody asks. The raw and synthetic capture
+   channels are the cheapest high-value work available.
+
+**A standing rule for every phase (owner, 2026-08-17): behavior NEVER
+branches on which model the LLM arm points at.** Whatever serves —
+vLLM, a hosted API, the Claude Code bridge, someday the local model
+itself — every mechanism below treats it identically. The serving arm
+appears in captured rows as a provenance tag (so training data can be
+filtered by source later), and that is the only thing it is ever
+allowed to be.
 
 Four goals, one loop: **acquire** understanding, **ruminate** on it,
 **capture** the evidence as training data, and **assemble** it into
@@ -76,10 +83,10 @@ Then teach `curriculum_export` a `chat` kind: captured turns rendered
 as nanochat chat-format conversations (`{"messages": [...]}`), banked
 into `runtime/agent/model/sft/` — **separate from the CPT stream**.
 The CPT trainer does not eat them yet; they accumulate as the
-feedstock for the eventual chat-SFT refresh of the local model. With
-`LLM=CLAUDECODE` this quietly builds a corpus of Claude answering
-questions about this exact system — the local model's future
-textbook, written by its predecessor.
+feedstock for the eventual chat-SFT refresh of the local model:
+whatever frontier is serving, its in-domain answers become the local
+model's future textbook, and the provenance tag lets that future
+training run weigh sources as it sees fit.
 
 *Owner call:* capture default (proposal: off in the repo, on in your
 botd), and whether hollis-derived text is capture-eligible (proposal:
@@ -109,10 +116,10 @@ training pairs inherit traceability.
 Consumers, wired in this phase: the salience **escalation prompt**
 (today the frontier judges from a bare query string — it should see
 the bound claims and code context; better escalation labels = better
-curriculum for free) and a `context` MCP/command surface the chat
-shells and the CLAUDECODE delegate can call (the delegate assembling
-its own context per question is the inside version of me reading the
-repo). The notebook's memory:index fence stays; this augments.
+curriculum for free) and a `context` command surface any consumer can
+call — chat shells, tool-capable delegates over MCP, rumination acts,
+all arms alike. The notebook's memory:index fence stays; this
+augments.
 
 *Metric:* assembled-context token counts land in metrics.jsonl per
 purpose — the syspack-shrinkage baseline. The long game is watching
@@ -215,9 +222,9 @@ gauge cluster for everything above.
 ## Owner calls collected
 
 1. Capture default and hollis-text eligibility (H1).
-2. Context budgets per profile, and whether the CLAUDECODE delegate
-   should auto-assemble context per turn (H2 — costs tokens, buys
-   groundedness).
+2. Context budgets per profile, and whether chat surfaces
+   auto-assemble context per turn (H2 — a per-surface setting,
+   arm-agnostic; costs tokens, buys groundedness).
 3. New domains: `environment`, `notions` — names and audit posture (H4/H5).
 4. Rumination drive split: how many acts/hour go to re-verify vs
    connect vs wonder (H5; proposal 2/1/1).
