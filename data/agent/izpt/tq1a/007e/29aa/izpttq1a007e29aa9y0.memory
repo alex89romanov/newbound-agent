@@ -105,5 +105,45 @@
     "tags": "model,salience,format-drift,escalation",
     "confidence": "high",
     "time": 1787014898796
+  },
+  {
+    "claim": "The spectrum cycle is chartered (docs/spectrum-cycle.md, 2026-08-18, owner review pending): the model subsystem must scale as a continuous spectrum - a nanochat d10 on one 3090 up to frontier-scale open weights on a cluster - and scale is a measured quantity, never a branch: no mechanism may test model family, name, or size class; only the posture solver reads the resource map and the model footprint, and only its published output varies.",
+    "detail": "Companion to harvest-cycle.md (harvest grows the food; spectrum grows the organism). Structure: the backend seam and the engine seam, candidate = base + delta, the recipe as the unit of composition. Standing rule 5: compatibility with the shipped 5b-8b loop is the FIRST acceptance gate of every phase. Phases S1-S8; ten owner calls collected at the end of the doc.",
+    "tags": "spectrum,charter,doctrine",
+    "source": {
+      "doc": "docs/spectrum-cycle.md @ 79d73b6 (claude/agent-resident-model-subsystem-evpfgw)"
+    },
+    "confidence": "high",
+    "time": 1787093843802
+  },
+  {
+    "claim": "General open-source weights cannot drop into the nanochat stack, and never will via conversion - the mismatch is architectural, not file-format (NanochatScorer constructs nanochat's own GPT class and pickled tokenizer); the route to open models is a second backend (HFScorer) behind the existing scorer seam. Checkpoints already in nanochat's base-dir layout DO drop in today: point MODEL_CHECKPOINT at the directory, honored as-is.",
+    "detail": "The nanochat weld is ~250 of service.py's 1648 lines plus bootstrap's env stage: load/serve (NanochatScorer:257, from_ring:301), dialect render (render_for_completion in score/gen_agreement/render_sample), loss forward model(x,y), ring save_checkpoint:1238, lora_target_paths:759 transformer.h.* names, render_conversation persona masking, sequence_len meta, base_data parquet standard docs:998, the three pool literals:1162, the venv build. Everything above the scorer seam - gates, double buffer, pointers, soak, persona probe - is already model-agnostic.",
+    "tags": "spectrum,nanochat,backend",
+    "source": {
+      "doc": "docs/spectrum-cycle.md weld inventory; verified against data/agent/_ASSETS/service.py 2026-08-18"
+    },
+    "confidence": "high",
+    "time": 1787093857826
+  },
+  {
+    "claim": "The CPT trainer's unwritten ceiling: the candidate is a full deepcopy of the live model with fp32 AdamW moments beside it, so serve-and-train-on-one-card holds only while the model fits roughly twice (params x ~20 bytes; a d20 is under 12GB all-in). The spectrum charter removes the ceiling by making the candidate base + delta, with a posture solver walking full -> full-sharded -> lora -> qlora -> frozen and taking the top rung that fits, arithmetic published.",
+    "detail": "frozen is a posture, not a failure: banking and measurement continue. The split pointer lets the two lanes sit at different spectrum points - a d20 salience judge training full beside an imported 8B user pointer serving frozen on the same card is the intended shape. Full posture's ring layout is unchanged on disk, so a live instance upgrades in place.",
+    "tags": "spectrum,trainer,cpt",
+    "source": {
+      "doc": "docs/spectrum-cycle.md fidelity ladder; trainer_real in data/agent/_ASSETS/service.py"
+    },
+    "confidence": "high",
+    "time": 1787093857888
+  },
+  {
+    "claim": "Owner direction 2026-08-18: the subsystem is also the lab, and the agent feeds it. The feed contract: every capture channel, live or chartered by the harvest cycle, terminates in a named managed dataset - no orphan banks; synthetic generation is a dataset operation (dataset_derive) with lineage recorded (source datasets + revisions, generator as a provenance tag never a branch, transform recipe); recipes snap base/datasets/posture/adapters/evals together and the bench answers data-vs-architecture through the one-brick discipline, scored with the gates' own instruments on frozen eval snapshots.",
+    "detail": "Streams vs snapshots: live channels feed append-only streams the standing CPT loop may ride (today's behavior); experiments and SFT runs pin frozen hashed snapshots for reproducibility. Purpose-built LoRAs on demand generalize derive_adapter (corpus -> LoRA -> gate -> apply) from persona special case to named adapter records - chartered as S4, early, because the pattern is already proven in service.py:870. Model-driven derivation spends tokens: deliberate command or drive budget, never ambient.",
+    "tags": "spectrum,datasets,bench,adapters",
+    "source": {
+      "doc": "docs/spectrum-cycle.md S2 feed contract + S4 + S6, owner direction in session 2026-08-18"
+    },
+    "confidence": "high",
+    "time": 1787093867455
   }
 ]
