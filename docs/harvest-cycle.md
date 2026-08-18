@@ -70,13 +70,35 @@ lost forever) and the assembler lands early (every later phase is a
 customer of it). Each phase is a branch, a disposable battery, and a
 merge word — the established rhythm.
 
-### H1 — Bank the raw stream (day 1)
+### H1 — The message store, then bank the raw stream (day 1)
 
-Extend capture into `chat_llm` itself, all arms: with `LLM_CAPTURE=on`
-(botd, live key), every frontier call appends one structured JSONL row
-— `{t, venue, arm, model, messages, tools, response, cost_usd}` — to
-`runtime/agent/model/capture/YYYYMMDD.jsonl`. Instance-owned, never
-committed, size-capped by daily rotation. This supersedes the
+**First, the foundation: messages become records, referenced by ID.**
+A conversation's turns ride every subsequent request in that
+conversation, so naive capture stores message 1 once per turn —
+quadratic duplication before the salience log, the archivist queue,
+and the SFT bank each take their own copies. Instead: a new
+**instance-specific library** (working name `msgs` — owner call), in
+the kb/runtime posture (skeleton ships, nothing under its data ever
+commits, skip-worktree + ignore). One record per individual message:
+`{id, t, role, venue, content, entity?, provenance}` — and because
+the store is content-addressed, identical text dedupes structurally.
+Everything downstream then references **IDs, not text**:
+
+- capture rows become `{t, venue, arm, model, msg_ids[], reply_id,
+  tools?, cost_usd}` — a few dozen bytes per call
+- a conversation is an ordered ID list; export renders by join
+- hollis transcripts unify into the same space (an utterance IS a
+  message from an entity, venue `room`) — one message universe for
+  chat, frontier traffic, and the household's speech
+- claims and training pairs cite message IDs as provenance, so every
+  future lesson can be traced to the words that taught it
+- the H2 assembler draws messages by ID and never pastes duplicates
+  into one context
+
+**Then capture**, now cheap: with `LLM_CAPTURE=on` (botd, live key),
+every frontier call through `chat_llm` — all arms identically —
+appends one ID-referencing row to
+`runtime/agent/model/capture/YYYYMMDD.jsonl`. This supersedes the
 ask_llm-only Q/A text files (fold them in, same switch).
 
 Then teach `curriculum_export` a `chat` kind: captured turns rendered
@@ -173,6 +195,39 @@ Friday" is a claim the executive may infer. Cheap, immediately useful
 (the agent noticing its own GPU is busy is self-model), and it
 exercises the zero-executive-change test again.
 
+**"Being a good sensor" — the design exploration.** Hollis currently
+emits only transcripts, but its lower levels produce a stream of
+determinations we leave on the table: transient classifications
+(label, confidence, dB), continuous-source labels, ambience shifts,
+state changes, cadence, DOA locations, voiceprint match scores,
+calibration health. The contract's mapping table already reserves
+rows for all of these; this workstream decides — deliberately, in
+writing — which ones an agent-grade sensor should emit and how:
+
+- **Vocabulary**: wire the remaining `acoustic_event` variants
+  (transient, continuous, ambience_shift, state_change, cadence)
+  through the existing emit path, each with a coalescing rule (one
+  perception per state SHIFT, never per frame — a dishwasher starting
+  is one event; a dishwasher running is zero).
+- **Space**: locations make the home legible. Recurring located
+  sources become claims ("the dishwasher lives at [x,y,z]", "the
+  front door is the transient source at ...") — the acoustic map the
+  entity tracker already half-owns, promoted from sensor state to
+  shared understanding where it earns it.
+- **Self-knowledge**: the sensor reports its own condition —
+  calibration scores, muted mics, discovery changes — as
+  perceptions, so the agent knows when its ears degrade (and can say
+  so, or a rumination act can file a wondering about it).
+- **The rubric**: the exploration's written deliverable is a
+  perception-contract amendment — §6 gains sensor-quality criteria
+  (coalescing discipline, salience_hint honesty, payload =
+  observation never conclusion, self-reporting) that hollis is
+  measured against and camera will be built against.
+
+The salience lesson from first contact applies here in reverse: the
+low levels are where the acoustic domain's *real* information lives —
+the goal is emitting it at the granularity of meaning, not volume.
+
 ### H5 — Rumination: the idle mind works its garden (day 5)
 
 Phase 4 gave us drive-budgeted epistemic acts; this phase gives the
@@ -221,6 +276,10 @@ gauge cluster for everything above.
 
 ## Owner calls collected
 
+0. The message library's name (`msgs`?) and whether hollis dual-writes
+   transcripts (its own store + a message record) or the executive
+   records them on perceive (H1; proposal: executive-side on perceive,
+   keeping the sensor decoupled — hollis's store stays its own).
 1. Capture default and hollis-text eligibility (H1).
 2. Context budgets per profile, and whether chat surfaces
    auto-assemble context per turn (H2 — a per-surface setting,
@@ -230,3 +289,6 @@ gauge cluster for everything above.
    connect vs wonder (H5; proposal 2/1/1).
 5. Retroactive why-harvest depth: full git history or last-N-days
    (H3; proposal full — it is one-time and the corpus is ours).
+6. Which low-level acoustic events emit by default once wired (H4;
+   proposal: ambience_shift, state_change, and located transients on
+   by default; per-frame anything, never).
