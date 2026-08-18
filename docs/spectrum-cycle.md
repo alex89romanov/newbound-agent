@@ -1,14 +1,14 @@
 # The spectrum cycle — one substrate from d10 to the frontier
 
 **Status: charter for the model-subsystem cycle — drafted 2026-08-18,
-owner review pending.** Companion to `docs/harvest-cycle.md`, not its
-successor: the harvest cycle grows the feedstock; this cycle grows the
-organism that eats it. They interleave — S2 below is H6's landing zone,
-and S6 is the SFT phase the harvest charter deliberately deferred.
-Builds strictly on the shipped framework (the scorer seam, the CPT
-trainer and its gates, the ring, the split pointer, the persona
-adapter, curriculum ingest). Nothing here replaces an organ; every
-phase widens one.
+revised same day after owner direction; owner review pending.**
+Companion to `docs/harvest-cycle.md`, not its successor: the harvest
+cycle grows the feedstock; this cycle grows the organism that eats it.
+They interleave — S2 below is H6's landing zone, and S8 is the SFT
+phase the harvest charter deliberately deferred. Builds strictly on
+the shipped framework (the scorer seam, the CPT trainer and its gates,
+the ring, the split pointer, the persona adapter, curriculum ingest).
+Nothing here replaces an organ; every phase widens one.
 
 ## Why this cycle
 
@@ -43,11 +43,22 @@ across the whole range — same commands, same gates, same mind tab —
 and no design decision may assume any particular box. Hardware
 requirements vary drastically; *mechanisms* must not.
 
+**And the aim, sharpened (owner, same day): the subsystem is also the
+lab.** What we are building toward is a super-easy way to mix and
+match datasets in and out; to build profiles and try them at
+different sizes and across different architectures; to snap the parts
+together like bricks — and, when a variant wins, to say *why*: was it
+the training data or the architecture? Deriving purpose-built LoRAs
+on demand is a first-class product of the subsystem, not a
+persona-only trick. And above everything else: every function the
+subsystem serves today keeps serving, and every phase pulls in the
+same direction as the standing proposals.
+
 ## Standing rules for every phase
 
 1. **Scale is a measured quantity, never a branch.** No mechanism may
    test model family, name, or a size class. One component — the
-   posture solver (S4) — reads the resource map and the model's
+   posture solver (S5) — reads the resource map and the model's
    footprint and publishes its arithmetic; only its *output* varies.
    This extends the harvest cycle's standing rule to the resident
    itself: identity is provenance, scale is measurement, and neither
@@ -57,7 +68,8 @@ requirements vary drastically; *mechanisms* must not.
    gate — identical in *meaning* at every point on the spectrum.
    Scale may change how long a gate takes or what physically moves at
    promotion; it may never change what the gate measures or who is
-   allowed to pass.
+   allowed to pass. The bench (S6) measures with the same instruments
+   the gates enforce with — one vocabulary of quality, everywhere.
 3. **Weights and datasets under management are instance-owned**, like
    the brain: records ship as skeleton, bytes never commit. Imports
    are deliberate commands; nothing acquires data or weights on its
@@ -68,10 +80,16 @@ requirements vary drastically; *mechanisms* must not.
    `service_status`, `metrics.jsonl`, and the mind tab. An override
    exists (`MODEL_POSTURE=`) and is published as loudly as a choice.
    Silent adaptation reads as magic until it reads as a bug.
+5. **Compatibility is the first gate of every phase.** The shipped
+   loop — stub → nanochat serve → CPT → gates → split pointer →
+   persona — runs unchanged through every merge, on the same runbook
+   steps. A phase that improves the lab by breaking the organism has
+   failed its own gate.
 
 ## The shape of the answer
 
-Two seams and one unification carry the whole spectrum:
+Two seams, one unification, and one unit of composition carry the
+whole spectrum — and the last one is the lab:
 
 - **The backend seam** (S3): everything the subsystem asks of a model
   — load, render the dialect, one loss step, generate, name adapter
@@ -79,17 +97,27 @@ Two seams and one unification carry the whole spectrum:
   implementations, nanochat and HF. Everything above the seam
   (gates, pointers, soak, persona, ingest) does not know which is
   serving. The zero-executive-change test, one level down.
-- **The engine seam** (S5): token generation is in-process today and
+- **The engine seam** (S7): token generation is in-process today and
   stays so wherever the model fits; where it doesn't, the same scorer
   fronts an external engine (vLLM-class, localhost). Pointer
   semantics — flip, soak, rollback — are identical; only the latency
   of a flip differs (an in-memory swap vs an engine reload).
-- **The candidate is always base + delta** (S4): full CPT is the
+- **The candidate is always base + delta** (S5): full CPT is the
   degenerate delta (the whole state dict — today's ring, unchanged on
   disk); a LoRA is a small one; frozen is the empty one. Ring
   checkpoints become `{base_ref, delta}`, promotion is apply-delta,
   rollback is a pointer move. One code path from d10 to the frontier;
   the solver only picks the delta type.
+- **The recipe is the unit of composition** (S6): a named, declarative
+  record — base (architecture × size), named datasets with mix
+  weights, posture, hyperparameters, adapters, eval set. Everything
+  the subsystem does becomes a recipe run: birth is the shipped
+  nanochat speedrun recipe, the live CPT loop is a standing recipe,
+  an experiment is a control recipe plus a variant differing in
+  exactly one brick. Attribution falls out by construction — vary the
+  data with the architecture held, or the architecture with the data
+  held, and the bench scores both with the same measures on the same
+  eval sets.
 
 The fidelity ladder the solver walks, top rung that fits with declared
 headroom (serving reservation + margin), never a model-name branch:
@@ -125,14 +153,15 @@ Every nanochat-specific touchpoint, all in `service.py` +
 | standard docs | base-dir parquet shards (`:998`) | the anchor dataset, via S2 |
 | pools | three literals (`:1162`) | named pools from S2 |
 | env build | nanochat pyproject venv (`bootstrap.rs:103`) | per-backend env recipe, same donefile idiom |
-| distribution | `NANOCHAT_DIST` / `train.sh` | S5 placement |
+| distribution | `NANOCHAT_DIST` / `train.sh` | S7 placement |
 
 ## The phases
 
 Ordered so the records land first (cheap, and today's d20 loop is
-their first customer) and the physics lands last, on settled
-foundations. Each phase is a branch, a disposable battery, and a merge
-word — the established rhythm.
+their first customer), the killer feature lands early (the persona
+machinery already proves the adapter pattern), and the physics lands
+last, on settled foundations. Each phase is a branch, a disposable
+battery, and a merge word — the established rhythm.
 
 ### S1 — The model record and the resource map
 
@@ -147,7 +176,7 @@ unregistered nanochat dir, exactly today's behavior.
 
 Beside it, the **resource map**: a procedural probe (GPUs, free VRAM
 each, interconnect, nodes — `nvidia-smi` facts plus placement config)
-published like any sensor. First customers: the solver (S4) — and the
+published like any sensor. First customers: the solver (S5) — and the
 birth path, whose `NANOCHAT_TRAIN_ARGS` defaults were hand-sized for
 one card and can now be sized from the map.
 
@@ -160,9 +189,11 @@ Commands in the `curriculum_export` idiom: `dataset_add` (local file
 or HF hub — deliberate, never automatic), `dataset_list`,
 `dataset_inspect`. The trainer's three hardcoded pools generalize to
 named pools with weights (`parse_kv` already accepts arbitrary keys;
-only the pools dict is a literal). Multi-node shard placement follows
-the existing `NANOCHAT_DIST` NFS guidance and becomes the manager's
-problem, not the runbook's.
+only the pools dict is a literal) — **mixing a dataset in or out of
+the live loop becomes editing one weight**, a settings change, not a
+code change. Multi-node shard placement follows the existing
+`NANOCHAT_DIST` NFS guidance and becomes the manager's problem, not
+the runbook's.
 
 **The anchor rule** rides here: every model record names the dataset
 its forgetting guard measures against. A model born here anchors to
@@ -172,7 +203,7 @@ gate meaningful — and an import must be *given* an anchor at the door
 anchor cannot pass a gate; refusing to measure is not passing.
 
 H6's export-v2 sweeps into named datasets rather than loose files;
-H1's SFT bank becomes a dataset like any other, waiting for S6.
+H1's SFT bank becomes a dataset like any other, waiting for S8.
 
 ### S3 — The backend seam
 
@@ -187,7 +218,29 @@ dialect discipline is preserved verbatim: training, serving, and the
 agreement gate speak one prompt dialect per model record, and an
 unparseable verdict still escalates.
 
-### S4 — The delta trainer and the posture solver
+### S4 — Adapters on demand
+
+The killer feature, and it is mostly already written:
+`derive_adapter` (`service.py:870`) is the whole pattern — corpus →
+LoRA → gate (must improve its subject by `min_gain`, must not
+lobotomize the base past `guard`) → apply — welded to one corpus and
+one lane. Promote it to a general organ: **adapters become named
+records** (purpose, dataset ref, base ref, targets, rank, gate
+report), derived by one command against any managed base —
+
+    agent-model-adapter_derive name:<n> dataset:<d> base:<model> ...
+
+— and applied to or removed from a pointer deliberately. Persona
+becomes the first instance of the general mechanism rather than a
+special case: its card, its probe, its re-derive loop unchanged. A
+purpose-built skin — a coding adapter from H3's why-harvest, a
+salience-dialect adapter, a per-entity voice — is derived in minutes
+on the box that serves it, gated exactly as persona is today, and its
+gate report travels with it. Stacking is an owner call (below);
+proposal: allowed, ordered, each adapter gated in the presence of the
+stack beneath it.
+
+### S5 — The delta trainer and the posture solver
 
 The heart. The candidate becomes base + delta; the solver walks the
 fidelity ladder against the resource map and publishes its choice and
@@ -211,7 +264,40 @@ soak evidence the fast lane provides for free when lineages match.
 Whether an instance carries two residents at once is an owner call
 (below); the mechanism must be ready either way.
 
-### S5 — Placement and the cluster
+### S6 — The recipe and the bench
+
+The lab. A **recipe** is a named, declarative record snapping the
+bricks together: base (architecture × size), datasets with mix
+weights, posture (or `auto` for the solver), hyperparameters,
+adapters, eval set. `recipe_author` / `recipe_clone` make variants
+one-edit cheap; **`agent-model-experiment`** runs a recipe — or a
+control + variant pair — to a stated budget (steps or hours) and
+scores every result with the instruments the gates already enforce
+with: agreement on held-out pairs, anchor loss, per-dataset held-out
+loss, persona loss where an adapter rides — on named `eval` datasets
+that never train and are frozen per experiment for comparability.
+Reports are records; the mind tab gains a bench card: runs, the brick
+that varied, the deltas per measure.
+
+**The one-brick discipline** is how "was it the data or the
+architecture?" gets answered by construction: an experiment names its
+control and its single varied axis; the command warns — records
+honestly, never refuses — when more than one brick moved. Size sweeps
+are the same mechanism, not a feature: one recipe, a list of depths,
+the solver sizing each run to the map — a d10/d20/d26 sweep is one
+command on any box that fits, and an architecture comparison is the
+same sweep with the base brick swapped.
+
+The birth path folds in rather than duplicating: today's speedrun IS
+the shipped recipe (`NANOCHAT_TRAIN_ARGS` becomes its knobs), and
+bootstrap's train-if-empty behavior is running it. GPU governance on
+one card: an experiment borrows the standing trainer's time-share —
+candidate steps pause, serving never does, and the borrow is
+published in `service_status`; with placement (S7), the bench takes
+spare GPUs instead. Anything mutating shared state runs against a
+disposable copy — the existing rule, unchanged.
+
+### S7 — Placement and the cluster
 
 Serve and train become placeable roles over the resource map. The
 degenerate placement is today's: one process, one GPU, time-shared.
@@ -226,25 +312,29 @@ frontier-scale MoE on a B200 cluster — serving is external and
 training touches adapters only; nothing in the mechanism knows it is
 big, and that is the point.
 
-### S6 — SFT joins the loop
+### S8 — SFT joins the loop
 
 The phase the harvest charter deferred, chartered here: the banked
 chat/SFT dataset (H1) trains the user lane — on an imported capable
 base, likely the largest single quality jump the user pointer will
-ever take. Rides the user gate and soak unchanged; gate design gets
-its own written page before code, per the harvest cycle's own
-deferral logic. Not scheduled ahead of S4 — it needs the delta
-trainer and the anchor rule to exist.
+ever take. An SFT refresh is a recipe run whose product faces the
+user gate: it rides the soak and the pointer machinery unchanged, and
+its gate design gets its own written page before code, per the
+harvest cycle's own deferral logic. Not scheduled ahead of S5 and S6
+— it needs the delta trainer, the anchor rule, and the bench to
+exist, because the first question about an SFT'd candidate is a bench
+question.
 
 ## What elegant means, testably
 
-Three reference boxes, one acceptance bar — same commands, same
-gates, same mind tab, and the only difference between boxes is what
-the solver and placement publish:
+Three reference boxes and one attribution demo, one acceptance bar —
+same commands, same gates, same mind tab, and the only difference
+between boxes is what the solver and placement publish:
 
 - **R1 — one 3090, nanochat d20.** Today's behavior reproduced
   through the new machinery: solver lands `full`, ring bit-compatible
-  with the live instance, no runbook step changes.
+  with the live instance, no runbook step changes. (Standing rule 5:
+  this is also every phase's first gate, not just the cycle's.)
 - **R2 — one 3090, an imported 8B instruct.** Solver lands `qlora`;
   every gate fires with real numbers against the given anchor; user
   pointer promotes through soak; persona derives via PEFT.
@@ -252,6 +342,11 @@ the solver and placement publish:
   serve and train; the same `service_status` shape reports it; a
   larger posture (`full-sharded`) is chosen by arithmetic the smaller
   box shows as rejected.
+- **R4 — the attribution demo.** One recipe, two variants: one moves
+  only the dataset mix, one moves only the base architecture. The
+  bench card answers "which brick earned the delta" with the same
+  numbers the gates enforce with — and a purpose-built adapter
+  derived from one of those datasets ships from the same screen.
 
 The demo at the end of the cycle is one settings change: point
 `MODEL=` at a different record and watch the same organism wake up at
@@ -263,6 +358,11 @@ a different scale.
   residents (one per lane), and only if the owner rules for it.
 - No automatic model selection or acquisition: which weights enter is
   an owner call, made through the import door, every time.
+- No autonomous experimentation: the bench runs what the owner (or a
+  session, deliberately) queues; nothing self-experiments, and no
+  experiment result promotes into a serving lane except through the
+  standing gates. No hyperparameter auto-search this cycle — the
+  bench makes sweeps cheap; it does not run them unasked.
 - No abandonment of the birth path: bootstrap training its own model
   from nothing remains the default origin story; imports are adopted,
   and their lineage tags say so forever.
@@ -271,23 +371,33 @@ a different scale.
 
 ## Owner calls collected
 
-1. Registry shape: home for model records (proposal: an `agent.models`
-   control, kb posture) and the settings key (`MODEL=` naming a
-   record, `MODEL_CHECKPOINT` kept as the degenerate alias) (S1).
+1. Registry shape: homes for model, dataset, recipe, and adapter
+   records (proposal: `agent.models` / `agent.datasets` /
+   `agent.recipes` controls, kb posture) and the settings key
+   (`MODEL=` naming a record, `MODEL_CHECKPOINT` kept as the
+   degenerate alias) (S1/S2/S4/S6).
 2. Anchor default for imports (proposal: shipped fineweb-edu sample
    recipe via the dataset manager; stated honestly as a proxy — an
    import's true pretraining distribution is unavailable) (S2).
-3. Solver headroom and override (proposal: serving KV reservation
-   plus 15% margin; `MODEL_POSTURE=` override, published) (S4).
-4. Ring byte budget (proposal: 100GB default, user-pointer
-   checkpoints protected as today) (S4).
-5. One resident or two: may the user lane ride a different lineage
+3. Adapter stacking: may several adapters ride one pointer?
+   (proposal: yes — ordered, each gated in the presence of the stack
+   beneath it, the whole stack re-probed on base movement like
+   persona is today) (S4).
+4. Solver headroom and override (proposal: serving KV reservation
+   plus 15% margin; `MODEL_POSTURE=` override, published) (S5).
+5. Ring byte budget (proposal: 100GB default, user-pointer
+   checkpoints protected as today) (S5).
+6. One resident or two: may the user lane ride a different lineage
    than the salience lane on one instance, with shadow-soak as its
    evidence? (proposal: yes — the split pointer was always two jobs)
-   (S4/S6).
-6. External engine at the far end (proposal: seam now, in-process HF
+   (S5/S8).
+7. The bench's standing eval set and budget etiquette (proposal:
+   held-out pairs + anchor sample + per-dataset holdouts, frozen per
+   experiment; on one card an experiment pauses candidate steps and
+   never serving; one-brick violations warn, never refuse) (S6).
+8. External engine at the far end (proposal: seam now, in-process HF
    generate until a box actually needs vLLM; adapter hot-swap is the
-   promotion path there) (S5).
-7. Network posture for acquisition: HF hub fetches happen only inside
+   promotion path there) (S7).
+9. Network posture for acquisition: HF hub fetches happen only inside
    the deliberate import/dataset commands; offline boxes use local
    paths (S1/S2).
