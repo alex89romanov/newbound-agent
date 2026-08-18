@@ -301,9 +301,13 @@ special case: its card, its probe, its re-derive loop unchanged. A
 purpose-built skin — a coding adapter from H3's why-harvest, a
 salience-dialect adapter, a per-entity voice — is derived in minutes
 on the box that serves it, gated exactly as persona is today, and its
-gate report travels with it. Stacking is an owner call (below);
-proposal: allowed, ordered, each adapter gated in the presence of the
-stack beneath it.
+gate report travels with it. Stacking is ruled (owner, 2026-08-18):
+allowed, and gated as a unit — merged additive deltas commute, so
+there is no order; any change to the stack (add, remove, base
+movement underneath) re-runs every member's subject probe with the
+full stack applied, plus one standard-loss guard for the whole
+stack, on the watchdog cadence persona already proves. A stack of
+one is today's persona behavior, unchanged.
 
 ### S5 — The delta trainer and the posture solver
 
@@ -458,10 +462,12 @@ a different scale.
    (sample the model at import, freeze it); an explicit anchor always
    overrides; the fineweb-edu sample ships as an optional dataset
    recipe, not a default (S2).
-3. Adapter stacking: may several adapters ride one pointer?
-   (proposal: yes — ordered, each gated in the presence of the stack
-   beneath it, the whole stack re-probed on base movement like
-   persona is today) (S4).
+3. **RULED (owner, 2026-08-18) — adapters stack, gated as a unit.**
+   Merged additive deltas commute, so order is meaningless; what is
+   gated is the combination: any stack change or base movement
+   re-runs every member's subject probe with the full stack applied,
+   plus one standard-loss guard for the stack. A stack of one is
+   persona's shipped behavior, unchanged (S4).
 4. Solver headroom and override (proposal: serving KV reservation
    plus 15% margin; `MODEL_POSTURE=` override, published) (S5).
 5. Ring byte budget (proposal: 100GB default, user-pointer
