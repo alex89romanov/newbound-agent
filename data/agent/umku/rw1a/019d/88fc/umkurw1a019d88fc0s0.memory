@@ -1,0 +1,15 @@
+[
+  {
+    "claim": "agent-context-assemble is H2's one door: purpose (chat|escalation|rumination|coding|briefing) picks per-source budget weights over claims/code/room/session/system; budget is a token ceiling (chars/4) enforced by ranked truncation; every block is provenance-tagged and every call logs token counts to metrics.jsonl - the syspack-shrinkage baseline. Sources fail individually, never the block; recall rows now carry the facet source pointer (additive), and STALE claims' referents are included marked DRIFTED-SINCE-CLAIM - drift is when the live code matters most",
+    "detail": "The escalation prompt consumes it (CONTEXT_ESCALATION_BUDGET, default 900 tokens), with a bare-prompt fallback so an escalation is never lost to its context. Chat auto-assembly per turn is owner call 2, unwired.",
+    "tags": "context,assemble,syspack",
+    "confidence": "high",
+    "time": 1787140461488
+  },
+  {
+    "claim": "Budget-arithmetic gotcha (cost one empty section, H2): when clipping content to fit a per-item allowance, subtract the PROVENANCE HEADER and separators from the clip room, or a full-budget piece overshoots by a few chars and the budget check drops the whole item - measure the header, never guess a constant",
+    "tags": "budgeting,truncation",
+    "confidence": "high",
+    "time": 1787140461780
+  }
+]

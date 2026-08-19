@@ -107,11 +107,15 @@ fn render_registry(store: &DataStore) -> Result<String, String> {
 }
 
 // agent-model-dataset_derive - synthetic data is a dataset operation
-// (spectrum S2, ruling 10). This branch ships the procedural
-// transform only: render_dialect, which runs IN THE SERVICE so the
-// serving dialect keeps one home (render_sample is the transform).
-// The derived record carries lineage: source, transform, provenance.
-// Model-driven generation arrives with its governed spender later.
+// (spectrum S2, ruling 10). Two transforms, two addresses:
+//   render_dialect - procedural, runs IN THE SERVICE so the serving
+//     dialect keeps one home (render_sample is the transform).
+//   distill_why - model-driven (harvest H3b), runs HERE because its
+//     generator is the frontier arm behind ask_llm. Where a generator
+//     EXECUTES picks the dispatch path; which MODEL answers is only
+//     ever a provenance tag on the derived rows (the standing rule).
+// Every derived record carries lineage: source, transform, generator,
+// and the source pin hashed at derive time.
 fn prop(key: &str, dflt: &str) -> String {
     (|| -> Option<String> {
         let s = DataStore::globals().try_get_object("system").ok()?;
@@ -128,8 +132,15 @@ fn prop(key: &str, dflt: &str) -> String {
 let name_t = name.trim().to_lowercase();
 let out_t = out_name.trim().to_lowercase();
 let transform_t = transform.trim().to_string();
-if transform_t != "render_dialect" {
-    return err(format!("this branch ships one transform: render_dialect (got '{}')", transform));
+if !["render_dialect", "distill_why"].contains(&transform_t.as_str()) {
+    return err(format!("transforms: render_dialect (procedural, runs in the service) | distill_why (model-driven, runs here behind the frontier arm) (got '{}')", transform));
+}
+// The spender's cap (harvest H3b, ruling 10): model-driven derivation
+// spends tokens, so it runs by deliberate command with an EXPLICIT row
+// cap - never unbounded, never ambient. The drive-budgeted caller
+// arrives with H5. render_dialect is procedural and ignores limit.
+if transform_t == "distill_why" && (limit < 1 || limit > 25) {
+    return err("distill_why requires 1 <= limit <= 25 - the explicit spend cap of one deliberate run".to_string());
 }
 let ok_name = !out_t.is_empty()
     && !["fresh", "replay", "standard", "stub"].contains(&out_t.as_str())
@@ -148,6 +159,174 @@ let src_rec = match find_ds(&list, &name_t) {
     Some(m) => m,
     None => { return err(format!("dataset '{}' is not registered", name_t)); }
 };
+
+if transform_t == "distill_why" {
+    // ── the model-driven branch (harvest H3b) ───────────────────────
+    // For each source row (a change paired with its stated why), the
+    // frontier is asked what the change teaches about how this system
+    // works - with an H2 coding context in front of it, not a bare
+    // row. Products: a hysteresis-guarded claim on the subject control
+    // (patch rows only - commit rows have no lib.ctl home) and one QA
+    // conversation row into the out stream (kind sft) through the one
+    // feeder. The generator is a PROVENANCE TAG on every row - which
+    // arm answered is recorded, never branched on.
+    fn fnv64(s: &str) -> u64 {
+        let mut h: u64 = 0xcbf29ce484222325;
+        for b in s.as_bytes() { h ^= *b as u64; h = h.wrapping_mul(0x100000001b3); }
+        h
+    }
+    let src_path = if src_rec.has("path") { src_rec.get_string("path") } else { String::new() };
+    let src_file = std::path::Path::new(&src_path).join("data.jsonl");
+    let text = match std::fs::read_to_string(&src_file) {
+        Ok(t) => t,
+        Err(e) => { return err(format!("cannot read {}: {}", src_file.display(), e)); }
+    };
+    // the pin: what was read, exactly, at derive time - every QA row
+    // carries this hash plus its own row hash, so lineage survives the
+    // stream moving on (the registry-bloat-free form of ruling 10's
+    // snapshot pinning; a frozen copy is dataset_snapshot's job when a
+    // training run needs one)
+    let src_hash = format!("{:016x}", fnv64(&text));
+    let rows: Vec<&str> = text.lines().filter(|l| !l.trim().is_empty()).collect();
+
+    // the done-set: spend once per source row, across runs
+    let root2 = match store.root.canonicalize().ok()
+            .and_then(|r| r.parent().map(|p| p.to_path_buf())) {
+        Some(r) => r,
+        None => { return err("cannot resolve the checkout root".to_string()); }
+    };
+    let out_dir2 = root2.join("runtime").join("agent").join("model").join("datasets").join(&out_t);
+    let _ = std::fs::create_dir_all(&out_dir2);
+    let done_path = out_dir2.join("distilled.json");
+    let mut done: std::collections::HashSet<String> = std::collections::HashSet::new();
+    if let Ok(dt) = std::fs::read_to_string(&done_path) {
+        if let Ok(da) = std::panic::catch_unwind(|| DataArray::from_string(&dt)) {
+            for i in 0..da.len() {
+                if let Ok(s) = da.try_get_string(i) { done.insert(s); }
+            }
+        }
+    }
+
+    let arm = format!("{}:{}", prop("LLM", "unset"), prop("LLM_CTL", ""));
+    let budget: i64 = prop("CONTEXT_DISTILL_BUDGET", "900").parse().unwrap_or(900);
+    let mut qa_lines: Vec<String> = Vec::new();
+    let mut distilled = 0i64;
+    let mut skipped_done = 0i64;
+    let mut unparseable = 0i64;
+    let mut claims_deposited = 0i64;
+    let mut claims_held = 0i64;
+
+    // newest rows first - recent changes teach the current system
+    for raw in rows.iter().rev() {
+        if distilled >= limit { break; }
+        let row_hash = format!("{:016x}", fnv64(raw));
+        if done.contains(&row_hash) { skipped_done += 1; continue; }
+        let row = match DataObject::try_from_string(raw) { Ok(r) => r, Err(_) => continue };
+        let why0 = if row.has("why") { row.get_string("why") } else { String::new() };
+        let home = if row.has("home") { row.get_string("home") } else { String::new() };
+        let subject = if home.is_empty() {
+            why0.chars().take(120).collect::<String>()
+        } else {
+            format!("{} {}", home, why0.chars().take(100).collect::<String>())
+        };
+        let ctx = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            crate::agent::context::assemble::assemble("coding".to_string(), subject.clone(), budget)
+        })).ok()
+            .filter(|c| c.try_get_string("status").ok().as_deref() == Some("ok"))
+            .map(|c| c.try_get_string("block").unwrap_or_default())
+            .unwrap_or_default();
+        let prompt = format!(
+            "You are the agent studying its own becoming. A change was made to this system; its journal row follows.\nCHANGE: {}\nSYSTEM CONTEXT (assembled, provenance-tagged):\n{}\nAnswer with ONLY one JSON object, no fences:\n{{\"question\": \"<the natural question a developer would ask about this change>\", \"why\": \"<why it was made, 1-2 sentences>\", \"teaches\": \"<one durable, standalone claim about how this system works that the change reveals>\"}}",
+            raw, ctx);
+        let reply = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            ask_llm(prompt, Data::DNull)
+        })).unwrap_or_else(|_| "ERROR: ask_llm panicked".to_string());
+        // spent either way: the row is done unless the ARM itself errored
+        if reply.starts_with("ERROR") {
+            return err(format!("the frontier arm failed after {} rows: {}", distilled, reply.chars().take(200).collect::<String>()));
+        }
+        done.insert(row_hash.clone());
+        distilled += 1;
+        let parsed = reply.find('{').and_then(|s0| reply.rfind('}').map(|e0| (s0, e0)))
+            .filter(|(s0, e0)| e0 > s0)
+            .and_then(|(s0, e0)| DataObject::try_from_string(&reply[s0..=e0]).ok());
+        let fd = match parsed { Some(f) => f, None => { unparseable += 1; continue; } };
+        let q = if fd.has("question") { fd.get_string("question") } else { String::new() };
+        let w = if fd.has("why") { fd.get_string("why") } else { String::new() };
+        let t2 = if fd.has("teaches") { fd.get_string("teaches") } else { String::new() };
+        if q.trim().is_empty() || (w.trim().is_empty() && t2.trim().is_empty()) {
+            unparseable += 1; continue;
+        }
+        // (a) the claim, hysteresis-guarded like any adjudication -
+        //     patch rows only: they name a lib.ctl subject
+        if !home.is_empty() && !t2.trim().is_empty() {
+            if let Some((hlib, hdom)) = home.split_once('.') {
+                let mut entry = DataObject::new();
+                entry.put_string("claim", t2.trim());
+                if !w.trim().is_empty() { entry.put_string("detail", w.trim()); }
+                entry.put_string("tags", "code-why,distilled");
+                entry.put_string("confidence", "medium");
+                let adj = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    adjudicate(hlib.to_string(), hdom.to_string(), entry.deep_copy(), "distill_why".to_string())
+                }));
+                if let Ok(a) = adj {
+                    let st = if a.has("status") { a.get_string("status") } else { String::new() };
+                    if st == "ok" { claims_deposited += 1; } else { claims_held += 1; }
+                }
+            }
+        }
+        // (b) the QA conversation row, provenance riding every row
+        let mut conv = DataObject::new();
+        let mut msgs = DataArray::new();
+        let mut mu = DataObject::new();
+        mu.put_string("role", "user");
+        mu.put_string("content", q.trim());
+        msgs.push_object(mu);
+        let mut ma = DataObject::new();
+        ma.put_string("role", "assistant");
+        let answer = if w.trim().is_empty() { t2.trim().to_string() }
+            else if t2.trim().is_empty() { w.trim().to_string() }
+            else { format!("{} {}", w.trim(), t2.trim()) };
+        ma.put_string("content", &answer);
+        msgs.push_object(ma);
+        conv.put_array("messages", msgs);
+        let mut prov = DataObject::new();
+        prov.put_string("generator", &arm);
+        prov.put_string("source", &name_t);
+        prov.put_string("src_hash", &src_hash);
+        prov.put_string("row", &row_hash);
+        prov.put_int("t", time());
+        conv.put_object("provenance", prov);
+        qa_lines.push(conv.to_string().replace('\n', " "));
+    }
+
+    // persist the done-set, feed the bank
+    let mut da = DataArray::new();
+    for h in &done { da.push_string(h); }
+    let _ = std::fs::write(&done_path, da.to_string());
+    let mut appended = 0i64;
+    if !qa_lines.is_empty() {
+        let fed = dataset_feed(out_t.clone(), "sft".to_string(), qa_lines.join("
+"),
+            format!("derived:distill_why:{}", name_t), "dataset_derive".to_string(), 10);
+        if fed.has("appended") { appended = fed.get_int("appended"); }
+    }
+    let mut o = DataObject::new();
+    o.put_string("status", "ok");
+    o.put_string("transform", "distill_why");
+    o.put_string("from", &name_t);
+    o.put_string("derived", &out_t);
+    o.put_string("generator", &arm);
+    o.put_int("distilled", distilled);
+    o.put_int("skipped_done", skipped_done);
+    o.put_int("unparseable", unparseable);
+    o.put_int("claims_deposited", claims_deposited);
+    o.put_int("claims_held", claims_held);
+    o.put_int("qa_appended", appended);
+    o.put_string("src_pin", &src_hash);
+    return o;
+}
+
 if find_ds(&list, &out_t).is_some() {
     return err(format!("'{}' is already registered", out_t));
 }

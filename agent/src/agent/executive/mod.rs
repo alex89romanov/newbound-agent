@@ -1,5 +1,6 @@
 // This file is auto-generated and managed by the flowlang build script.
 use flowlang::rustcmd::Transform;
+pub mod consolidate_room;
 pub mod salience_log;
 pub mod set_drive;
 pub mod perceive;
@@ -13,4 +14,5 @@ pub fn cmdinit(cmds: &mut Vec<(String, Transform, String)>) {
     cmds.push(("rstxhp1a00528ab29h8".to_string(), perceive::execute, "".to_string()));
     cmds.push(("yhmiqo1a0068b5d24m5".to_string(), set_drive::execute, "".to_string()));
     cmds.push(("pqphsl1a0069ec4b0j1".to_string(), salience_log::execute, "".to_string()));
+    cmds.push(("qimijq1a01a19edbdl1".to_string(), consolidate_room::execute, "".to_string()));
 }

@@ -7,10 +7,11 @@
       "lib": "agent",
       "ctl": "agentloop",
       "facet": "js",
-      "hash": "6569fbeed2ace744"
+      "hash": "18e725718f2d6a5e"
     },
     "confidence": "high",
-    "time": 1785964641067
+    "time": 1785964641067,
+    "reverified": 1787145845593
   },
   {
     "claim": "Anthropic's Messages API cannot be reached through the OPENAI arm: it is a distinct wire, not chat-completions with a different key.",
@@ -105,5 +106,12 @@
     "tags": "llm,claudecode,resident-context,prompts",
     "confidence": "high",
     "time": 1786997803520
+  },
+  {
+    "claim": "chat_llm carries the capture seam (H1b): its whole dispatch runs inside one closure so every arm exits through one point; LLM_CAPTURE=on (botd, live key) records the conversation as message records plus an ID-referencing row in runtime/agent/model/capture/. Occurrence ids chain FNV-128 over the conversation prefix, so a turn re-sent on every later request records once - capture is idempotent per turn",
+    "detail": "Verified: turn 2 re-derived turn 1's ids exactly (replayed assistant answer = turn 1's reply_id) and minted only its own two. ask_llm's LLM_CAPTURE_DIR Q/A files are retired - ask_llm IS chat_llm, so the seam covers it.",
+    "tags": "chat_llm,capture,msg",
+    "confidence": "high",
+    "time": 1787139770840
   }
 ]

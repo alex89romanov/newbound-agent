@@ -4,5 +4,12 @@
     "tags": "phase2",
     "confidence": "high",
     "time": 1786811602356
+  },
+  {
+    "claim": "H4 landed across three repos: the system sensor (agent-sensor-system_sense, band-crossing emissions off the grown resource-map probe - one probe two consumers, wired into the tailer loop every ~30s), acoustic consolidation (agent-executive-consolidate_room - quiet gate + cursor, claims to kb.environment via adjudicate incl. voiceprint bindings, tried first on every drive tick), the hollis vocabulary (fork branch claude/harvest-h4-sensor-vocabulary: emit path widened with extra-JSON payload fields; transient/continuous/ambience_shift/state_change/cadence/micro_transient wired with per-event gates and coalescing per the section 6 rubric), and the contract amendment (system_state row + the sensor-quality rubric in section 6)",
+    "detail": "Overlaying hollis into a checkout works exactly like agent/kb/scratch (two symlinks); its crate needs newbound rebuild to generate src (store-only repo convention - generated src is NOT committed there), libasound2-dev for cpal, and ort needs ORT_STRATEGY=system ORT_LIB_LOCATION pointing at a dir containing libonnxruntime.so (the PyPI onnxruntime wheel supplies it) with ORT_PREFER_DYNAMIC_LINK=1 - plus a libonnxruntime.so.1 soname link on LD_LIBRARY_PATH at dylib-load time. api.rs churn from a hollis-bearing rebuild must be reverted in the agent repo before committing.",
+    "tags": "harvest,h4,sensors",
+    "confidence": "high",
+    "time": 1787145334528
   }
 ]

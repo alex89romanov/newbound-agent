@@ -301,9 +301,36 @@ std::thread::spawn(move || {
                                 let lf = if ex.has("last_frontier_time") { ex.get_int("last_frontier_time") } else { 0 };
                                 if now2 - lf >= 5000 {
                                     ex.put_int("last_frontier_time", now2);
+                                    // H2: the frontier judges with the
+                                    // bound claims and code context in
+                                    // front of it, not from a bare query
+                                    // string - better escalation labels
+                                    // are better curriculum for free.
+                                    // Assembly failure falls back to the
+                                    // bare prompt: an escalation must
+                                    // never be lost to its context.
+                                    let esc_budget = (|| -> Option<i64> {
+                                        let s = DataStore::globals().try_get_object("system").ok()?;
+                                        let a = s.try_get_object("apps").ok()?;
+                                        let g2 = a.try_get_object("agent").ok()?;
+                                        let r = g2.try_get_object("runtime").ok()?;
+                                        r.try_get_string("CONTEXT_ESCALATION_BUDGET").ok()?.trim().parse::<i64>().ok()
+                                    })().unwrap_or(900);
+                                    let ctx_block = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                                        crate::agent::context::assemble::assemble(
+                                            "escalation".to_string(), qs.clone(), esc_budget)
+                                    })).ok()
+                                        .filter(|c| c.try_get_string("status").ok().as_deref() == Some("ok"))
+                                        .map(|c| c.try_get_string("block").unwrap_or_default())
+                                        .unwrap_or_default();
+                                    let ctx_part = if ctx_block.trim().is_empty() {
+                                        format!("CONTEXT: recall matched {} claims.", ctx.get_int("matched"))
+                                    } else {
+                                        format!("CONTEXT (assembled, provenance-tagged):\n{}", ctx_block)
+                                    };
                                     let fprompt = format!(
-                                        "You are the salience auditor for an autonomous agent's perception stream.\nPERCEPTION: {}\nCONTEXT: recall matched {} claims.\nThe resident model rated salience {:.2}.\nIndependently rate how much this perception matters to the agent's understanding of its environment, from 0.0 (noise) to 1.0 (critical).\nReply with ONLY a JSON object: {{\"salient\": <0.0-1.0>, \"reasoning\": \"<one sentence>\"}}",
-                                        qs, ctx.get_int("matched"), sal);
+                                        "You are the salience auditor for an autonomous agent's perception stream.\nPERCEPTION: {}\n{}\nThe resident model rated salience {:.2}.\nIndependently rate how much this perception matters to the agent's understanding of its environment, from 0.0 (noise) to 1.0 (critical).\nReply with ONLY a JSON object: {{\"salient\": <0.0-1.0>, \"reasoning\": \"<one sentence>\"}}",
+                                        qs, ctx_part, sal);
                                     let fres = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                                         ask_llm(fprompt, Data::DNull)
                                     }));
@@ -407,10 +434,104 @@ std::thread::spawn(move || {
             if drive > 0 && now >= next_at {
                 ex.put_string("phase", "deciding");
                 ex.put_int("next_act_time", now + 3600000 / drive);
-                let worked = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                    let cmd = Command::lookup("agent", "archivist", "epistemic_work");
-                    cmd.execute(DataObject::new())
+                // H4: the room is consulted first. consolidate_room's
+                // quiet gate and cursor make this a free no-op unless
+                // conversation happened AND subsided - only then does
+                // it spend, and the spend is this tick's act. The act
+                // repertoire proper (re-verify / connect / wonder)
+                // arrives with H5; epistemic work stays the fallback.
+                let mut acted_on_room = false;
+                let roomed = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    let cmd = Command::lookup("agent", "executive", "consolidate_room");
+                    let mut args = DataObject::new();
+                    args.put_int("min_quiet_s", 180);
+                    args.put_int("window", 60);
+                    args.put_int("budget", 600);
+                    cmd.execute(args)
                 }));
+                if let Ok(Ok(rr)) = roomed {
+                    if rr.has("a") {
+                        let aa = rr.get_object("a");
+                        if aa.has("consolidated") && aa.get_int("consolidated") > 0 {
+                            acted_on_room = true;
+                            let mut act = DataObject::new();
+                            act.put_string("kind", "consolidate_room");
+                            act.put_int("utterances", aa.get_int("consolidated"));
+                            if aa.has("claims_deposited") {
+                                act.put_int("claims", aa.get_int("claims_deposited"));
+                            }
+                            act.put_string("home", "kb.environment");
+                            act.put_int("time", now);
+                            ex.put_object("last_act", act);
+                            ex.put_int("acts_total", ex.get_int("acts_total") + 1);
+                        }
+                    }
+                }
+                // H5: the act repertoire. When the room needed
+                // nothing, the tick rotates through the garden -
+                // reverify, reverify, connect, wonder, distill (owner
+                // call 4's 2/1/1 proposal, distill appended per H3's
+                // sequencing note). Every act is a governed command:
+                // journaled, hysteresis-guarded, spend-capped. An act
+                // that finds nothing to do costs nothing; the stale
+                // fallback below (epistemic_work + decay) remains the
+                // no-frontier floor when the arm is down.
+                let mut acted_in_garden = false;
+                if !acted_on_room {
+                    let rot = if ex.has("rum_rot") { ex.get_int("rum_rot") } else { 0 };
+                    ex.put_int("rum_rot", rot + 1);
+                    let (alib, actl, acmd, mut aargs) = match rot % 5 {
+                        0 | 1 => {
+                            let mut a = DataObject::new();
+                            a.put_int("limit", 1);
+                            ("agent", "archivist", "reverify", a)
+                        }
+                        2 => {
+                            let mut a = DataObject::new();
+                            a.put_string("subject", "");
+                            ("agent", "archivist", "connect", a)
+                        }
+                        3 => ("agent", "archivist", "wonder", DataObject::new()),
+                        _ => {
+                            let mut a = DataObject::new();
+                            a.put_string("name", "code-why");
+                            a.put_string("out_name", "code-why-qa");
+                            a.put_string("transform", "distill_why");
+                            a.put_int("limit", 1);
+                            ("agent", "model", "dataset_derive", a)
+                        }
+                    };
+                    let acted = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                        let cmd = Command::lookup(alib, actl, acmd);
+                        cmd.execute(aargs.deep_copy())
+                    }));
+                    if let Ok(Ok(rr)) = acted {
+                        if rr.has("a") {
+                            let aa = rr.get_object("a");
+                            let did = (aa.has("spent") && aa.get_int("spent") > 0)
+                                || (aa.has("deposited") && aa.get_int("deposited") > 0)
+                                || (aa.has("added") && aa.get_int("added") > 0)
+                                || (aa.has("distilled") && aa.get_int("distilled") > 0);
+                            if did {
+                                acted_in_garden = true;
+                                let mut act = DataObject::new();
+                                act.put_string("kind", acmd);
+                                act.put_string("home", &format!("{}.{}", alib, actl));
+                                act.put_int("time", now);
+                                ex.put_object("last_act", act);
+                                ex.put_int("acts_total", ex.get_int("acts_total") + 1);
+                            }
+                        }
+                    }
+                }
+                let worked = if acted_on_room || acted_in_garden {
+                    Err(Box::new(()) as Box<dyn std::any::Any + Send>)
+                } else {
+                    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                        let cmd = Command::lookup("agent", "archivist", "epistemic_work");
+                        cmd.execute(DataObject::new())
+                    }))
+                };
                 if let Ok(Ok(r)) = worked {
                     if r.has("a") {
                         let a = r.get_object("a");

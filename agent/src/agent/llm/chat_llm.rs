@@ -5,6 +5,7 @@ use flowlang::command::Command;
 use ndata::data::Data;
 use std::collections::HashMap;
 
+use crate::agent::msg::put::put;
 pub fn execute(o: DataObject) -> DataObject {
     use std::panic;
     for p in ["messages", "tools"] {
@@ -53,6 +54,13 @@ pub fn execute(o: DataObject) -> DataObject {
 }
 
 pub fn chat_llm(messages: DataArray, tools: DataArray) -> DataObject {
+// ── capture seam (harvest H1b): the entire dispatch below runs inside
+// one closure so every arm's exit passes one point. With LLM_CAPTURE=on
+// (botd, live key - re-read per call like LLM itself), the conversation
+// is recorded as message records and one ID-referencing row lands in
+// runtime/agent/model/capture/YYYYMMDD.jsonl. The arm is a provenance
+// tag on the row - never a branch: capture treats every arm identically.
+let __result: DataObject = (|| -> DataObject {
 // ── THE provider engine. ask_llm is a thin wrapper over this command, so
 // there is no second copy of the resolver to keep in sync.
 //
@@ -1106,5 +1114,84 @@ for attempt in 0..attempts {
 }
 
 out
+
+})();
+
+// what follows must never break the answer: capture failures are the
+// capture channel's problem, not the caller's.
+let __cap = (|| -> Option<DataObject> {
+    let s = DataStore::globals().try_get_object("system").ok()?;
+    let a = s.try_get_object("apps").ok()?;
+    let g = a.try_get_object("agent").ok()?;
+    let r = g.try_get_object("runtime").ok()?;
+    if r.try_get_string("LLM_CAPTURE").ok()?.trim().to_lowercase() != "on" { return None; }
+    Some(r)
+})();
+if let Some(meta2) = __cap {
+    let kind2 = __result.try_get_string("kind").unwrap_or_default();
+    if kind2 == "text" || kind2 == "tool_calls" {
+        fn fnv_cap(s: &str) -> u128 {
+            let mut h: u128 = 0x6c62272e07bb014262b821756295c58d;
+            for b in s.as_bytes() { h ^= *b as u128; h = h.wrapping_mul(0x0000000001000000000000000000013b); }
+            h
+        }
+        let arm2 = meta2.try_get_string("LLM").ok()
+            .map(|v| v.trim().to_uppercase()).filter(|v| !v.is_empty())
+            .unwrap_or_else(|| "VLLM".to_string());
+        let model2 = meta2.try_get_string(&format!("{}_MODEL", arm2)).ok()
+            .filter(|v| !v.trim().is_empty())
+            .or_else(|| meta2.try_get_string("LLM_CTL").ok())
+            .unwrap_or_default();
+        // occurrence ids chain over the conversation prefix, so the
+        // same history re-sent next turn dedupes to the same ids
+        let mut chain: u128 = 0;
+        let mut msg_ids = DataArray::new();
+        for i in 0..messages.len() {
+            let m = messages.get_object(i);
+            let role2 = m.try_get_string("role").unwrap_or_default();
+            let content2 = m.try_get_string("content").unwrap_or_default();
+            chain = fnv_cap(&format!("{:032x}\u{1f}{}\u{1f}{}", chain, role2, content2));
+            if content2.is_empty() { continue; }
+            let oid = format!("mo{:032x}", chain);
+            let r2 = put(role2, "llm".to_string(), content2, String::new(), arm2.clone(), oid.clone());
+            if r2.try_get_string("status").ok().as_deref() == Some("ok") { msg_ids.push_string(&oid); }
+        }
+        let reply_text = if kind2 == "text" {
+            __result.try_get_string("content").unwrap_or_default()
+        } else {
+            __result.try_get_object("assistant_message").map(|m| m.to_string()).unwrap_or_default()
+        };
+        let mut reply_id = String::new();
+        if !reply_text.is_empty() {
+            chain = fnv_cap(&format!("{:032x}\u{1f}assistant\u{1f}{}", chain, reply_text));
+            reply_id = format!("mo{:032x}", chain);
+            let _ = put("assistant".to_string(), "llm".to_string(), reply_text, String::new(), arm2.clone(), reply_id.clone());
+        }
+        let store2 = DataStore::new();
+        if let Some(root2) = store2.root.canonicalize().ok().and_then(|r| r.parent().map(|p| p.to_path_buf())) {
+            let dir2 = root2.join("runtime").join("agent").join("model").join("capture");
+            if std::fs::create_dir_all(&dir2).is_ok() {
+                use std::io::Write;
+                let now2 = flowlang::flowlang::system::time::time();
+                let day = now2 / 86_400_000;
+                let mut row = DataObject::new();
+                row.put_int("t", now2);
+                row.put_string("venue", "llm");
+                row.put_string("arm", &arm2);
+                row.put_string("model", &model2);
+                row.put_string("kind", &kind2);
+                row.put_array("msg_ids", msg_ids);
+                row.put_string("reply_id", &reply_id);
+                row.put_int("tools", tools.len() as i64);
+                if let Ok(c) = __result.try_get_float("cost_usd") { row.put_float("cost_usd", c); }
+                if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true)
+                        .open(dir2.join(format!("d{}.jsonl", day))) {
+                    let _ = writeln!(f, "{}", row.to_string().replace('\n', " "));
+                }
+            }
+        }
+    }
+}
+__result
 
 }

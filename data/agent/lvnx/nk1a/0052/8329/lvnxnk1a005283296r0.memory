@@ -36,5 +36,12 @@
     "tags": "executive,sensors,phase9",
     "confidence": "high",
     "time": 1786980001043
+  },
+  {
+    "claim": "perceive records acoustic transcripts as messages BY KIND (kind acoustic_event + payload.event transcript -> msg.put role speaker, venue room, sensor id as provenance) - owner call 0's ruled shape: any acoustic sensor's speech joins the one message universe with zero sensor-specific code in agent",
+    "detail": "Recording is best-effort beside the queue, never a gate on it. Non-transcript events (state_change etc.) do not record messages.",
+    "tags": "perceive,acoustic,msg,layering",
+    "confidence": "high",
+    "time": 1787139771107
   }
 ]
