@@ -1,5 +1,11 @@
 // This file is auto-generated and managed by the flowlang build script.
 use flowlang::rustcmd::Transform;
+pub mod dataset_remove;
+pub mod dataset_derive;
+pub mod dataset_snapshot;
+pub mod dataset_inspect;
+pub mod dataset_list;
+pub mod dataset_add;
 pub mod resources;
 pub mod model_remove;
 pub mod models;
@@ -39,4 +45,10 @@ pub fn cmdinit(cmds: &mut Vec<(String, Transform, String)>) {
     cmds.push(("yjmwrj1a0177498a8v1".to_string(), models::execute, "".to_string()));
     cmds.push(("ggojst1a01774ad4dg1".to_string(), model_remove::execute, "".to_string()));
     cmds.push(("qzikks1a01776d049o1".to_string(), resources::execute, "".to_string()));
+    cmds.push(("srzlok1a0178434d1k1".to_string(), dataset_add::execute, "".to_string()));
+    cmds.push(("iklvto1a017845e1ar1".to_string(), dataset_list::execute, "".to_string()));
+    cmds.push(("uvqhnt1a0178473cbm1".to_string(), dataset_inspect::execute, "".to_string()));
+    cmds.push(("jimxoz1a0178489a2h1".to_string(), dataset_snapshot::execute, "".to_string()));
+    cmds.push(("oopiwl1a01784a023z1".to_string(), dataset_derive::execute, "".to_string()));
+    cmds.push(("rvjoug1a01787534du1".to_string(), dataset_remove::execute, "".to_string()));
 }

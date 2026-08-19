@@ -165,5 +165,15 @@
     },
     "confidence": "high",
     "time": 1787100343894
+  },
+  {
+    "claim": "S2 landed (claude/spectrum-s1s2-registry): the dataset manager exists. Six commands - dataset_add (in-place registration, FNV content hash, read-time holdout_every policy so user files are never rewritten; anchor-kind registration flips anchor_status on waiting models), dataset_list, dataset_inspect (peek + re-verify; snapshot hash mismatch is a tamper alarm, stream hash is rolling by design), dataset_snapshot (frozen hashed cut copied into the managed dir, lineage snapshot:<source>@<rows>), dataset_derive (render_dialect runs IN THE SERVICE via /derive so the dialect keeps one home; lineage derived:<transform>:<source>), dataset_remove (refuses while MODEL_MIX names it; purge only inside the managed dir). The feed contract runs: curriculum_export sweeps into the salience-pairs and memory streams line-deduped (idempotent - second export appends zero), self-registering, legacy ingest untouched. The trainer builds pools from registry.json datasets joined with MODEL_MIX weights by name (built-ins unchanged when nothing is configured), reports per-dataset held-out losses at gate time without gating, and reads a registered model's anchor through the manager (unregistered checkpoint = legacy split, byte-for-byte).",
+    "detail": "Battery passed on stubs: add/inspect/verify round trip with tamper detection, export idempotence (212 swept, 0 on repeat), snapshot + derive with correct lineage, loader harness (191/21 split at every=10, jsonl streams render through render_sample, anchor resolves checkpoint->model->dataset->30 docs), R1 stub status healthy throughout. Bug found and fixed in-battery: the service may run with a relative --data-dir, so /derive's reply path only resolves from its cwd - registry records must always be written with absolute paths computed from the store root; dataset_derive now does. GPU-box items: pools actually training under mix weights, per-dataset gate losses on a real candidate.",
+    "tags": "spectrum,s2,datasets",
+    "source": {
+      "doc": "docs/spectrum-s1s2.md S2; battery run in session 2026-08-19"
+    },
+    "confidence": "high",
+    "time": 1787101226212
   }
 ]
