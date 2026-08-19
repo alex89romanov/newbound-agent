@@ -185,5 +185,15 @@
     },
     "confidence": "high",
     "time": 1787103684021
+  },
+  {
+    "claim": "S4 landed (claude/spectrum-s4-adapters): adapters on demand. agent-model-adapter_derive derives a named adapter from any registered dataset against the serving pointer's base or a registered model - hook-LoRA in the service, persona's gate (min_gain on subject held-out, standard-loss guard), knobs from USER_LORA, blob in the managed adapters dir, record with the gate report verbatim in the runtime library; deriving never applies. adapter_apply changes the user pointer's stack under ruling 3: rebuild from FRESH base + persona + every member (additive deltas commute - no order; rebuild beats subtracting in bf16), gate the COMBINATION (per-member subject probes with the full stack, one std guard); pass serves and persists across promotions/restarts, fail leaves serving untouched and names the member that broke. The watchdog probes each member's drift on cadence - surfaced, never silently acted on. Persona stays the standing first skin beneath the stack.",
+    "detail": "CPU battery passed: derive accept 6.21->5.95 on a 12-row dataset (holdout policy split 10/2); stack of one then two, both members re-clearing the unit gate on fresh ground; delete refused while applied; gated unapply; restart re-applied the stack. Bug found in-battery: the +lora/+adp name markers were endswith-checked and broke once stacked - all three sites now use containment. Owner-box battery owed: real model, real corpora, stack probe across a real promotion. Persona-into-records unification deferred to the S5 refactor.",
+    "tags": "spectrum,s4,adapters",
+    "source": {
+      "doc": "docs/spectrum-s4.md; battery run in session 2026-08-19"
+    },
+    "confidence": "high",
+    "time": 1787104308929
   }
 ]

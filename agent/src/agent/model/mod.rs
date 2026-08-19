@@ -1,5 +1,9 @@
 // This file is auto-generated and managed by the flowlang build script.
 use flowlang::rustcmd::Transform;
+pub mod adapter_delete;
+pub mod adapters;
+pub mod adapter_apply;
+pub mod adapter_derive;
 pub mod dataset_remove;
 pub mod dataset_derive;
 pub mod dataset_snapshot;
@@ -51,4 +55,8 @@ pub fn cmdinit(cmds: &mut Vec<(String, Transform, String)>) {
     cmds.push(("jimxoz1a0178489a2h1".to_string(), dataset_snapshot::execute, "".to_string()));
     cmds.push(("oopiwl1a01784a023z1".to_string(), dataset_derive::execute, "".to_string()));
     cmds.push(("rvjoug1a01787534du1".to_string(), dataset_remove::execute, "".to_string()));
+    cmds.push(("uglrzs1a017b4932dm1".to_string(), adapter_derive::execute, "".to_string()));
+    cmds.push(("rzrtvh1a017b4aa9ez1".to_string(), adapter_apply::execute, "".to_string()));
+    cmds.push(("zwhrqp1a017b4c175s1".to_string(), adapters::execute, "".to_string()));
+    cmds.push(("rpszoz1a017b4d8cez1".to_string(), adapter_delete::execute, "".to_string()));
 }
