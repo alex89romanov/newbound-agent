@@ -235,5 +235,12 @@
     },
     "confidence": "high",
     "time": 1787129643863
+  },
+  {
+    "claim": "dataset_feed IS the feed contract as code (H1c): channels hand JSONL lines; the feeder owns line-hash dedup, append, stream registration, row counts, and the registry.json re-render, and refuses to re-kind an existing bank. curriculum_export's salience-pairs/memory/chat sweeps all call it; H3's why-harvest must too - never inline the plumbing again",
+    "detail": "chat-bank registers as kind sft, holdout_every 5 (ten conversations = the 8/2 corpus sft_run demands). Text replies only; tool_calls transcripts are not SFT-trainable conversations yet.",
+    "tags": "dataset_feed,feed-contract,curriculum_export",
+    "confidence": "high",
+    "time": 1787139770973
   }
 ]
