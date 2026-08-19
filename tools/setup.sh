@@ -77,18 +77,58 @@ fi
 HOST_PREBUILT=no
 [ -x target/release/newbound ] && HOST_PREBUILT=yes
 
+# 2b. TRANSITIONAL - delete once flowlang 0.3.34 is on crates.io and the
+#     pins are bumped (docs/ffi-dynamic-loading.md, Phase 5). The committed
+#     platform code references flowlang::hotswap, which crates.io 0.3.33
+#     lacks; a sibling mraiser/flow checkout provides it via a local-only
+#     [patch] in .cargo/config.toml. Two copies because cargo resolves a
+#     build cwd physically: the checkout's covers the host build, the agent
+#     repo's covers the dylib builds reached through the overlay symlinks.
+#     Both are untracked and per-clone excluded - never committed.
+if grep -q 'flowlang = { version="0.3.33" }' Cargo.toml; then
+  FLOW_DIR=""
+  for cand in "$AGENT_DIR/../flow" "$NB/../flow"; do
+    if [ -f "$cand/Cargo.toml" ] && grep -q '^name = "flowlang"' "$cand/Cargo.toml"; then
+      FLOW_DIR=$(cd "$cand" && pwd); break
+    fi
+  done
+  if [ -n "$FLOW_DIR" ]; then
+    for root in "$NB" "$AGENT_DIR"; do
+      if [ ! -f "$root/.cargo/config.toml" ]; then
+        mkdir -p "$root/.cargo"
+        printf '# LOCAL ONLY (setup.sh transitional): flowlang with hotswap until 0.3.34 ships\n[patch.crates-io]\nflowlang = { path = "%s" }\n' "$FLOW_DIR" > "$root/.cargo/config.toml"
+      fi
+      GD=$(cd "$root" && git rev-parse --absolute-git-dir 2>/dev/null || true)
+      if [ -n "$GD" ]; then
+        mkdir -p "$GD/info"
+        grep -qx '/.cargo' "$GD/info/exclude" 2>/dev/null || echo '/.cargo' >> "$GD/info/exclude"
+      fi
+    done
+    # Building under the patch rewrites Cargo.lock (the flowlang entry
+    # becomes a path source); that churn is transitional local state too.
+    git update-index --skip-worktree Cargo.lock 2>/dev/null || true
+    echo "== transitional: flowlang patched to $FLOW_DIR via .cargo/config.toml (both roots)"
+    echo "==   (undo when 0.3.34 ships: rm .cargo/config.toml; git update-index --no-skip-worktree Cargo.lock)"
+  else
+    echo "== WARNING: this tree references flowlang::hotswap, which crates.io flowlang 0.3.33 lacks;"
+    echo "==   clone mraiser/flow beside the repos and rerun, or wait for the flowlang 0.3.34 release."
+  fi
+fi
+
 # 3. Host build (first pass). No-op when already built.
 cargo build --release --features=serde_support
 
-# 4. Regenerate the initializer if it doesn't know the overlay crates yet,
-#    then rebuild the host with the FFI blocks baked in.
-if ! grep -q 'Initialize crate: agent' src/generated_initializer.rs 2>/dev/null \
-  || ! grep -q 'Initialize crate: kb' src/generated_initializer.rs \
-  || ! grep -q 'Initialize crate: scratch' src/generated_initializer.rs; then
+# 4. One rebuild per checkout. The initializer is FFI-agnostic since the
+#    hotswap upgrade (docs/ffi-dynamic-loading.md): FFI crates load from
+#    store metadata at runtime, so nothing is baked in anymore. The rebuild
+#    still writes the workspace exclude (dev.dev.compile's artifact probe
+#    reads it) and regenerates crate scaffolds/api.rs against this store.
+if ! grep -Eq 'exclude *= *\[.*"agent"' Cargo.toml \
+  || ! grep -q 'hotswap::start' src/generated_initializer.rs 2>/dev/null; then
   ./target/release/newbound rebuild
   cargo build --release --features=serde_support
 else
-  echo "== initializer already carries the overlay crates; skipping rebuild"
+  echo "== workspace exclude and initializer are current; skipping rebuild"
 fi
 
 # 5. The dylibs (fast no-ops when unchanged; hot-load into a running server).

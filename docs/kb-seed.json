@@ -1,5 +1,5 @@
 {
-  "time": 1786818880374,
+  "time": 1787152478925,
   "domains": [
     {
       "tags": "doctrine,owner",
@@ -394,6 +394,16 @@
           "tags": "doctrine,training,model-seed,correction",
           "confidence": "high",
           "time": 1786792327149
+        },
+        {
+          "claim": "Rule of thumb for housing user data: unless it needs table scans, it probably does not need a dedicated library. User settings and state go in the runtime library; user files go in the runtime folder.",
+          "detail": "Stated while ruling the spectrum charter registry question: models, datasets, recipes, and adapters are products of the system - user data - and live in the existing runtime homes, never in a shipped library. The app ships mechanism and compiled-in defaults only.",
+          "tags": "doctrine,storage,runtime",
+          "source": {
+            "doc": "the owner, in session, 2026-08-19"
+          },
+          "confidence": "high",
+          "time": 1787098886006
         }
       ],
       "name": "doctrine"
@@ -772,6 +782,7 @@
           "tags": "phase3,gotcha",
           "confidence": "high",
           "time": 1786815200799,
+          "promoted": 1787152443267,
           "subject": "dev.code"
         },
         {
@@ -803,6 +814,33 @@
           "tags": "update",
           "confidence": "high",
           "time": 1786818879587
+        },
+        {
+          "claim": "TRANSITIONAL until flowlang 0.3.34 is on crates.io: the hotswap branches reference flowlang::hotswap, which 0.3.33 lacks - setup.sh writes a local-only [patch.crates-io] to .cargo/config.toml in BOTH checkout roots (two copies because cargo resolves symlinked build cwds physically) and skip-worktrees Cargo.lock; a crate scaffolded mid-session needs the same patch by hand. Undo when 0.3.34 ships: rm .cargo/config.toml, git update-index --no-skip-worktree Cargo.lock, bump the =0.3.34 pins.",
+          "tags": "ffi,flowlang,release,transitional",
+          "source": {
+            "doc": "newbound-agent docs/ffi-dynamic-loading.md"
+          },
+          "confidence": "high",
+          "time": 1787152443072
+        },
+        {
+          "claim": "Restart boundaries: facet writes never need one; Rust commands in agent/kb/scratch hot-reload synchronously on compile - OK means live, with a std-only mtime poller as backstop for out-of-band builds; Rust commands in newbound_core-rooted libraries still need a host rebuild + restart; a NEW FFI crate needs NO restart - newlib -> add_control -> activate_lib brings it live from store metadata.",
+          "tags": "restart,ffi,hot-reload",
+          "source": {
+            "doc": "newbound-agent docs/ffi-dynamic-loading.md"
+          },
+          "confidence": "high",
+          "time": 1787152443093
+        },
+        {
+          "claim": "First build on a fresh overlaid checkout is a three-step: gen-cmd-crate.py if cmd/ is absent, host build, newbound rebuild - the rebuild writes the workspace exclude (dev.dev.compile's artifact probe reads it) and regenerates crate scaffolds and api.rs; the initializer is FFI-agnostic and carries no FFI blocks or watcher. tools/setup.sh chains all of it, including the transitional flowlang patch until 0.3.34 ships.",
+          "tags": "setup,rebuild,overlay",
+          "source": {
+            "doc": "newbound-agent docs/ffi-dynamic-loading.md"
+          },
+          "confidence": "high",
+          "time": 1787152443127
         }
       ],
       "name": "workflow"
