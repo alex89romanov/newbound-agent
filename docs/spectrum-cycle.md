@@ -329,16 +329,22 @@ newest entry — the ring is the restart-recovery path and never
 empties. Today's ring layout is the `full` posture's disk
 form, unchanged — a live instance upgrades in place.
 
-One design question this phase must answer in writing before code:
-**soak when the lanes diverge.** Today the fast lane is the slow
-lane's canary because both pointers draw from one lineage. When the
-user lane rides an imported base, that evidence is gone — the
-generalization is that *soak is serving without authority*: a
-second resident earns its user promotion by shadow-serving verdicts
-on live perceptions (recorded, never steering) until it has the same
-soak evidence the fast lane provides for free when lineages match.
-Whether an instance carries two residents at once is an owner call
-(below); the mechanism must be ready either way.
+**Two residents, ruled (owner, 2026-08-18): the lanes may diverge.**
+Today the fast lane is the slow lane's canary because both pointers
+draw from one lineage. Configuring a second model record
+(`USER_MODEL=`) splits the lanes — a fresh install has one nanochat,
+so one resident stays the default by construction — and the
+generalization is that *soak is serving without authority*: the
+user-lane resident earns its promotion by shadow-serving verdicts on
+live perceptions (recorded, never steering, sampled) until it has
+the same soak evidence the fast lane provides for free when lineages
+match. The RAM price is paid on a ladder, not up front: **residency**
+is solver-arbitrated per lane just as posture is —
+`resident → quantized → offload → on-demand → external (S7)` — with
+the fast lane holding priority (always-on, latency-sensitive,
+continuously training) and the user lane degrading first (bursty,
+human-paced: load per conversation, idle-unload, the judge keeps the
+card). Nothing is refused for RAM; it degrades, visibly.
 
 ### S6 — The recipe and the bench
 
@@ -490,10 +496,15 @@ a different scale.
    restart-recovery path and must never empty. Disk is a
    resource-map fact: the solver warns when the budget exceeds free
    disk (S5).
-6. One resident or two: may the user lane ride a different lineage
-   than the salience lane on one instance, with shadow-soak as its
-   evidence? (proposal: yes — the split pointer was always two jobs)
-   (S5/S8).
+6. **RULED (owner, 2026-08-18) — two residents, on a residency
+   ladder.** The user lane may ride a different lineage: configuring
+   a second model record turns it on (one resident stays the default
+   by construction — a fresh install has one nanochat), and
+   shadow-soak supplies the user-gate evidence when lineages
+   diverge. Residency is solver-walked per lane like posture
+   (resident → quantized → offload → on-demand → external), fast
+   lane priority, on-demand the expected shape on tight cards.
+   Nothing refuses for RAM; it degrades, visibly (S5/S8).
 7. The bench's standing eval set and budget etiquette (proposal:
    held-out pairs + anchor sample + per-dataset holdouts, frozen per
    experiment; on one card an experiment pauses candidate steps and
