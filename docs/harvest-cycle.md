@@ -2,7 +2,10 @@
 
 **Status: plan of record for the next cycle — drafted 2026-08-17;
 amended 2026-08-19 after the spectrum cycle landed (S1–S8,
-`docs/spectrum-cycle.md`).** Builds strictly on the shipped framework
+`docs/spectrum-cycle.md`); amended again 2026-08-19 after owner
+review of that amendment (rulings folded in below, and four places
+where the page described code that does not exist or coupling the
+layering rules forbid).** Builds strictly on the shipped framework
 (perception contract, federated memory, the salience tier, the
 flywheel, the split pointer, the CLAUDECODE arm — and now the
 registry, the dataset manager, the backend seam, the delta trainer,
@@ -52,6 +55,28 @@ itself — model identity and scale are never branch conditions — and
 to synthetic-data generators, which are provenance tags under the
 same rule: `docs/spectrum-cycle.md` standing rule 1 and ruling 10.)
 
+**A second standing rule (owner, 2026-08-19): where user data
+lives.** JSON that must never be checked in to git belongs in the
+**runtime library** (`./data/runtime`); user **files** belong in the
+runtime crate (`./runtime/<library_name>`). A dedicated library is
+reserved for the rare case where a table scan over the JSON genuinely
+earns the isolation. The existing user-data libraries are grandfathered
+— they cost a step at every level and confuse the user base, but
+refactoring them is not this cycle's work.
+
+**A third standing rule (owner, 2026-08-19): sensor layering.**
+Sensors plug in to agent, so a **sensor knows agent** — and the agent
+library may never know about an individual sensor. The exception is
+the built-in family (the codebase sensors, which ship with agent); a
+hardware sensor may reasonably join it and be agent-native. Agent is
+itself a plugin to `newbound_core`, so agent knows core — but
+**`newbound_core` may not house an agent-requiring sensor**. The
+distinction that makes this workable: *a probe is not a sensor*. A
+probe gathers facts procedurally and depends on nothing; a sensor
+binds and emits perceptions, which means calling `perceive`, which
+means knowing agent. Core may house a probe. Only agent may house the
+sensor that publishes it.
+
 Four goals, one loop: **acquire** understanding, **ruminate** on it,
 **capture** the evidence as training data, and **assemble** it into
 purpose-built contexts — which is both how the frontier gets smarter
@@ -71,7 +96,7 @@ about us today and how the local model needs less context tomorrow
 | hollis transcripts | stored, judged... then nothing | **the acoustic gap** |
 | Frontier req/resp | discarded (LLM_CAPTURE_DIR covers ask_llm only, off) | **the raw gap** |
 | Edit rationale ("why") | journaled labels nobody reads | **the synthetic gap** |
-| OS/hardware state | not sensed at all | **the sensor gap** |
+| OS/hardware state | probed by the resource map (spectrum S1) — read as data by the solver, never emitted as perceptions | **the sensor gap** (narrowed: a probe exists, a sensor does not) |
 | Context assembly | ad-hoc per surface (query strings, memory:index fence) | **the assembly gap** |
 
 ## The phases
@@ -87,20 +112,42 @@ merge word — the established rhythm.
 A conversation's turns ride every subsequent request in that
 conversation, so naive capture stores message 1 once per turn —
 quadratic duplication before the salience log, the archivist queue,
-and the SFT bank each take their own copies. Instead: a new
-**instance-specific library** (working name `msgs` — owner call), in
-the kb/runtime posture (skeleton ships, nothing under its data ever
-commits, skip-worktree + ignore). One record per individual message:
-`{id, t, role, venue, content, entity?, provenance}` — and because
-the store is content-addressed, identical text dedupes structurally.
+and the SFT bank each take their own copies. Instead: **one record per
+message in the runtime library** — no new library (the user-data
+standing rule above settles the draft's owner call in the other
+direction). Messages are fetched by ID and never scanned, so they take
+the general rule, not the table-scan exception.
+
+**Shape.** `{id, t, role, venue, content, entity?, provenance}`, one
+record *per message* — not one record holding a list. The
+`salience_log` idiom (a single runtime record with a `rows` array) is
+capped at 1000 for exactly this reason, and messages are the
+provenance substrate every later claim and training row cites forever.
+
+**Dedup is a choice, not a freebie.** The draft claimed identical text
+would dedupe structurally "because the store is content-addressed".
+Not by default: `set_data` writes to a path sharded from the **id**
+(flowlang `datastore.rs`, `get_data_file` → `id[0:4]/…/id`), and ids
+are system-minted unless the caller supplies one. Content addressing
+IS available — supply the id, minted as a hash of the content (owner,
+2026-08-19) — with one downstream effect to design around: hash the
+whole record and no two occurrences ever collide, so nothing dedupes.
+Real dedup wants the split — an immutable **content record** whose id
+is the hash of its text, plus a thin **occurrence record** (`t`,
+`role`, `venue`, `entity`, `provenance`) pointing at it. Then citing
+"a message" means citing an occurrence and citing "the words" means
+citing the content. Decide this at H1's start: retrofitting the split
+once IDs are embedded in claims and training rows is expensive.
+
 Everything downstream then references **IDs, not text**:
 
 - capture rows become `{t, venue, arm, model, msg_ids[], reply_id,
   tools?, cost_usd}` — a few dozen bytes per call
 - a conversation is an ordered ID list; export renders by join
-- hollis transcripts unify into the same space (an utterance IS a
-  message from an entity, venue `room`) — one message universe for
-  chat, frontier traffic, and the household's speech
+- acoustic transcripts unify into the same space, by kind rather
+  than by sensor (an utterance IS a message from an entity, venue
+  `room`) — one message universe for chat, frontier traffic, and the
+  household's speech, and a second acoustic sensor needs no new code
 - claims and training pairs cite message IDs as provenance, so every
   future lesson can be traced to the words that taught it
 - the H2 assembler draws messages by ID and never pastes duplicates
@@ -109,8 +156,13 @@ Everything downstream then references **IDs, not text**:
 **Then capture**, now cheap: with `LLM_CAPTURE=on` (botd, live key),
 every frontier call through `chat_llm` — all arms identically —
 appends one ID-referencing row to
-`runtime/agent/model/capture/YYYYMMDD.jsonl`. This supersedes the
-ask_llm-only Q/A text files (fold them in, same switch).
+`runtime/agent/model/capture/YYYYMMDD.jsonl`. This is a user file
+under the runtime crate, per the standing rule — and it is not an
+orphan bank, because it holds no trainable text: it is an index of
+IDs, and the bank it feeds (`chat-bank`) is a registered dataset.
+Folding in the ask_llm-only Q/A text files means *importing* them —
+their text becomes message records, their calls become capture rows —
+not letting loose text survive beside a managed dataset.
 
 Then teach `curriculum_export` a `chat` kind: captured turns rendered
 as conversation rows (`{"messages": [...]}` — the backend-neutral
@@ -141,8 +193,12 @@ every knowledge source we have:
 - federated claims (recall, with staleness marks honored)
 - the subject's actual code (facets/command bodies via the claims'
   source pointers — the store IS the codebase)
-- recent acoustic reality (transcripts + occupancy from hollis's
-  stores)
+- recent acoustic reality — drawn from perceptions **by kind**
+  (`acoustic_event`), and after H1 from the message records they
+  become, never from a named sensor's own store: the sensor-layering
+  rule forbids the agent library knowing about hollis specifically,
+  and by-kind consumption is what makes the assembler work unchanged
+  the day a second acoustic sensor or the camera exists
 - system state (once H4's sensor exists) and service/trainer metrics
 - recent session history (the archivist's turn queue, transient)
 
@@ -181,11 +237,45 @@ authors; our own commits carry rich rationale. Two harvesters:
   and ask: *why was this change made, and what does it teach about
   how this system works?* → (a) a claim on the subject control,
   hysteresis-guarded like any adjudication; (b) a synthetic QA pair
-  ("Q: why does bootstrap rewrite service.py? A: ...") into the
-  `chat-bank` dataset with provenance back to the patch. This IS
-  `dataset_derive`'s model-driven mode (spectrum ruling 10): the
-  generator is a provenance tag, the spend is deliberate or
-  drive-budgeted, never ambient, and the derived rows carry lineage.
+  ("Q: why does bootstrap rewrite service.py? A: ...") into
+  **`code-why`'s sft slice** — the dataset the spectrum's own feed
+  contract assigns this channel, not `chat-bank`. Keeping captured
+  frontier chat and synthetic QA in separate datasets is what makes
+  "did the win come from the raw transcripts or the synthetic
+  expansion?" an ordinary one-brick bench question; mixing them
+  forecloses it.
+
+**What H3 must build, stated plainly.** The previous amendment said
+this "IS `dataset_derive`'s model-driven mode". That mode does not
+exist: `dataset_derive` ships the procedural transform only and
+refuses everything else (`this branch ships one transform:
+render_dialect`), its own header noting that "model-driven generation
+arrives with its governed spender later". H3 lands it — for the whole
+subsystem, not just for itself:
+
+- **A generator axis.** Today `transform` is one string dispatched
+  procedurally inside the service. Ruling 10 admits three generator
+  classes; they do not share an address — procedural transforms and
+  the resident run in the service, the frontier arm runs in the agent
+  library behind `chat_llm`. Dispatch therefore forks on *where the
+  generator executes*, which is not a model-identity branch (the
+  standing rule holds), but is a second execution path to design.
+- **The governed spender**, and a sequencing consequence: ruling 10
+  wants deliberate-command spend always and drive-budgeted spend once
+  H5 lands — but H3 runs on day 3 and H5 on day 5. So **H3 ships
+  deliberate-command-only** with an explicit row/spend cap, and H5's
+  rumination act calls it. That keeps the order and hands H5 a second
+  act for free.
+- **Kind and shape.** `dataset_derive` hardcodes `kind: "cpt"` on its
+  output; distilled QA is conversation-shaped and lands in an `sft`
+  slice, so derive must learn to emit both.
+- **Snapshot pinning.** Ruling 10 pins snapshots for bench and SFT
+  runs; a derivation off a live stream must pin its source at derive
+  time or its lineage points at a moving target.
+
+Sized honestly, H3 is a phase on the order of H1 — a procedural
+harvester (free, retroactive) plus a real extension to a shipped
+subsystem command.
 
 This is the code-domain harvest matching the charter's "exceptional
 at code first": the system explaining its own becoming, in trainable
@@ -195,8 +285,11 @@ form.
 
 **Acoustic consolidation** — executive-side, NOT hollis-side (sensors
 stay procedural): a drive-budgeted act that runs when conversation
-subsides (cadence/occupancy signals hollis already emits). It takes
-the recent transcript window + entity records, assembles an H2
+subsides (cadence/occupancy signals the acoustic sensor already
+emits). It takes the recent transcript window — perceptions of kind
+`acoustic_event`, and the message records they become — plus the
+entity claims the agent itself holds, never a reach into the sensor's
+own library (the layering rule), assembles an H2
 context, and asks the frontier for CLAIMS: what happened, who was
 involved, what was decided, what patterns recur ("Marc works
 evenings", "the household discusses X on Sundays"). Deposits go to a
@@ -213,8 +306,31 @@ utilization/temperature, service liveness. Threshold-crossing
 emissions only (never polling spam — coalescing is the sensor's first
 responsibility). Payloads are observations; "disk will fill by
 Friday" is a claim the executive may infer. Cheap, immediately useful
-(the agent noticing its own GPU is busy is self-model), and it
-exercises the zero-executive-change test again.
+(the agent noticing its own GPU is busy is self-model).
+
+**It reuses the probe it already has.** Spectrum S1 shipped the
+resource map — `agent-model-resources` already shells `nvidia-smi`
+for GPUs and reads free disk, and the posture solver consumes it. The
+sensor must not stand up a second probe: **one probe, two consumers**
+— the solver reads it as data, the sensor emits its
+threshold-crossings as perceptions. The probe grows RAM, load,
+temperature and service liveness once, and both consumers gain them.
+Two probes reporting one box eventually disagree, and reuse is the
+standing priority.
+
+Housing follows the layering rule: the sensor is **agent-native**,
+joining the built-in family, which is legal precisely because it
+ships with agent. Should the probe ever gain a non-agent consumer it
+may descend into `newbound_core` as pure sysinfo — legal because
+nothing that calls `perceive` moves with it — but there is no second
+consumer today, and the move costs a host rebuild and a restart.
+
+*One claim narrowed:* a built-in sensor exercises the envelope, the
+kind registry and binding — it does **not** exercise the plugin path
+(discovery, `Command::lookup` delegation, the missing-agent counted
+skip). Only hollis tests that. Keeping this sensor built-in is right
+— it buys the solver's direct access — but the page should not claim
+it re-proves the plugin route.
 
 **"Being a good sensor" — the design exploration.** Hollis currently
 emits only transcripts, but its lower levels produce a stream of
@@ -281,7 +397,18 @@ sweep already feeds the `salience-pairs` and `memory` stream
 datasets, deduped and self-registering, with per-kind counts
 reported. What remains for this cycle is extending the SAME feed
 contract to the new banks — the `chat` kind into `chat-bank` (H1)
-and the why-harvest's synthetic QA (H3) — plus the mind-tab card
+and the why-harvest's into `code-why` (H3) — and here the word
+"contract" flatters the code: today it is an inlined loop over a
+literal `[("salience-pairs", true), ("memory", false)]` with a
+*boolean* discriminator, plus some fifty lines of registration, dedup
+and registry re-render that `dataset_add` carries its own copy of.
+The bool does not generalize past two streams, and copies three and
+four are what H1 and H3 would write. **So H6's factoring comes
+first** — one feeder owning row counts, holdout policy, dedup and
+registration, called by every channel — or the banks' semantics drift
+apart. (Reducing the codebase is the standing priority; this cycle
+grows it, so every growth pays for itself in reuse.) Plus the
+mind-tab card
 showing the week's harvest: claims by domain and author, capture
 volume, the banks' row counts (`agent-model-dataset_list` already
 carries them), notions pending audit, and the bench's reports
@@ -304,10 +431,16 @@ mostly wired — this cycle points it at the harvest.
 
 ## Owner calls collected
 
-0. The message library's name (`msgs`?) and whether hollis dual-writes
-   transcripts (its own store + a message record) or the executive
-   records them on perceive (H1; proposal: executive-side on perceive,
-   keeping the sensor decoupled — hollis's store stays its own).
+0. **RULED (owner, 2026-08-19) — no message library.** Messages are
+   user JSON: records in the runtime library, per the user-data
+   standing rule; `msgs` survives at most as a record-id namespace.
+   The dual-write half is settled by the layering rule rather than
+   separately: the **executive records on perceive**, because that
+   keeps the message store sensor-agnostic — any sensor's utterances
+   become messages by kind, with no hollis-specific code in agent —
+   and hollis's own store stays its own. What remains open is
+   internal to H1: whether ids are content hashes, and whether the
+   content/occurrence split is taken up front (see H1).
 1. Capture default and hollis-text eligibility (H1).
 2. Context budgets per profile, and whether chat surfaces
    auto-assemble context per turn (H2 — a per-surface setting,
@@ -317,6 +450,16 @@ mostly wired — this cycle points it at the harvest.
    connect vs wonder (H5; proposal 2/1/1).
 5. Retroactive why-harvest depth: full git history or last-N-days
    (H3; proposal full — it is one-time and the corpus is ours).
+   Note H3's scope grew: it now lands `dataset_derive`'s model-driven
+   branch and its spender, deliberate-command-only, with the
+   drive-budgeted half arriving in H5.
 6. Which low-level acoustic events emit by default once wired (H4;
    proposal: ambience_shift, state_change, and located transients on
    by default; per-frame anything, never).
+
+**Also ruled 2026-08-19, and folded in above rather than left as
+calls:** synthetic QA lands in `code-why`, not `chat-bank` (H3); the
+feed contract is factored before it is copied again (H6); the system
+sensor reuses the resource map's probe and stays agent-native, and
+`newbound_core` may house a probe but never an agent-requiring sensor
+(H4, standing rule 3).

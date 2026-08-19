@@ -693,15 +693,49 @@ async function init(host) {
     }, 5000);
     const kv = (n) => host.querySelector(`[data-kv="${n}"]`);
 
-    const [exR, snR, svR, trR, slR] = await Promise.all([
+    const [exR, snR, svR, trR, slR, hvR] = await Promise.all([
       invoke("agent", "executive", "status", {}),
       invoke("agent", "sensor", "status", {}),
       invoke("agent", "model", "service_status", {}),
       invoke("agent", "model", "train_status", {}),
       invoke("agent", "executive", "salience_log", {}),
+      invoke("agent", "model", "harvest_report", { window_days: 7 }),
     ]);
     const ex = mEnv(exR) || {}, sn = mEnv(snR) || {}, sv = mEnv(svR) || {};
     const tr = mEnv(trR) || {}, sl = mEnv(slR) || {};
+    const hv = mEnv(hvR) || {};
+
+    // the harvest - what the week grew (H6). Claims by domain, the
+    // banks, the garden's acts, the syspack gauge - and the owner's
+    // two queues: notions awaiting audit, wonderings to pick from.
+    {
+      const dom = Object.entries(hv.claims_by_domain || {})
+        .sort((a, b) => b[1] - a[1]).slice(0, 5)
+        .map(([k, v]) => `${k} ${v}`).join(" · ");
+      const actsTxt = Object.entries(hv.acts || {})
+        .map(([k, v]) => `${k} ${v}`).join(" · ") || "none yet";
+      const banksTxt = (hv.banks || [])
+        .map(b => `${b.name} ${b.rows}`).join(" · ") || "—";
+      const gauge = Object.entries(hv.context_by_purpose || {})
+        .map(([p, r]) => `${p} ${r.tokens_avg}`).join(" · ");
+      const venues = Object.entries(hv.messages_by_venue || {})
+        .map(([k, v]) => `${k} ${v}`).join(" · ");
+      kv("harvest").innerHTML =
+        mChip(`${hv.claims ?? 0} claims / ${hv.window_days ?? 7}d`, "ok") +
+        mChip(`${hv.notions_pending ?? 0} notions await audit`, (hv.notions_pending ?? 0) > 0 ? "warn" : "off") +
+        mKv([
+          ["by domain (top)", dom || "—"],
+          ["the garden's acts", actsTxt],
+          ["banks (rows)", banksTxt],
+          ["messages", `${hv.messages ?? 0} (${venues || "—"})`],
+          ["capture rows", hv.capture_rows ?? 0],
+          ["context tokens avg", gauge || "no calls yet", "", ],
+        ]);
+      const notes = (hv.wonderings || []).slice(-2)
+        .map(q => `? ${q}`).join("\n");
+      const noteEl = host.querySelector('[data-note="harvest"]');
+      if (noteEl) noteEl.textContent = notes;
+    }
 
     // the loop
     const ctx = ex.last_context || {};

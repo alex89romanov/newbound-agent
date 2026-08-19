@@ -1,0 +1,12 @@
+[
+  {
+    "time": 1787145845593,
+    "action": "confirmed",
+    "after": "high",
+    "author": "reverify",
+    "before": "high",
+    "input_claim": "Every LLM provider behind agent.llm's resolver accepts exactly ONE system message, and it must be at index 0.",
+    "reasoning": "The current agentloop.js facet still describes chatTurn's convo() as building a merged copy that appends context to the existing single system message rather than inserting a second one, consistent with the one-system-message-at-index-0 constraint.",
+    "relation": "reverified"
+  }
+]

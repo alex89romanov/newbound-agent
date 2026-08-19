@@ -245,6 +245,17 @@ std::thread::spawn(move || {
             }
         }
         st.put_int("cursor", t0);
+        // the system sensor rides the same loop (H4): one sweep every
+        // 15 ticks (~30s) - one sensor family, one loop, no second
+        // scheduler. The sweep itself coalesces (band crossings only),
+        // so this cadence sets latency, not volume.
+        let ticks = if st.has("sys_ticks") { st.get_int("sys_ticks") } else { 0 } + 1;
+        st.put_int("sys_ticks", ticks);
+        if ticks % 15 == 0 {
+            let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                crate::agent::sensor::system_sense::system_sense()
+            }));
+        }
         std::thread::sleep(std::time::Duration::from_millis(2000));
     }
 });

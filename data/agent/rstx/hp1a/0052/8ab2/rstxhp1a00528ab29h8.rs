@@ -46,6 +46,26 @@ if perception.has("v") && perception.get_int("v") != 1 {
     o.put_string("msg", "unsupported envelope version (this executive speaks v1)");
     return o;
 }
+// H1 (owner call 0, ruled 2026-08-19): the executive records utterances
+// on perceive - by KIND, never by sensor, so any acoustic sensor's
+// transcripts join the one message universe with no sensor-specific
+// code here (the layering rule). The sensor id rides as provenance, a
+// tag. Recording is best-effort beside the queue, never a gate on it:
+// a store hiccup must not cost a perception.
+if perception.get_string("kind") == "acoustic_event" {
+    if let Ok(p) = perception.try_get_object("payload") {
+        if p.try_get_string("event").ok().as_deref() == Some("transcript") {
+            let text = p.try_get_string("text").unwrap_or_default();
+            if !text.trim().is_empty() {
+                let entity = p.try_get_string("entity").unwrap_or_default();
+                let sensor = perception.get_string("sensor");
+                let _ = put("speaker".to_string(), "room".to_string(), text,
+                            entity, sensor, String::new());
+            }
+        }
+    }
+}
+
 let mut g = DataStore::globals();
 let mut ex = ensure_exec_state(&mut g);
 let mut q = ex.get_array("queue");
