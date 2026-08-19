@@ -249,5 +249,11 @@
     "tags": "harvest,h3,code-why",
     "confidence": "high",
     "time": 1787143707461
+  },
+  {
+    "claim": "H6 landed, closing the harvest cycle: agent-model-harvest_report (claims by domain in-window; memory writes by author FROM THE JOURNALS - entries do not carry authorship, the _patches journal does; act traces; bank rows; capture volume; messages by venue; notions pending; wonderings; context token averages per purpose = the syspack gauge) and the mind tab's harvest card rendering it, verified in the running app via browser. All six phases of docs/harvest-cycle.md are live: the message store, the assembler, the why-harvest + distill, the system sensor + room consolidation + hollis vocabulary, the rumination repertoire, and the gauge cluster",
+    "tags": "harvest,h6,cycle-complete",
+    "confidence": "high",
+    "time": 1787146872644
   }
 ]
