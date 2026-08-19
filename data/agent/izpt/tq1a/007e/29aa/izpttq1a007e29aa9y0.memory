@@ -145,5 +145,15 @@
     },
     "confidence": "high",
     "time": 1787093867455
+  },
+  {
+    "claim": "All ten spectrum-cycle owner calls are ruled (2026-08-18/19) and docs/spectrum-cycle.md is plan of record. Load-bearing rulings: registry records live in the runtime library and bytes in the runtime folder (user data, never shipped); anchors resolve by lineage (born-here models anchor to their training datasets, imports mint a self-sampled anchor at the door); adapters stack gated as a unit; two residents allowed with residency as a second solver-walked ladder (resident/quantized/offload/on-demand/external, fast lane priority, nothing refuses for RAM - it degrades visibly); derivation governance is uniform across generators, deliberate or drive-budgeted, never ambient.",
+    "detail": "Also ruled: solver fits = free VRAM minus computed serving reservation minus 15% margin, forced postures that do not fit refuse at launch with arithmetic shown; ring prunes by byte budget (100GB default) with two floors (protected set, newest entry); bench yardstick pinned as frozen snapshot at run start, one-brick violations warn never refuse; external engine installs only when configured, promotions there move adapters via hot-swap; acquisition only through the two deliberate doors, revision-pinned, HF_TOKEN only for gated models.",
+    "tags": "spectrum,charter,rulings",
+    "source": {
+      "doc": "docs/spectrum-cycle.md owner calls 1-10, ruled in session 2026-08-18/19"
+    },
+    "confidence": "high",
+    "time": 1787098886170
   }
 ]
