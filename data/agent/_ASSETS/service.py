@@ -108,6 +108,269 @@ def append_metric(data_dir, row):
                         f.writelines(lines[-4000:])
     except Exception:
         pass
+
+
+RESOURCES_CACHE = {"at": 0.0, "val": None}
+
+
+def probe_resources(data_dir):
+    """The resource map (spectrum S1): GPUs + disk, cheap and honest.
+    torch when the venv has it, nvidia-smi when it doesn't, empty -
+    but present - on a box with neither. Cached briefly: /status is
+    polled and nvidia-smi is a subprocess. First customers: the S5
+    posture solver, ring byte-budget warnings, birth-run sizing."""
+    now = time.time()
+    if RESOURCES_CACHE["val"] is not None and now - RESOURCES_CACHE["at"] < 5:
+        return RESOURCES_CACHE["val"]
+    gpus = []
+    try:
+        import torch
+        if torch.cuda.is_available():
+            for i in range(torch.cuda.device_count()):
+                free, total = torch.cuda.mem_get_info(i)
+                gpus.append({"index": i,
+                             "name": torch.cuda.get_device_name(i),
+                             "total_mb": int(total / 1048576),
+                             "free_mb": int(free / 1048576)})
+    except Exception:
+        try:
+            import subprocess
+            out = subprocess.run(
+                ["nvidia-smi",
+                 "--query-gpu=index,name,memory.total,memory.free",
+                 "--format=csv,noheader,nounits"],
+                capture_output=True, text=True, timeout=5).stdout
+            for ln in out.strip().splitlines():
+                parts = [p.strip() for p in ln.split(",")]
+                if len(parts) >= 4:
+                    gpus.append({"index": int(parts[0]), "name": parts[1],
+                                 "total_mb": int(parts[2]),
+                                 "free_mb": int(parts[3])})
+        except Exception:
+            pass
+    disk_free_gb = None
+    try:
+        st = os.statvfs(data_dir)
+        disk_free_gb = round(st.f_bavail * st.f_frsize / 1073741824, 1)
+    except Exception:
+        pass
+    val = {"gpus": gpus, "disk_free_gb": disk_free_gb}
+    RESOURCES_CACHE["at"] = now
+    RESOURCES_CACHE["val"] = val
+    return val
+
+
+def registry_info(data_dir):
+    """The registry's window into /status: names only. The record of
+    truth lives in the runtime library; the service reads only the
+    rendered registry.json (it never reads the store), picked up by
+    mtime like persona.jsonl."""
+    path = os.path.join(data_dir, "registry.json")
+    if not os.path.exists(path):
+        return None
+    try:
+        with open(path) as f:
+            reg = json.load(f)
+        return {"models": [m.get("name", "?") for m in reg.get("models", [])],
+                "datasets": [d.get("name", "?")
+                             for d in reg.get("datasets", [])],
+                "rendered_at": reg.get("rendered_at")}
+    except Exception as e:
+        return {"error": f"registry.json unreadable: {e}"}
+
+
+REGISTRY_DS = {"mtime": 0.0, "list": []}
+
+
+def load_registry_datasets(data_dir):
+    """Registered datasets from registry.json (the service's store-blind
+    window). Re-read when the file's mtime moves - the same pickup
+    signal the whole registry uses."""
+    path = os.path.join(data_dir, "registry.json")
+    try:
+        mt = os.path.getmtime(path)
+    except OSError:
+        REGISTRY_DS["list"] = []
+        return REGISTRY_DS["list"]
+    if mt != REGISTRY_DS["mtime"]:
+        try:
+            with open(path) as f:
+                REGISTRY_DS["list"] = json.load(f).get("datasets", [])
+            REGISTRY_DS["mtime"] = mt
+        except Exception:
+            pass
+    return REGISTRY_DS["list"]
+
+
+def dataset_paths(rec):
+    """The files carrying a registered dataset's rows, by its format."""
+    p = rec.get("path") or ""
+    fmt = rec.get("format") or "jsonl"
+    ext = {"jsonl": ".jsonl", "txt": ".txt",
+           "parquet": ".parquet"}.get(fmt, ".jsonl")
+    if os.path.isfile(p):
+        return [p]
+    if os.path.isdir(p):
+        out = []
+        for base, _dirs, files in os.walk(p):
+            out.extend(os.path.join(base, n)
+                       for n in sorted(files) if n.endswith(ext))
+        return sorted(out)
+    return []
+
+
+def load_dataset_docs(rec, limit=2048):
+    """(train_docs, holdout_docs) for one registered dataset. JSONL
+    rows render through render_sample so training speaks THE dialect
+    ({"text": ...} rows pass through); txt rows are docs as-is.
+    holdout_every=N reserves every Nth row, never trained - the
+    persona split pattern. Tail-capped so streams stay affordable."""
+    fmt = rec.get("format") or "jsonl"
+    if fmt == "parquet":
+        return [], []  # pyarrow territory; the standard pool covers it
+    lines = []
+    for path in dataset_paths(rec):
+        try:
+            with open(path) as f:
+                lines.extend(ln.rstrip("\n") for ln in f if ln.strip())
+        except OSError:
+            continue
+    lines = lines[-limit:]
+    hn = int(rec.get("holdout_every") or 0)
+    train, hold = [], []
+    for i, ln in enumerate(lines):
+        doc = ln
+        if fmt == "jsonl":
+            try:
+                o = json.loads(ln)
+                if isinstance(o, dict):
+                    doc = o["text"] if "text" in o else render_sample(o)
+            except Exception:
+                pass
+        (hold if hn > 0 and i % hn == hn - 1 else train).append(doc)
+    return train, hold[:64]
+
+
+def load_anchor_docs(args):
+    """Ruling 2: the forgetting guard reads its anchor through the
+    manager WHEN the serving model is registered with one - resolve
+    this service's checkpoint against the registry's model records,
+    follow the record's anchor to a registered dataset, load its docs.
+    Returns [] when unregistered or unanchored: the legacy base-dir
+    path then runs byte-for-byte (R1)."""
+    path = os.path.join(args.data_dir, "registry.json")
+    try:
+        with open(path) as f:
+            reg = json.load(f)
+    except Exception:
+        return []
+    try:
+        ck = os.path.realpath(args.checkpoint)
+    except OSError:
+        return []
+    anchor = None
+    for m in reg.get("models", []):
+        try:
+            if os.path.realpath(m.get("path") or "") == ck:
+                a = m.get("anchor") or ""
+                if a and a not in ("mint", "none"):
+                    anchor = a
+                break
+        except OSError:
+            continue
+    if not anchor:
+        return []
+    for rec in reg.get("datasets", []):
+        if rec.get("name") == anchor:
+            docs, _hold = load_dataset_docs(dict(rec, holdout_every=0),
+                                            limit=512)
+            if docs:
+                print(f"[trainer] anchor through the manager: "
+                      f"'{anchor}' ({len(docs)} docs)", flush=True)
+            return docs
+    return []
+
+
+MINT = {"running": False, "last": None}
+
+MINT_SEEDS = [
+    "Tell me about yourself.",
+    "What do you know a lot about?",
+    "Explain something interesting.",
+    "Describe a process you understand well.",
+    "What happened in the world recently?",
+    "Write a short story about a machine that learns.",
+    "Give me practical advice about computers.",
+    "What makes a good explanation?",
+    "Describe your ideal day.",
+    "How does the weather work?",
+    "What is the most important invention?",
+    "Continue this thought: The system was designed to",
+    "Summarize what you believe about language.",
+    "What would you teach a beginner first?",
+    "Describe a place you would like to visit.",
+    "Why do people tell stories?",
+]
+
+
+def mint_anchor_thread(args, path, out_name, n):
+    """Ruling 2: an import without its pretraining data gets a MINTED
+    anchor - a frozen sample of the model's own voice at the door,
+    measuring drift-from-its-imported-self forever after. Loads its
+    own scorer from `path` (the serving slots are never touched),
+    samples with variety, writes datasets/<out_name>/anchor.jsonl +
+    meta.json, and frees the weights. Progress rides /status.mint."""
+    res = {"model": path, "name": out_name, "requested": int(n), "rows": 0,
+           "started": int(time.time() * 1000), "status": "running"}
+    with LOCK:
+        MINT["running"] = True
+        MINT["last"] = dict(res)
+    scorer = None
+    try:
+        scorer = NanochatScorer(path)
+        outdir = os.path.join(args.data_dir, "datasets", out_name)
+        os.makedirs(outdir, exist_ok=True)
+        rows = 0
+        with open(os.path.join(outdir, "anchor.jsonl"), "w") as f:
+            for i in range(int(n)):
+                prompt = MINT_SEEDS[i % len(MINT_SEEDS)]
+                conversation = {"messages": [
+                    {"role": "user", "content": prompt},
+                    {"role": "assistant", "content": ""},
+                ]}
+                ids = scorer.tokenizer.render_for_completion(conversation)
+                results, _m = scorer.engine.generate_batch(
+                    ids, num_samples=1, max_tokens=256,
+                    temperature=0.8, top_k=50)
+                text = scorer.tokenizer.decode(results[0][len(ids):])
+                f.write(json.dumps({"text": text}) + "\n")
+                rows += 1
+                if rows % 25 == 0:
+                    with LOCK:
+                        MINT["last"] = dict(res, rows=rows)
+        meta = {"name": out_name, "kind": "anchor", "rows": rows,
+                "model_path": path, "frozen": True,
+                "at": int(time.time() * 1000)}
+        with open(os.path.join(outdir, "meta.json"), "w") as f:
+            json.dump(meta, f)
+        res.update(rows=rows, status="done",
+                   finished=int(time.time() * 1000))
+        print(f"[mint] anchor {out_name}: {rows} rows", flush=True)
+    except Exception as e:
+        res.update(status="error", error=str(e)[:500])
+        print(f"[mint] anchor {out_name} FAILED: {e}", flush=True)
+    finally:
+        del scorer
+        try:
+            import torch
+            torch.cuda.empty_cache()
+        except Exception:
+            pass
+    with LOCK:
+        MINT["running"] = False
+        MINT["last"] = res
+
+
 STATE = {
     "slots": {"A": None, "B": None},
     "live": "A",
@@ -1060,13 +1323,44 @@ def trainer_real(args):
                     except Exception:
                         pass
     standard = load_standard_docs(args)
-    heldout_std = standard[:24]
-    standard = standard[24:]
+    # ruling 2: a registered model's anchor replaces the held-out
+    # standard sample - the gate reads through the manager. An
+    # unregistered or unanchored checkpoint takes the legacy split,
+    # byte-for-byte (R1).
+    anchor_docs = load_anchor_docs(args)
+    if anchor_docs:
+        heldout_std = anchor_docs[:24]
+    else:
+        heldout_std = standard[:24]
+        standard = standard[24:]
+    # S2: registered dataset pools join the built-ins, weighted by
+    # MODEL_MIX entries naming them. Nothing configured = exactly the
+    # three built-in pools - today's behavior. Mixing a dataset in or
+    # out is editing one weight.
+    ds_pools = {}
+    ds_holdout = {}
+
+    def refresh_ds_pools():
+        for rec in load_registry_datasets(args.data_dir):
+            nm = rec.get("name")
+            if not nm or nm in ("fresh", "replay", "standard"):
+                continue
+            if mix.get(nm, 0) <= 0:
+                continue
+            tr, ho = load_dataset_docs(rec)
+            if tr:
+                ds_pools[nm] = tr
+            if ho:
+                ds_holdout[nm] = ho
+
+    refresh_ds_pools()
     with LOCK:
         TRAINER["active"] = True
         TRAINER["mix"] = mix
         TRAINER["standard_docs"] = len(standard)
         TRAINER["replay_size"] = len(replay)
+        TRAINER["dataset_pools"] = {k: len(v) for k, v in ds_pools.items()}
+        TRAINER["anchor"] = bool(anchor_docs)
     print(f"[trainer] live: candidate of {live.name} on {device}, "
           f"mix={mix} gate={gate_cfg} lr={args.lr} seq_len={seq_len}", flush=True)
 
@@ -1128,8 +1422,18 @@ def trainer_real(args):
     live_agree = None
     fails = 0
     ema = None
+    tick = 0
     while True:
         time.sleep(max(float(args.train_interval), 0.05))
+        # streams grow and datasets register mid-flight: refresh the
+        # registered pools at start and every ~30 ticks (registry.json
+        # itself is mtime-cached inside the loader)
+        tick += 1
+        if tick % 30 == 1:
+            refresh_ds_pools()
+            with LOCK:
+                TRAINER["dataset_pools"] = {
+                    k: len(v) for k, v in ds_pools.items()}
         # drain fresh curriculum; 1-in-10 goes to held-out, never trained
         with LOCK:
             fresh_in = list(TRAIN_Q)
@@ -1159,7 +1463,9 @@ def trainer_real(args):
             replay = replay[:4096]
             with open(replay_path, "w") as f:
                 f.writelines(d + "\n" for d in replay)
-        pools = {"fresh": fresh_docs or replay, "replay": replay, "standard": standard}
+        pools = dict(ds_pools)
+        pools.update({"fresh": fresh_docs or replay, "replay": replay,
+                      "standard": standard})
         avail = {k: p for k, p in pools.items() if p and mix.get(k, 0) > 0}
         if not avail:
             with LOCK:
@@ -1220,12 +1526,21 @@ def trainer_real(args):
             learn_ok = (cand_fresh is None or live_fresh is None
                         or cand_fresh <= live_fresh)
         verdict = "promote" if (std_ok and learn_ok) else "hold"
+        # per-dataset held-out losses: REPORTED, not gating - the
+        # bench's yardstick (ruling 7) accumulating before the bench
+        # exists. The standing gates keep their meaning unchanged.
+        ds_losses = {}
+        for nm, docs in ds_holdout.items():
+            dl = eval_loss(candidate, chunks_of(docs[:24]))
+            if dl is not None:
+                ds_losses[nm] = dl
         gate_row = {
             "step": steps, "verdict": verdict,
             "cand_std": cand_std, "live_std": live_std,
             "cand_fresh": cand_fresh, "live_fresh": live_fresh2,
             "cand_agree": cand_agree, "live_agree": live_agree,
             "pairs": len(HELDOUT_PAIRS),
+            "datasets": ds_losses or None,
         }
         print(f"[trainer] gate: {gate_row}", flush=True)
         with LOCK:
@@ -1377,6 +1692,10 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         if self.path != "/status":
             return self._json(404, {"status": "err", "msg": "unknown path"})
+        # computed OUTSIDE the lock: probe_resources may shell out to
+        # nvidia-smi, and /salience scoring shares this lock
+        res_map = probe_resources(self.server.args.data_dir)
+        reg_info = registry_info(self.server.args.data_dir)
         with LOCK:
             live = STATE["live"]
             scorer = STATE["slots"][live]
@@ -1413,6 +1732,9 @@ class Handler(BaseHTTPRequestHandler):
                     if n.endswith(".jsonl")]),
                 "checkpoints": sorted(os.listdir(ck)) if os.path.isdir(ck) else [],
                 "uptime_s": int(time.time() - START),
+                "resources": res_map,
+                "registry": reg_info,
+                "mint": MINT["last"],
                 "trainer": dict(TRAINER),
                 "user": dict(
                     USER,
@@ -1468,6 +1790,88 @@ class Handler(BaseHTTPRequestHandler):
             with open(os.path.join(ingest, name), "w") as f:
                 f.write(raw)
             return self._json(200, {"status": "ok", "queued": name})
+        if self.path == "/derive":
+            # S2: procedural transforms run HERE so the dialect keeps
+            # one home - render_sample IS the render_dialect transform.
+            # Synchronous: rendering is line-at-a-time stdlib work, and
+            # it runs in stub mode too.
+            try:
+                req = json.loads(raw)
+            except Exception:
+                return self._json(400, {"status": "err",
+                                        "msg": "body must be JSON"})
+            spath = str(req.get("source_path") or "")
+            out_name = str(req.get("name") or "")
+            transform = str(req.get("transform") or "")
+            if transform != "render_dialect":
+                return self._json(400, {
+                    "status": "err",
+                    "msg": f"unknown transform '{transform}' - this "
+                           "branch ships render_dialect only"})
+            files = []
+            if os.path.isfile(spath):
+                files = [spath]
+            elif os.path.isdir(spath):
+                for base, _d, fs in os.walk(spath):
+                    files.extend(os.path.join(base, n)
+                                 for n in sorted(fs)
+                                 if n.endswith(".jsonl"))
+            if not files or not out_name:
+                return self._json(400, {"status": "err",
+                                        "msg": "need name and a jsonl "
+                                        f"source (got '{spath}')"})
+            outdir = os.path.join(self.server.args.data_dir,
+                                  "datasets", out_name)
+            os.makedirs(outdir, exist_ok=True)
+            rows = 0
+            outpath = os.path.join(outdir, "docs.txt")
+            with open(outpath, "w") as f:
+                for path in files:
+                    with open(path) as sf:
+                        for ln in sf:
+                            ln = ln.strip()
+                            if not ln:
+                                continue
+                            try:
+                                doc = render_sample(json.loads(ln))
+                            except Exception:
+                                doc = ln
+                            f.write(doc.replace("\n", " ") + "\n")
+                            rows += 1
+            return self._json(200, {"status": "ok", "rows": rows,
+                                    "path": outpath})
+        if self.path == "/mint_anchor":
+            # ruling 2: mint a self-sampled anchor for an import. Loads
+            # its own scorer (never the serving slots); background
+            # thread; progress rides /status.mint. Stub mode has no
+            # torch to load with - refuse honestly.
+            try:
+                req = json.loads(raw)
+            except Exception:
+                return self._json(400, {"status": "err",
+                                        "msg": "body must be JSON"})
+            if self.server.args.checkpoint == "stub":
+                return self._json(409, {"status": "err",
+                                        "msg": "stub mode cannot mint - no "
+                                        "model environment; configure a real "
+                                        "checkpoint first"})
+            path = str(req.get("path") or "")
+            out_name = str(req.get("name") or "")
+            n = int(req.get("n") or 200)
+            if not path or not os.path.isdir(path) or not out_name:
+                return self._json(400, {"status": "err",
+                                        "msg": "need path (existing dir) "
+                                        "and name"})
+            with LOCK:
+                if MINT["running"]:
+                    return self._json(409, {"status": "err",
+                                            "msg": "a mint is already "
+                                            "running", "mint": MINT["last"]})
+            threading.Thread(target=mint_anchor_thread,
+                             args=(self.server.args, path, out_name, n),
+                             daemon=True).start()
+            return self._json(200, {"status": "ok", "started": True,
+                                    "name": out_name, "n": n})
         if self.path == "/shutdown":
             # The GPU off-switch: answer, then exit cleanly. Everything
             # durable survives on disk (ring checkpoints, replay,

@@ -40,7 +40,45 @@ fn err(msg: String) -> DataObject {
     o
 }
 
-let checkpoint = prop("MODEL_CHECKPOINT", "stub");
+// spectrum S1: MODEL= names a registry record (runtime library,
+// ruling 1) and wins over the MODEL_CHECKPOINT alias. The record
+// supplies path + backend; an hf-backend record stages honestly and
+// refuses to serve until the S3 seam lands. No MODEL= set = the
+// unregistered-directory alias, byte-for-byte the old behavior.
+let model_name = prop("MODEL", "");
+let mut backend = "nanochat".to_string();
+let mut checkpoint = prop("MODEL_CHECKPOINT", "stub");
+if !model_name.is_empty() {
+    let rstore = DataStore::new();
+    let mut found = false;
+    if rstore.exists("runtime", "models") {
+        let d = rstore.get_data("runtime", "models").get_object("data");
+        if d.has("list") {
+            let list = d.get_array("list");
+            for i in 0..list.len() {
+                if let Ok(m) = list.try_get_object(i) {
+                    if m.has("name") && m.get_string("name") == model_name {
+                        checkpoint = m.get_string("path");
+                        if m.has("backend") { backend = m.get_string("backend"); }
+                        found = true;
+                        break;
+                    }
+                }
+            }
+        }
+    }
+    if !found {
+        return err(format!(
+            "MODEL='{}' names no registered model - agent-model-import it first, or unset MODEL=",
+            model_name));
+    }
+    if backend == "hf" {
+        return err(format!(
+            "MODEL='{}' is an hf-backend record - the backend lands in S3; serve a nanochat record or the MODEL_CHECKPOINT alias for now",
+            model_name));
+    }
+}
+let _ = &backend;
 let port = prop("MODEL_SERVICE_PORT", "8077");
 let repo = prop("NANOCHAT_REPO", "https://github.com/karpathy/nanochat.git");
 
@@ -289,6 +327,8 @@ if service != "launch_failed" {
     }
 }
 o.put_string("service", &service);
+o.put_string("model", &model_name);
+o.put_string("backend", &backend);
 o.put_string("checkpoint", &checkpoint);
 o.put_string("port", &port);
 o.put_string("path", &modeldir.display().to_string());

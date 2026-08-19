@@ -155,5 +155,25 @@
     },
     "confidence": "high",
     "time": 1787098886170
+  },
+  {
+    "claim": "S1 landed (claude/spectrum-s1s2-registry): the registry exists. agent-model-import is the deliberate door (local paths; hf: sources refuse until the fetch stage; backend-shape validation at the door; FNV fingerprint over names+sizes; footprint from metadata), records in the runtime library models record (list-shaped, salience_log idiom), registry.json rendered on every write as the service's store-blind window (mtime pickup, the persona.jsonl pattern). agent-model-models lists; agent-model-model_remove refuses while MODEL= names the record and purges bytes only inside the managed weights dir. Bootstrap resolves MODEL= to path+backend ahead of the MODEL_CHECKPOINT alias (absent MODEL= is byte-for-byte the old path); hf records stage but refuse to serve until S3. The resource map rides /status (torch view, computed outside the scoring lock) with agent-model-resources proxying and an nvidia-smi fallback; /mint_anchor self-samples an import's anchor in a background thread (own scorer, never the serving slots), refusing in stub mode - import records mint_pending and never blocks on it.",
+    "detail": "Battery on stubs passed: R1 (stub + bare MODEL_CHECKPOINT unchanged, stale-script convergence relaunched the new asset), import/list/remove round trip both backends, dup + hub + hf-serve + missing-MODEL refusals, purge guard left out-of-weights files alone, resources sane on a CPU-only box (empty gpus, real disk), stub mint 409, import mint deferral recorded. GPU-box items for the real battery: actual mint generation, MODEL= serving a real checkpoint.",
+    "tags": "spectrum,s1,registry",
+    "source": {
+      "doc": "docs/spectrum-s1s2.md S1; battery run in session 2026-08-19"
+    },
+    "confidence": "high",
+    "time": 1787100343894
+  },
+  {
+    "claim": "S2 landed (claude/spectrum-s1s2-registry): the dataset manager exists. Six commands - dataset_add (in-place registration, FNV content hash, read-time holdout_every policy so user files are never rewritten; anchor-kind registration flips anchor_status on waiting models), dataset_list, dataset_inspect (peek + re-verify; snapshot hash mismatch is a tamper alarm, stream hash is rolling by design), dataset_snapshot (frozen hashed cut copied into the managed dir, lineage snapshot:<source>@<rows>), dataset_derive (render_dialect runs IN THE SERVICE via /derive so the dialect keeps one home; lineage derived:<transform>:<source>), dataset_remove (refuses while MODEL_MIX names it; purge only inside the managed dir). The feed contract runs: curriculum_export sweeps into the salience-pairs and memory streams line-deduped (idempotent - second export appends zero), self-registering, legacy ingest untouched. The trainer builds pools from registry.json datasets joined with MODEL_MIX weights by name (built-ins unchanged when nothing is configured), reports per-dataset held-out losses at gate time without gating, and reads a registered model's anchor through the manager (unregistered checkpoint = legacy split, byte-for-byte).",
+    "detail": "Battery passed on stubs: add/inspect/verify round trip with tamper detection, export idempotence (212 swept, 0 on repeat), snapshot + derive with correct lineage, loader harness (191/21 split at every=10, jsonl streams render through render_sample, anchor resolves checkpoint->model->dataset->30 docs), R1 stub status healthy throughout. Bug found and fixed in-battery: the service may run with a relative --data-dir, so /derive's reply path only resolves from its cwd - registry records must always be written with absolute paths computed from the store root; dataset_derive now does. GPU-box items: pools actually training under mix weights, per-dataset gate losses on a real candidate.",
+    "tags": "spectrum,s2,datasets",
+    "source": {
+      "doc": "docs/spectrum-s1s2.md S2; battery run in session 2026-08-19"
+    },
+    "confidence": "high",
+    "time": 1787101226212
   }
 ]
