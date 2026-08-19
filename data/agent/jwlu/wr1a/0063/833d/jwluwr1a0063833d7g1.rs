@@ -124,6 +124,10 @@ for lib in libs {
                 if let Ok(src) = e.try_get_object("source") {
                     if src.has("lib") && src.has("ctl") && src.has("facet") && src.has("hash") {
                         checked = true;
+                        // Additive (H2): the pointer rides the result row, so
+                        // the context assembler can read the referent itself -
+                        // "the store IS the codebase" needs the address.
+                        out.put_object("source", src.deep_copy());
                         let slib = src.get_string("lib");
                         let sid = ctl_id(&store, &slib, &src.get_string("ctl"));
                         if !sid.is_empty() && store.exists(&slib, &sid) {

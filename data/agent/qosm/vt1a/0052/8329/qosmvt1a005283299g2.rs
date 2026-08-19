@@ -257,9 +257,36 @@ std::thread::spawn(move || {
                                 let lf = if ex.has("last_frontier_time") { ex.get_int("last_frontier_time") } else { 0 };
                                 if now2 - lf >= 5000 {
                                     ex.put_int("last_frontier_time", now2);
+                                    // H2: the frontier judges with the
+                                    // bound claims and code context in
+                                    // front of it, not from a bare query
+                                    // string - better escalation labels
+                                    // are better curriculum for free.
+                                    // Assembly failure falls back to the
+                                    // bare prompt: an escalation must
+                                    // never be lost to its context.
+                                    let esc_budget = (|| -> Option<i64> {
+                                        let s = DataStore::globals().try_get_object("system").ok()?;
+                                        let a = s.try_get_object("apps").ok()?;
+                                        let g2 = a.try_get_object("agent").ok()?;
+                                        let r = g2.try_get_object("runtime").ok()?;
+                                        r.try_get_string("CONTEXT_ESCALATION_BUDGET").ok()?.trim().parse::<i64>().ok()
+                                    })().unwrap_or(900);
+                                    let ctx_block = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                                        crate::agent::context::assemble::assemble(
+                                            "escalation".to_string(), qs.clone(), esc_budget)
+                                    })).ok()
+                                        .filter(|c| c.try_get_string("status").ok().as_deref() == Some("ok"))
+                                        .map(|c| c.try_get_string("block").unwrap_or_default())
+                                        .unwrap_or_default();
+                                    let ctx_part = if ctx_block.trim().is_empty() {
+                                        format!("CONTEXT: recall matched {} claims.", ctx.get_int("matched"))
+                                    } else {
+                                        format!("CONTEXT (assembled, provenance-tagged):\n{}", ctx_block)
+                                    };
                                     let fprompt = format!(
-                                        "You are the salience auditor for an autonomous agent's perception stream.\nPERCEPTION: {}\nCONTEXT: recall matched {} claims.\nThe resident model rated salience {:.2}.\nIndependently rate how much this perception matters to the agent's understanding of its environment, from 0.0 (noise) to 1.0 (critical).\nReply with ONLY a JSON object: {{\"salient\": <0.0-1.0>, \"reasoning\": \"<one sentence>\"}}",
-                                        qs, ctx.get_int("matched"), sal);
+                                        "You are the salience auditor for an autonomous agent's perception stream.\nPERCEPTION: {}\n{}\nThe resident model rated salience {:.2}.\nIndependently rate how much this perception matters to the agent's understanding of its environment, from 0.0 (noise) to 1.0 (critical).\nReply with ONLY a JSON object: {{\"salient\": <0.0-1.0>, \"reasoning\": \"<one sentence>\"}}",
+                                        qs, ctx_part, sal);
                                     let fres = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                                         ask_llm(fprompt, Data::DNull)
                                     }));
