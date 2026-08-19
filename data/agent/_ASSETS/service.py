@@ -154,7 +154,17 @@ def probe_resources(data_dir):
         disk_free_gb = round(st.f_bavail * st.f_frsize / 1073741824, 1)
     except Exception:
         pass
-    val = {"gpus": gpus, "disk_free_gb": disk_free_gb}
+    ram_free_mb = None
+    try:
+        with open("/proc/meminfo") as f:
+            for ln in f:
+                if ln.startswith("MemAvailable:"):
+                    ram_free_mb = int(ln.split()[1]) // 1024
+                    break
+    except Exception:
+        pass
+    val = {"gpus": gpus, "disk_free_gb": disk_free_gb,
+           "ram_free_mb": ram_free_mb}
     RESOURCES_CACHE["at"] = now
     RESOURCES_CACHE["val"] = val
     return val
@@ -799,14 +809,16 @@ def make_scorer(checkpoint, data_dir, backend="nanochat"):
     if checkpoint == "stub":
         return StubScorer()
     if backend == "hf":
-        return HFScorer(checkpoint)
+        # gate-promoted CPT progress resumes across restarts on the
+        # lora rung too: re-merge the delta ring (S5)
+        return merge_ring_deltas(HFScorer(checkpoint), data_dir)
     ring = newest_ring(data_dir)
     if ring:
         try:
             return NanochatScorer.from_ring(checkpoint, ring)
         except Exception as e:
             print(f"[service] ring load failed ({e}); falling back to base dir", flush=True)
-    return NanochatScorer(checkpoint)
+    return merge_ring_deltas(NanochatScorer(checkpoint), data_dir)
 
 
 def newest_checkpoint(args):
@@ -889,11 +901,18 @@ def load_pointer_scorer(args, key):
         if getattr(args, "backend", "nanochat") == "hf":
             return HFScorer(args.checkpoint)
         return NanochatScorer(args.checkpoint)
+    ring_dir = os.path.join(args.data_dir, "checkpoints", key)
+    if os.path.isfile(os.path.join(ring_dir, "delta.pt")):
+        # a delta-ring key (S5's lora rung): base + every delta up to
+        # and including this checkpoint, chronologically
+        base = (HFScorer(args.checkpoint)
+                if getattr(args, "backend", "nanochat") == "hf"
+                else NanochatScorer(args.checkpoint))
+        return merge_ring_deltas(base, args.data_dir, upto=key)
     if getattr(args, "backend", "nanochat") == "hf":
         raise RuntimeError(
-            f"hf backend has no ring checkpoints yet (key '{key}') - "
-            "the delta trainer lands in S5")
-    ring_dir = os.path.join(args.data_dir, "checkpoints", key)
+            f"'{key}' is not a delta checkpoint - the hf backend rings "
+            "deltas only (full hf saves wait for their own ruling)")
     return NanochatScorer.from_ring(args.checkpoint, ring_dir)
 
 
@@ -1888,6 +1907,487 @@ def load_standard_docs(args, limit=512):
     return docs
 
 
+# ── S5: the posture solver and the delta trainer ────────────────────
+
+TRAIN_TLS = threading.local()
+
+
+def solve_posture(args, live):
+    """Ruling 4: fits = free memory minus the margin (the serving
+    model already resides, so 'free' is what remains beside it). The
+    ladder on this branch: full -> lora(r) -> frozen; full-sharded
+    waits for S7 placement, qlora for a quantization-dependency
+    ruling; full stays nanochat-only until the ring learns full hf
+    saves. MODEL_POSTURE= forces a rung, published; a forced rung
+    that does not fit REFUSES training - loudly, with the arithmetic -
+    rather than OOMing at step one. Unknown free memory is permissive
+    and says so ('source': none)."""
+    model = scorer_model(live)
+    params = sum(p.numel() for p in model.parameters())
+    try:
+        bytes_per = next(model.parameters()).element_size()
+    except StopIteration:
+        bytes_per = 4
+    weights_mb = int(params * bytes_per / 1048576)
+    res = probe_resources(args.data_dir)
+    gpus = res.get("gpus") or []
+    if gpus:
+        free_mb = gpus[0]["free_mb"]
+        total_mb = gpus[0]["total_mb"]
+        source = f"gpu{gpus[0]['index']}"
+    else:
+        free_mb = res.get("ram_free_mb")
+        total_mb = free_mb
+        source = "meminfo" if free_mb is not None else "none"
+    headroom_pct = float(getattr(args, "headroom", "15") or 15)
+    margin_mb = int((total_mb or 0) * headroom_pct / 100)
+    # full: a deepcopy candidate + fp32 AdamW moments + grads
+    need_full = weights_mb + int(params * 12 / 1048576)
+    # lora: tiny A/B + backward activations through the frozen base
+    need_lora = 500 + int(weights_mb * 0.05)
+    backend = "hf" if isinstance(live, HFScorer) else "nanochat"
+    arith = {"params": params, "weights_mb": weights_mb,
+             "free_mb": free_mb, "margin_mb": margin_mb,
+             "need_full_mb": need_full, "need_lora_mb": need_lora,
+             "source": source, "backend": backend}
+
+    def fits(need):
+        return free_mb is None or need + margin_mb <= free_mb
+
+    forced = str(getattr(args, "posture", "auto") or "auto")
+    if forced != "auto":
+        rung = forced.split("(", 1)[0]
+        ok = {"full": backend == "nanochat" and fits(need_full),
+              "lora": fits(need_lora),
+              "frozen": True}.get(rung)
+        if ok is None:
+            return "refused", dict(
+                arith, forced=forced,
+                why=f"unknown posture '{forced}' (full|lora|frozen)")
+        if not ok:
+            need = need_full if rung == "full" else need_lora
+            why = (f"forced '{forced}' does not fit: need {need}MB + "
+                   f"{margin_mb}MB margin, free {free_mb}MB ({source})"
+                   if backend != "hf" or rung != "full" else
+                   "full is nanochat-only until the ring learns full "
+                   "hf saves")
+            return "refused", dict(arith, forced=forced, why=why)
+        return rung, dict(arith, forced=forced)
+    if backend == "nanochat" and fits(need_full):
+        return "full", arith
+    if fits(need_lora):
+        return "lora", arith
+    return "frozen", arith
+
+
+def merge_ring_deltas(scorer, data_dir, upto=None):
+    """Reconstruct merged CPT state from a delta ring: each delta blob
+    was trained relative to the base plus every earlier merge, so
+    merging chronologically reconstructs exactly. upto=<dir basename>
+    stops after that checkpoint (a pointer's view); None merges all -
+    the restart-resume path."""
+    import glob as _g
+    import torch
+    model = scorer_model(scorer)
+    merged = 0
+    last = None
+    for d in sorted(_g.glob(os.path.join(data_dir, "checkpoints", "cpt-*"))):
+        f = os.path.join(d, "delta.pt")
+        if not os.path.isfile(f):
+            continue
+        try:
+            blob = torch.load(f, map_location="cpu", weights_only=False)
+        except Exception as e:
+            print(f"[service] delta {d} unreadable: {e}", flush=True)
+            continue
+        if merge_adapter_blob(model, blob):
+            merged += 1
+            last = os.path.basename(d)
+        if upto and os.path.basename(d) == upto:
+            break
+    if merged and last:
+        base = scorer.name.split(":cpt-", 1)[0]
+        step = last.rsplit("-", 1)[-1].lstrip("0") or "0"
+        scorer.name = f"{base}:cpt-{int(step)}"
+        print(f"[service] {merged} ring delta(s) merged -> {scorer.name}",
+              flush=True)
+    return scorer
+
+
+def prune_ring(args):
+    """Ruling 5: the ring prunes by BYTE budget, with two floors that
+    hold regardless - the protected user set never prunes, and neither
+    does the newest entry (the ring is the restart-recovery path and
+    must never empty). Full checkpoints and delta blobs meter the same
+    budget."""
+    ckroot = os.path.join(args.data_dir, "checkpoints")
+    if not os.path.isdir(ckroot):
+        return
+    budget = float(getattr(args, "ring_gb", "100") or 100) * 1073741824
+
+    def du(d):
+        t = 0
+        for base, _dd, files in os.walk(os.path.join(ckroot, d)):
+            for n in files:
+                try:
+                    t += os.path.getsize(os.path.join(base, n))
+                except OSError:
+                    pass
+        return t
+
+    entries = sorted(e for e in os.listdir(ckroot)
+                     if os.path.isdir(os.path.join(ckroot, e)))
+    if not entries:
+        return
+    sizes = {e: du(e) for e in entries}
+    with LOCK:
+        protected = {v for v in (USER["pointer"], USER["last_good"],
+                                 USER["ready"]) if v}
+    total = sum(sizes.values())
+    for old in entries[:-1]:
+        if total <= budget:
+            break
+        if old in protected:
+            continue
+        shutil.rmtree(os.path.join(ckroot, old), ignore_errors=True)
+        total -= sizes[old]
+
+
+def trainer_lora_loop(args, live, arith):
+    """The lora rung (S5): CPT as base + delta. The delta is hook-LoRA
+    on the SERVING model's own weights - zero-copy - with the hooks
+    gated per-thread (TRAIN_TLS): only the trainer thread flips its
+    thread-local on for its steps and candidate evals, so serving
+    threads never see the candidate. Same drain, same mix, same gates
+    as the full rung. Promotion MERGES the delta into the serving
+    weights (additive; a verdict generated mid-merge could straddle
+    old and new weights once - the epsilon audit is the standing net)
+    and rings the delta blob with its base ref: megabytes, not
+    gigabytes. Reset zeroes the delta."""
+    import torch
+    import random as _r
+    mix = parse_kv(args.mix, {"fresh": 0.25, "replay": 0.25,
+                              "standard": 0.5})
+    gate_cfg = parse_kv(args.gate, {"every": 50, "regress": 0.02,
+                                    "fails": 3, "agree_slack": 0.05,
+                                    "agree_n": 8})
+    cfg = parse_kv_mixed(getattr(args, "lora", ""), PERSONA_LORA_DEFAULTS)
+    model, tokenizer = scorer_model(live), live.tokenizer
+    device = model_device(model)
+    seq_len = min(int(live.meta["model_config"]["sequence_len"]
+                      if live.meta else 2048), 2048)
+    for p in model.parameters():
+        p.requires_grad_(False)
+    rank = int(cfg["rank"])
+    scale = 2.0  # alpha = 2 * rank
+    paths = lora_target_paths(model, cfg["targets"])
+    ab, hooks = {}, []
+    for path in paths:
+        try:
+            lin = model.get_submodule(path)
+        except AttributeError:
+            continue
+        A = torch.zeros(rank, lin.in_features, device=device,
+                        dtype=torch.float32).normal_(0, 0.02
+                                                     ).requires_grad_(True)
+        Bm = torch.zeros(lin.out_features, rank, device=device,
+                         dtype=torch.float32).requires_grad_(True)
+        ab[path] = (A, Bm)
+
+        def mk_hook(A=A, Bm=Bm):
+            def hook(_mod, inputs, output):
+                if not getattr(TRAIN_TLS, "on", False):
+                    return output
+                x = inputs[0]
+                return output + (x.float() @ A.t() @ Bm.t()
+                                 ).to(output.dtype) * scale
+            return hook
+        hooks.append(lin.register_forward_hook(mk_hook()))
+    if not ab:
+        with LOCK:
+            TRAINER["active"] = False
+            TRAINER["posture"] = "frozen - no LoRA targets matched"
+        return
+
+    def fresh_opt():
+        return torch.optim.AdamW([t for pr in ab.values() for t in pr],
+                                 lr=float(args.lr))
+
+    def zero_delta():
+        with torch.no_grad():
+            for A, Bm in ab.values():
+                A.normal_(0, 0.02)
+                Bm.zero_()
+
+    opt = fresh_opt()
+    replay_path = os.path.join(args.data_dir, "replay.jsonl")
+    heldout_path = os.path.join(args.data_dir, "heldout.jsonl")
+    pairs_path = os.path.join(args.data_dir, "heldout_pairs.jsonl")
+    replay = []
+    for path, dest in ((replay_path, replay), (heldout_path, HELDOUT_FRESH)):
+        if os.path.exists(path):
+            with open(path) as f:
+                dest.extend(ln.strip() for ln in f if ln.strip())
+    if os.path.exists(pairs_path) and not HELDOUT_PAIRS:
+        with open(pairs_path) as f:
+            for ln in f:
+                ln = ln.strip()
+                if ln:
+                    try:
+                        HELDOUT_PAIRS.append(json.loads(ln))
+                    except Exception:
+                        pass
+    standard = load_standard_docs(args)
+    anchor_docs = load_anchor_docs(args)
+    if anchor_docs:
+        heldout_std = anchor_docs[:24]
+    else:
+        heldout_std = standard[:24]
+        standard = standard[24:]
+    ds_pools = {}
+    ds_holdout = {}
+
+    def refresh_ds_pools():
+        for rec in load_registry_datasets(args.data_dir):
+            nm = rec.get("name")
+            if not nm or nm in ("fresh", "replay", "standard"):
+                continue
+            if mix.get(nm, 0) <= 0:
+                continue
+            tr, ho = load_dataset_docs(rec)
+            if tr:
+                ds_pools[nm] = tr
+            if ho:
+                ds_holdout[nm] = ho
+
+    refresh_ds_pools()
+    with LOCK:
+        TRAINER["active"] = True
+        TRAINER["mix"] = mix
+        TRAINER["standard_docs"] = len(standard)
+        TRAINER["replay_size"] = len(replay)
+        TRAINER["dataset_pools"] = {k: len(v) for k, v in ds_pools.items()}
+        TRAINER["anchor"] = bool(anchor_docs)
+
+    def chunks_of(docs):
+        toks = []
+        for d in docs:
+            toks.extend(encode_doc(tokenizer, d))
+        return [toks[i:i + seq_len + 1]
+                for i in range(0, len(toks) - seq_len - 1, seq_len)]
+
+    def delta_on(fn, *a):
+        TRAIN_TLS.on = True
+        try:
+            return fn(*a)
+        finally:
+            TRAIN_TLS.on = False
+
+    def eval_chunks(chs):
+        if not chs:
+            return None
+        import torch as _t
+        tot = 0.0
+        with _t.no_grad():
+            for c in chs[:16]:
+                tot += float(plain_lm_loss_t(model, tokenizer, c, device))
+        return tot / min(len(chs), 16)
+
+    def agreement(n, as_candidate):
+        pairs = HELDOUT_PAIRS[-int(n):]
+        if not pairs:
+            return None
+        total = 0.0
+        for pr in pairs:
+            def gen():
+                return live.generate_text(
+                    [{"role": "user",
+                      "content": salience_prompt("?", pr["input"], 0, 0)}],
+                    max_tokens=64, temperature=0.01, top_k=1)
+            completion = delta_on(gen) if as_candidate else gen()
+            sal, _w, _p = parse_salience(completion)
+            if sal is None:
+                sal = 0.5
+            total += min(1.0, abs(sal - float(pr["target"])))
+        return round(1.0 - total / len(pairs), 4)
+
+    heldout_std_chunks = chunks_of(heldout_std)
+    live_std = eval_chunks(heldout_std_chunks)
+    live_fresh = None
+    live_agree = None
+    fails = 0
+    ema = None
+    tick = 0
+    print(f"[trainer] lora rung on {live.name}: rank={rank} "
+          f"targets={len(ab)} mix={mix} gate={gate_cfg}", flush=True)
+    while True:
+        time.sleep(max(float(args.train_interval), 0.05))
+        tick += 1
+        if tick % 30 == 1:
+            refresh_ds_pools()
+            with LOCK:
+                TRAINER["dataset_pools"] = {k: len(v)
+                                            for k, v in ds_pools.items()}
+        with LOCK:
+            fresh_in = list(TRAIN_Q)
+            TRAIN_Q.clear()
+        fresh_docs = []
+        for entry in fresh_in:
+            d = entry["doc"] if isinstance(entry, dict) else entry
+            pair = entry.get("pair") if isinstance(entry, dict) else None
+            if _r.random() < 0.1 and len(HELDOUT_FRESH) < 512:
+                with LOCK:
+                    HELDOUT_FRESH.append(d)
+                with open(heldout_path, "a") as f:
+                    f.write(d.replace("\n", " ") + "\n")
+                if pair:
+                    HELDOUT_PAIRS.append(pair)
+                    with open(pairs_path, "a") as f:
+                        f.write(json.dumps(pair) + "\n")
+                    live_agree = None
+                live_fresh = None
+            else:
+                fresh_docs.append(d)
+                replay.append(d)
+                with open(replay_path, "a") as f:
+                    f.write(d.replace("\n", " ") + "\n")
+        if len(replay) > 4096:
+            _r.shuffle(replay)
+            replay = replay[:4096]
+            with open(replay_path, "w") as f:
+                f.writelines(d + "\n" for d in replay)
+        pools = dict(ds_pools)
+        pools.update({"fresh": fresh_docs or replay, "replay": replay,
+                      "standard": standard})
+        avail = {k: p for k, p in pools.items() if p and mix.get(k, 0) > 0}
+        if not avail:
+            with LOCK:
+                TRAINER["replay_size"] = len(replay)
+            continue
+        total_w = sum(mix[k] for k in avail)
+        docs = []
+        for k, pool in avail.items():
+            n = max(1, round(6 * mix[k] / total_w))
+            docs.extend(_r.choice(pool) for _ in range(n))
+        chs = chunks_of(docs)
+        if not chs:
+            continue
+        _r.shuffle(chs)
+        try:
+            TRAIN_TLS.on = True
+            loss = plain_lm_loss_t(model, tokenizer, chs[0], device)
+            opt.zero_grad()
+            loss.backward()
+            opt.step()
+        except torch.cuda.OutOfMemoryError:
+            torch.cuda.empty_cache()
+            print("[trainer] lora step OOM - skipped", flush=True)
+            continue
+        finally:
+            TRAIN_TLS.on = False
+        lv = float(loss.detach())
+        ema = lv if ema is None else 0.98 * ema + 0.02 * lv
+        with LOCK:
+            TRAINER["steps"] += 1
+            TRAINER["loss_ema"] = round(ema, 4)
+            TRAINER["replay_size"] = len(replay)
+            steps = TRAINER["steps"]
+        if steps % 10 == 0:
+            append_metric(args.data_dir, {"kind": "loss", "step": steps,
+                                          "loss": round(ema, 4)})
+        if steps % int(gate_cfg["every"]) != 0:
+            continue
+        cand_std = delta_on(eval_chunks, heldout_std_chunks)
+        std_ok = (cand_std is None or live_std is None
+                  or cand_std <= live_std * (1 + gate_cfg["regress"]))
+        cand_fresh = live_fresh2 = cand_agree = None
+        ds_losses = {}
+        for nm, docs2 in ds_holdout.items():
+            dl = delta_on(eval_chunks, chunks_of(docs2[:24]))
+            if dl is not None:
+                ds_losses[nm] = dl
+        if len(HELDOUT_PAIRS) >= 4:
+            if live_agree is None:
+                live_agree = agreement(gate_cfg["agree_n"], False)
+            cand_agree = agreement(gate_cfg["agree_n"], True)
+            learn_ok = (cand_agree is None or live_agree is None
+                        or cand_agree >= live_agree - gate_cfg["agree_slack"])
+        else:
+            heldout_fresh_chunks = chunks_of(HELDOUT_FRESH[-64:])
+            if live_fresh is None:
+                live_fresh = eval_chunks(heldout_fresh_chunks)
+            live_fresh2 = live_fresh
+            cand_fresh = delta_on(eval_chunks, heldout_fresh_chunks)
+            learn_ok = (cand_fresh is None or live_fresh is None
+                        or cand_fresh <= live_fresh)
+        verdict = "promote" if (std_ok and learn_ok) else "hold"
+        gate_row = {"step": steps, "verdict": verdict,
+                    "cand_std": cand_std, "live_std": live_std,
+                    "cand_fresh": cand_fresh, "live_fresh": live_fresh2,
+                    "cand_agree": cand_agree, "live_agree": live_agree,
+                    "pairs": len(HELDOUT_PAIRS),
+                    "datasets": ds_losses or None,
+                    "posture": "lora"}
+        print(f"[trainer] gate: {gate_row}", flush=True)
+        with LOCK:
+            TRAINER["gates"] += 1
+            TRAINER["last_gate"] = gate_row
+        append_metric(args.data_dir, dict(gate_row, kind="gate"))
+        if verdict == "promote":
+            saved_key = None
+            try:
+                ckdir = os.path.join(
+                    args.data_dir, "checkpoints",
+                    f"cpt-{time.strftime('%Y%m%d%H%M%S')}-{steps:06d}")
+                os.makedirs(ckdir, exist_ok=True)
+                torch.save({"state": {p: {"A": A.detach().cpu(),
+                                          "B": B.detach().cpu()}
+                                      for p, (A, B) in ab.items()},
+                            "rank": rank, "alpha": scale * rank,
+                            "base_ref": live.name,
+                            "backend": arith.get("backend"),
+                            "step": steps},
+                           os.path.join(ckdir, "delta.pt"))
+                saved_key = os.path.basename(ckdir)
+            except Exception as e:
+                print(f"[trainer] delta ring save failed "
+                      f"(promoting anyway): {e}", flush=True)
+            with torch.no_grad():
+                for path, (A, Bm) in ab.items():
+                    try:
+                        w = model.get_submodule(path).weight
+                    except AttributeError:
+                        continue
+                    w.add_(((Bm.float() @ A.float()) * scale
+                            ).to(w.device, w.dtype))
+            zero_delta()
+            opt = fresh_opt()
+            base = live.name.split("+", 1)[0].split(":cpt-", 1)[0]
+            live.name = f"{base}:cpt-{steps}"
+            with LOCK:
+                STATE["promotions"] += 1
+                TRAINER["promotions"] += 1
+            set_soak(saved_key)
+            prune_ring(args)
+            live_std = eval_chunks(heldout_std_chunks)
+            live_fresh = None
+            live_agree = None
+            fails = 0
+            print(f"[trainer] PROMOTED (merge) -> {live.name}", flush=True)
+        else:
+            fails += 1
+            with LOCK:
+                TRAINER["fails"] = fails
+            if fails >= int(gate_cfg["fails"]):
+                zero_delta()
+                opt = fresh_opt()
+                fails = 0
+                with LOCK:
+                    TRAINER["resets"] += 1
+                    TRAINER["fails"] = 0
+                print("[trainer] lora candidate reset", flush=True)
+
+
 def trainer_real(args):
     """Continuous CPT on a candidate copy of the live model. Runs only
     once a NanochatScorer is live; steps forever at --train-interval."""
@@ -1896,22 +2396,25 @@ def trainer_real(args):
     while True:
         with LOCK:
             live = STATE["slots"][STATE["live"]]
-        if live is not None and isinstance(live, HFScorer):
-            # ruled posture: the delta trainer lands in S5; until then
-            # an hf resident serves frozen - and says so (rule 4).
-            # Banking continues; only candidate training pauses.
-            with LOCK:
-                TRAINER["active"] = False
-                TRAINER["posture"] = ("frozen - hf backend serves "
-                                      "without training until the S5 "
-                                      "delta trainer")
-            print("[trainer] posture: frozen (hf backend)", flush=True)
-            return
-        if live is not None and live.name.startswith("nanochat"):
-            with LOCK:
-                TRAINER["posture"] = "full"
+        if live is not None and not isinstance(live, StubScorer):
             break
         time.sleep(5)
+    # S5: the posture solver rules how (and whether) the candidate
+    # trains - ruling 4's arithmetic, published (rule 4). full is the
+    # shipped deepcopy path below; lora is the delta rung; frozen and
+    # refused end here with the numbers on status.
+    posture, arith = solve_posture(args, live)
+    with LOCK:
+        TRAINER["posture"] = (posture if posture != "refused"
+                              else f"refused: {arith.get('why')}")
+        TRAINER["arithmetic"] = arith
+    print(f"[trainer] posture: {posture} {arith}", flush=True)
+    if posture in ("refused", "frozen"):
+        with LOCK:
+            TRAINER["active"] = False
+        return
+    if posture == "lora":
+        return trainer_lora_loop(args, live, arith)
     import torch
     mix = parse_kv(args.mix, {"fresh": 0.25, "replay": 0.25, "standard": 0.5})
     gate_cfg = parse_kv(args.gate, {"every": 50, "regress": 0.02, "fails": 3,
@@ -2175,16 +2678,8 @@ def trainer_real(args):
                                 {k: v.detach().cpu() for k, v in candidate.state_dict().items()},
                                 None, {"model_config": dict(live.meta["model_config"])})
                 saved_key = os.path.basename(ckdir)
-                # ring pruning - but never the user pointer's checkpoints
-                with LOCK:
-                    protected = {v for v in (USER["pointer"], USER["last_good"],
-                                             USER["ready"]) if v}
-                ring = sorted(os.listdir(os.path.join(args.data_dir, "checkpoints")))
-                for old in ring[:-5]:
-                    if old in protected:
-                        continue
-                    shutil.rmtree(os.path.join(args.data_dir, "checkpoints", old),
-                                  ignore_errors=True)
+                # ring pruning by byte budget (ruling 5), floors held
+                prune_ring(args)
             except Exception as e:
                 print(f"[trainer] ring save failed (promoting anyway): {e}", flush=True)
             promoted_model = _copy.deepcopy(candidate)
@@ -2698,6 +3193,18 @@ def main():
                     choices=["nanochat", "hf"],
                     help="which backend serves the checkpoint (S3); "
                          "resolved from the model record by bootstrap")
+    ap.add_argument("--posture", default="auto",
+                    help="S5, ruling 4: auto (the solver decides) or a "
+                         "forced rung (full|lora|frozen) - published, "
+                         "and refused with the arithmetic when it "
+                         "does not fit")
+    ap.add_argument("--ring-gb", default="100",
+                    help="S5, ruling 5: the ring's byte budget in GB; "
+                         "the protected user set and the newest entry "
+                         "never prune")
+    ap.add_argument("--headroom", default="15",
+                    help="S5, ruling 4: the solver's safety margin as "
+                         "a percent of total memory")
     ap.add_argument("--train", default="on", choices=["on", "off"],
                     help="continuous CPT on a candidate of the live model")
     ap.add_argument("--mix", default="fresh=0.25,replay=0.25,standard=0.5",

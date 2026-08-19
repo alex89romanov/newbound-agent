@@ -195,5 +195,15 @@
     },
     "confidence": "high",
     "time": 1787104308929
+  },
+  {
+    "claim": "S5 landed (claude/spectrum-s5-delta-trainer): the candidate is base + delta and the posture solver rules how it trains. solve_posture publishes fits arithmetic per ruling 4 (free memory measured from GPU or /proc/meminfo minus MODEL_HEADROOM percent margin; ladder full -> lora -> frozen on this branch; MODEL_POSTURE= forces a rung and a misfit refuses training loudly with the numbers, serving untouched). The lora rung trains the SERVING model zero-copy: hook-LoRA gated per-thread (TRAIN_TLS) so serving threads never see the candidate; same drain/mix/pools/gates as full; promotion merges the delta into the serving weights and rings the blob with its base ref (kilobytes); restart resume and pointer keys re-merge the delta ring chronologically - reconstruction is exact because each delta trained relative to base plus every earlier merge. CPT on an hf resident is real. Ring prunes by MODEL_RING_GB byte budget (ruling 5) with both floors; the full rung is the shipped deepcopy path byte-for-byte.",
+    "detail": "CPU battery: solver chose lora on meminfo (500MB need + 2245MB margin vs 14973MB free, published), trainer stepped the tiny hf resident on the memory stream, five merge-promotions to hf:tiny-hf:cpt-30 with 19KB deltas, stop/relaunch resumed at cpt-42, MODEL_POSTURE=full refused with reason, R1 restored. Deferred deliberately: USER_MODEL= two-residents (own branch), full-sharded (S7), qlora (quantization dependency needs a doctrine ruling), full hf saves (ring format ruling). Owner-box battery owed: real model, nanochat full-rung regression, budget-sized prune observed.",
+    "tags": "spectrum,s5,solver,delta",
+    "source": {
+      "doc": "docs/spectrum-s5.md; battery run in session 2026-08-19"
+    },
+    "confidence": "high",
+    "time": 1787104910469
   }
 ]
