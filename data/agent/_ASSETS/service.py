@@ -929,7 +929,8 @@ def do_user_promote(args, reason):
         return False, {"status": "err", "msg": "no candidate is ready - "
                        "the user gate has not passed (soak/agree/regress)"}
     try:
-        scorer = apply_persona(args, load_pointer_scorer(args, key))
+        scorer = apply_persona_and_stack(args,
+                                         load_pointer_scorer(args, key))
     except Exception as e:
         return False, {"status": "err", "msg": f"user pointer load failed: {e}"}
     with LOCK:
@@ -938,7 +939,8 @@ def do_user_promote(args, reason):
         USER["last_good"] = prev
         USER["pointer"] = key
         USER["name"] = ("user:" + key
-                        + ("+lora" if getattr(scorer, "name", "").endswith("+lora") else ""))
+                        + ("+lora" if "+lora" in getattr(scorer, "name", "") else "")
+                        + ("+adp" if "+adp" in getattr(scorer, "name", "") else ""))
         USER["promoted_at"] = int(time.time() * 1000)
         USER["eval"] = snapshot
         USER["ready"] = None
@@ -960,14 +962,16 @@ def do_user_rollback(args, reason):
     if not target:
         return False, {"status": "err", "msg": "no last_good to roll back to"}
     try:
-        scorer = apply_persona(args, load_pointer_scorer(args, target))
+        scorer = apply_persona_and_stack(args,
+                                         load_pointer_scorer(args, target))
     except Exception as e:
         return False, {"status": "err", "msg": f"rollback load failed: {e}"}
     with LOCK:
         USER_SLOT["scorer"] = scorer
         USER["pointer"] = target
         USER["name"] = ("user:" + target
-                        + ("+lora" if getattr(scorer, "name", "").endswith("+lora") else ""))
+                        + ("+lora" if "+lora" in getattr(scorer, "name", "") else "")
+                        + ("+adp" if "+adp" in getattr(scorer, "name", "") else ""))
         USER["promoted_at"] = int(time.time() * 1000)
         USER["last_good"] = None    # one step back, deliberately - not a stack
         USER["rollbacks"] += 1
@@ -1091,6 +1095,44 @@ def user_gate_loop(args):
                         threading.Thread(target=derive_adapter,
                                          args=(args, "probe" if PERSONA["adapter"] else "first"),
                                          daemon=True).start()
+            # (2c) the stack probe (S4, ruling 3's cadence): each
+            # applied member's subject held-out loss on the SERVING
+            # model vs its derivation baseline; slip past slack is
+            # surfaced (status + metric), never silently acted on -
+            # unapply is the owner's deliberate act.
+            with LOCK:
+                probe_stack = list(ADAPTERS["stack"])
+            if (probe_stack and user_scorer is not None and serving
+                    and not isinstance(user_scorer, StubScorer)):
+                _pm = scorer_model(user_scorer)
+                _pdev = model_device(_pm)
+                _pseq = (user_scorer.meta["model_config"]["sequence_len"]
+                         if user_scorer.meta else 2048)
+                import torch as _torch
+                for _name in probe_stack:
+                    try:
+                        _blob = _torch.load(
+                            adapter_blob_path(args.data_dir, _name),
+                            map_location="cpu", weights_only=False)
+                        _tr2, _ho2 = load_dataset_convs(
+                            args, _blob["meta"].get("dataset", ""))
+                        _probe = persona_eval(_pm, user_scorer.tokenizer,
+                                              _ho2 or [], _pdev, _pseq)
+                        _basel = _blob["meta"].get("heldout_adapted")
+                        if _probe is not None:
+                            _slipped = (_basel is not None and _probe
+                                        > _basel * (1 + float(lcfg["slack"])))
+                            with LOCK:
+                                ADAPTERS["probes"][_name] = {
+                                    "probe": _probe, "baseline": _basel,
+                                    "slipped": _slipped}
+                            append_metric(args.data_dir, {
+                                "kind": "adapter_probe", "name": _name,
+                                "probe": _probe, "baseline": _basel,
+                                "slipped": _slipped})
+                    except Exception as _e:
+                        print(f"[adapters] probe of '{_name}' failed: "
+                              f"{_e}", flush=True)
             # (3) the watchdog re-audit
             if user_scorer is not None and serving:
                 fresh = user_agreement(user_scorer)
@@ -1130,15 +1172,17 @@ def restore_user_pointer(args):
     except Exception as e:
         print(f"[user] persisted pointer {key} failed to load: {e}", flush=True)
         return
-    scorer = apply_persona(args, scorer)
+    scorer = apply_persona_and_stack(args, scorer)
     with LOCK:
         USER_SLOT["scorer"] = scorer
         for k in ("pointer", "name", "promoted_at", "eval", "last_good"):
             USER[k] = snap.get(k)
         USER["promotions"] = int(snap.get("promotions") or 0)
         USER["rollbacks"] = int(snap.get("rollbacks") or 0)
-        if getattr(scorer, "name", "").endswith("+lora"):
-            USER["name"] = f"user:{key}+lora"
+        marks = ("+lora" if "+lora" in getattr(scorer, "name", "") else "") \
+            + ("+adp" if "+adp" in getattr(scorer, "name", "") else "")
+        if marks:
+            USER["name"] = f"user:{key}{marks}"
     print(f"[user] restored pointer {key}", flush=True)
 
 
@@ -1437,8 +1481,9 @@ def _derive_adapter_inner(args, cfg, key, reason):
                           for p, (A, B) in ab.items()},
                 "rank": rank, "alpha": alpha, "meta": report},
                adapter_path(args.data_dir))
-    # swap serving: a fresh base + the new adapter merged
-    fresh = apply_persona(args, load_pointer_scorer(args, key))
+    # swap serving: a fresh base + the new adapter merged (and the
+    # named-adapter stack re-applied on top - S4)
+    fresh = apply_persona_and_stack(args, load_pointer_scorer(args, key))
     with LOCK:
         USER_SLOT["scorer"] = fresh
         USER["name"] = f"user:{key}+lora"
@@ -1446,6 +1491,376 @@ def _derive_adapter_inner(args, cfg, key, reason):
         PERSONA["baseline"] = adapted_heldout
         PERSONA["probe"] = adapted_heldout
     return {"status": "ok", **report}
+
+
+# ── S4: adapters on demand ──────────────────────────────────────────
+# The persona pattern - corpus -> hook-LoRA -> gate -> apply -
+# generalized to NAMED adapters: derived from any registered dataset
+# against the serving pointer's base (or any registered model), gated
+# exactly as persona is, and stacked on the user pointer under ruling
+# 3: merged additive deltas commute, so there is no order - what is
+# gated is the COMBINATION, re-validated whole on every stack change.
+# Records live in the runtime library (the commands write them); the
+# service owns the blobs and the stack. Persona stays the standing
+# first skin - the stack stands on base+persona ground.
+
+ADAPTERS = {"stack": [], "deriving": False, "last_report": None,
+            "probes": {}}
+
+
+def adapters_dir(data_dir):
+    d = os.path.join(data_dir, "adapters")
+    os.makedirs(d, exist_ok=True)
+    return d
+
+
+def adapter_blob_path(data_dir, name):
+    return os.path.join(adapters_dir(data_dir), f"{name}.pt")
+
+
+def stack_state_path(data_dir):
+    return os.path.join(adapters_dir(data_dir), "stack.json")
+
+
+def save_stack_state(data_dir):
+    with LOCK:
+        stack = list(ADAPTERS["stack"])
+    try:
+        tmp = stack_state_path(data_dir) + ".tmp"
+        with open(tmp, "w") as f:
+            json.dump(stack, f)
+        os.replace(tmp, stack_state_path(data_dir))
+    except Exception as e:
+        print(f"[adapters] stack persist failed: {e}", flush=True)
+
+
+def load_dataset_convs(args, dataset_name):
+    """(train, heldout) conversations from a registered dataset - jsonl
+    rows in the persona shapes ({"user","assistant"} or
+    {"messages":[...]}). The dataset's holdout_every policy splits;
+    0 falls back to every 5th - a derivation must hold something out
+    for its gate to mean anything."""
+    for rec in load_registry_datasets(args.data_dir):
+        if rec.get("name") != dataset_name:
+            continue
+        hn = int(rec.get("holdout_every") or 0) or 5
+        train, hold = [], []
+        i = 0
+        for path in dataset_paths(dict(rec, format="jsonl")):
+            try:
+                with open(path) as f:
+                    for ln in f:
+                        ln = ln.strip()
+                        if not ln:
+                            continue
+                        try:
+                            o = json.loads(ln)
+                        except Exception:
+                            continue
+                        if "messages" in o:
+                            conv = {"messages": o["messages"]}
+                        elif "user" in o and "assistant" in o:
+                            conv = {"messages": [
+                                {"role": "user", "content": str(o["user"])},
+                                {"role": "assistant",
+                                 "content": str(o["assistant"])}]}
+                        else:
+                            continue
+                        (hold if i % hn == hn - 1 else train).append(conv)
+                        i += 1
+            except OSError:
+                continue
+        return train, hold
+    return None, None
+
+
+def load_base_scorer(args, base):
+    """The adapter's base: 'pointer' -> a fresh copy of the serving
+    user pointer's weights; a registered model name -> that record's
+    backend + path, loaded fresh."""
+    if base == "pointer":
+        with LOCK:
+            key = USER["pointer"]
+        if not key:
+            raise RuntimeError("no user pointer promoted - promote one "
+                               "or name a registered model as base")
+        return load_pointer_scorer(args, key), f"pointer:{key}"
+    path = os.path.join(args.data_dir, "registry.json")
+    try:
+        with open(path) as f:
+            reg = json.load(f)
+    except Exception:
+        reg = {}
+    for m in reg.get("models", []):
+        if m.get("name") == base:
+            if m.get("backend") == "hf":
+                return HFScorer(m.get("path")), f"model:{base}"
+            return NanochatScorer(m.get("path")), f"model:{base}"
+    raise RuntimeError(f"'{base}' is neither 'pointer' nor a "
+                       "registered model")
+
+
+def merge_adapter_blob(model, blob):
+    """W += (alpha/rank) * B@A per target - the additive merge both
+    persona and the stack use. Returns how many linears took it."""
+    import torch
+    scale = float(blob["alpha"]) / float(blob["rank"])
+    applied = 0
+    with torch.no_grad():
+        for path, ab in blob["state"].items():
+            try:
+                w = model.get_submodule(path).weight
+            except AttributeError:
+                continue
+            delta = (ab["B"].float() @ ab["A"].float()) * scale
+            if delta.shape == w.shape:
+                w.add_(delta.to(w.device, w.dtype))
+                applied += 1
+    return applied
+
+
+def derive_named_adapter(args, spec):
+    """Derive one named adapter: corpus from a registered dataset,
+    base per spec, hook-LoRA training, the persona gate (min_gain on
+    the subject's held-out loss, guard on standard loss). Saves the
+    blob; never applies - apply is its own deliberate, gated act."""
+    import torch
+    cfg = parse_kv_mixed(getattr(args, "lora", ""), PERSONA_LORA_DEFAULTS)
+    name = spec["name"]
+    with LOCK:
+        if ADAPTERS["deriving"] or PERSONA["deriving"]:
+            return {"status": "err", "msg": "a derivation is already running"}
+        ADAPTERS["deriving"] = True
+    t0 = time.time()
+    try:
+        train, hold = load_dataset_convs(args, spec["dataset"])
+        if train is None:
+            return {"status": "err",
+                    "msg": f"dataset '{spec['dataset']}' is not registered"}
+        if len(train) < 4 or len(hold) < 1:
+            return {"status": "err",
+                    "msg": f"corpus too small ({len(train)} train / "
+                           f"{len(hold)} held-out; need 4/1)"}
+        scorer, base_ref = load_base_scorer(args, spec["base"])
+        model, tokenizer = scorer_model(scorer), scorer.tokenizer
+        device = model_device(model)
+        seq_len = (scorer.meta["model_config"]["sequence_len"]
+                   if scorer.meta else 2048)
+        base_heldout = persona_eval(model, tokenizer, hold, device, seq_len)
+        standard = load_standard_docs(args, limit=64)
+        base_std = plain_lm_eval(model, tokenizer, standard[:24], device,
+                                 seq_len)
+        rank = int(spec.get("rank") or cfg["rank"])
+        alpha = float(cfg["alpha"]) / float(cfg["rank"]) * rank
+        scale = alpha / rank
+        steps = int(spec.get("steps") or cfg["steps"])
+        paths = lora_target_paths(model, spec.get("targets")
+                                  or cfg["targets"])
+        ab, hooks = {}, []
+        for path in paths:
+            try:
+                lin = model.get_submodule(path)
+            except AttributeError:
+                continue
+            A = torch.zeros(rank, lin.in_features, device=device,
+                            dtype=torch.float32).normal_(0, 0.02
+                                                         ).requires_grad_(True)
+            Bm = torch.zeros(lin.out_features, rank, device=device,
+                             dtype=torch.float32).requires_grad_(True)
+            ab[path] = (A, Bm)
+
+            def mk_hook(A=A, Bm=Bm):
+                def hook(_mod, inputs, output):
+                    x = inputs[0]
+                    return output + (x.float() @ A.t() @ Bm.t()
+                                     ).to(output.dtype) * scale
+                return hook
+            hooks.append(lin.register_forward_hook(mk_hook()))
+        if not ab:
+            return {"status": "err",
+                    "msg": "no LoRA targets matched the base model"}
+        params = [t for pair in ab.values() for t in pair]
+        opt = torch.optim.AdamW(params, lr=float(cfg["lr"]))
+        model.train()
+        import random as _random
+        for _step in range(steps):
+            conv = train[_random.randrange(len(train))]
+            try:
+                ids, mask = render_masked(tokenizer, conv,
+                                          min(int(seq_len), 1024))
+            except Exception:
+                continue
+            if len(ids) < 3 or sum(mask) == 0:
+                continue
+            loss = masked_lm_loss_t(model, tokenizer, ids, mask, device)
+            opt.zero_grad()
+            loss.backward()
+            opt.step()
+        model.eval()
+        adapted_heldout = persona_eval(model, tokenizer, hold, device,
+                                       seq_len)
+        adapted_std = plain_lm_eval(model, tokenizer, standard[:24],
+                                    device, seq_len)
+        for h in hooks:
+            h.remove()
+        gain_ok = (adapted_heldout is not None and base_heldout is not None
+                   and adapted_heldout
+                   <= base_heldout * (1 - float(cfg["min_gain"])))
+        guard_ok = (adapted_std is None or base_std is None
+                    or adapted_std <= base_std * (1 + float(cfg["guard"])))
+        report = {
+            "name": name, "dataset": spec["dataset"], "base": base_ref,
+            "rank": rank, "alpha": alpha, "steps": steps,
+            "targets": spec.get("targets") or cfg["targets"],
+            "train_rows": len(train), "heldout_rows": len(hold),
+            "heldout_base": base_heldout,
+            "heldout_adapted": adapted_heldout,
+            "std_base": base_std, "std_adapted": adapted_std,
+            "gain_ok": gain_ok, "guard_ok": guard_ok,
+            "seconds": int(time.time() - t0),
+            "at": int(time.time() * 1000),
+        }
+        verdict = "accept" if (gain_ok and guard_ok) else "reject"
+        append_metric(args.data_dir, dict(report, kind="adapter_derive",
+                                          verdict=verdict))
+        with LOCK:
+            ADAPTERS["last_report"] = dict(report, verdict=verdict)
+        print(f"[adapters] derive {name}: {verdict} {report}", flush=True)
+        if verdict == "reject":
+            return {"status": "err",
+                    "msg": "derivation rejected by its gate", **report}
+        torch.save({"state": {p: {"A": A.detach().cpu(),
+                                  "B": B.detach().cpu()}
+                              for p, (A, B) in ab.items()},
+                    "rank": rank, "alpha": alpha, "meta": report},
+                   adapter_blob_path(args.data_dir, name))
+        del scorer
+        try:
+            torch.cuda.empty_cache()
+        except Exception:
+            pass
+        return {"status": "ok", **report}
+    finally:
+        with LOCK:
+            ADAPTERS["deriving"] = False
+
+
+def apply_stack_gated(args, new_stack, reason):
+    """Ruling 3, executed: rebuild the user scorer from a FRESH base +
+    persona + every member merged (additive deltas commute; rebuilding
+    beats subtracting in bf16), then gate the COMBINATION - every
+    member's subject held-out loss with the full stack applied must
+    still clear min_gain against the fresh bare base, and one standard
+    -loss guard covers the whole stack. Pass -> swap serving; fail ->
+    serving untouched, the numbers say which member broke."""
+    import torch
+    cfg = parse_kv_mixed(getattr(args, "lora", ""), PERSONA_LORA_DEFAULTS)
+    with LOCK:
+        key = USER["pointer"]
+    if not key:
+        return {"status": "err", "msg": "no user pointer promoted"}
+    try:
+        scorer = apply_persona(args, load_pointer_scorer(args, key))
+    except Exception as e:
+        return {"status": "err", "msg": f"base load failed: {e}"}
+    if isinstance(scorer, StubScorer):
+        return {"status": "err", "msg": "stub mode has no weights to stack"}
+    model, tokenizer = scorer_model(scorer), scorer.tokenizer
+    device = model_device(model)
+    seq_len = (scorer.meta["model_config"]["sequence_len"]
+               if scorer.meta else 2048)
+    holds, blobs = {}, {}
+    for name in new_stack:
+        try:
+            blobs[name] = torch.load(adapter_blob_path(args.data_dir, name),
+                                     map_location="cpu", weights_only=False)
+        except Exception as e:
+            return {"status": "err", "msg": f"adapter '{name}' blob "
+                                            f"unreadable: {e}"}
+        _tr, hold = load_dataset_convs(
+            args, blobs[name]["meta"].get("dataset", ""))
+        holds[name] = hold or []
+    bare = {name: persona_eval(model, tokenizer, holds[name], device,
+                               seq_len) for name in new_stack}
+    standard = load_standard_docs(args, limit=64)
+    std_bare = plain_lm_eval(model, tokenizer, standard[:24], device,
+                             seq_len)
+    for name in new_stack:
+        merge_adapter_blob(model, blobs[name])
+    stacked = {name: persona_eval(model, tokenizer, holds[name], device,
+                                  seq_len) for name in new_stack}
+    std_stacked = plain_lm_eval(model, tokenizer, standard[:24], device,
+                                seq_len)
+    members = {}
+    all_ok = True
+    for name in new_stack:
+        ok = (stacked[name] is None or bare[name] is None
+              or stacked[name] <= bare[name] * (1 - float(cfg["min_gain"])))
+        members[name] = {"bare": bare[name], "stacked": stacked[name],
+                         "gain_ok": ok}
+        all_ok = all_ok and ok
+    guard_ok = (std_stacked is None or std_bare is None
+                or std_stacked <= std_bare * (1 + float(cfg["guard"])))
+    report = {"stack": list(new_stack), "members": members,
+              "std_bare": std_bare, "std_stacked": std_stacked,
+              "guard_ok": guard_ok, "reason": reason,
+              "at": int(time.time() * 1000)}
+    verdict = "accept" if (all_ok and guard_ok) else "reject"
+    append_metric(args.data_dir, dict(report, kind="adapter_stack",
+                                      verdict=verdict))
+    with LOCK:
+        ADAPTERS["last_report"] = dict(report, verdict=verdict)
+    print(f"[adapters] stack {new_stack}: {verdict}", flush=True)
+    if verdict == "reject":
+        del model
+        return {"status": "err",
+                "msg": "stack rejected by the unit gate", **report}
+    if new_stack:
+        scorer.name = scorer.name + "+adp:" + ",".join(new_stack)
+    with LOCK:
+        USER_SLOT["scorer"] = scorer
+        USER["name"] = "user:" + key + (
+            "+lora" if "+lora" in getattr(scorer, "name", "") else "") + (
+            "+adp" if new_stack else "")
+        ADAPTERS["stack"] = list(new_stack)
+        ADAPTERS["probes"] = {}
+    save_stack_state(args.data_dir)
+    return {"status": "ok", **report}
+
+
+def apply_persona_and_stack(args, scorer):
+    """The re-apply path (promote, rollback, restart): persona first,
+    then the persisted stack merged UNGATED - the gate ran when the
+    stack was formed; base movement is re-audited by the watchdog's
+    stack probe on its own cadence."""
+    scorer = apply_persona(args, scorer)
+    if isinstance(scorer, StubScorer):
+        return scorer
+    try:
+        with open(stack_state_path(args.data_dir)) as f:
+            stack = json.load(f)
+    except Exception:
+        return scorer
+    if not stack:
+        return scorer
+    import torch
+    model = scorer_model(scorer)
+    applied = []
+    for name in stack:
+        try:
+            blob = torch.load(adapter_blob_path(args.data_dir, name),
+                              map_location="cpu", weights_only=False)
+            if merge_adapter_blob(model, blob):
+                applied.append(name)
+        except Exception as e:
+            print(f"[adapters] re-apply of '{name}' failed: {e}",
+                  flush=True)
+    if applied:
+        scorer.name = scorer.name + "+adp:" + ",".join(applied)
+        with LOCK:
+            ADAPTERS["stack"] = applied
+        print(f"[adapters] stack re-applied: {applied}", flush=True)
+    return scorer
 
 
 def load_standard_docs(args, limit=512):
@@ -1948,6 +2363,7 @@ class Handler(BaseHTTPRequestHandler):
                     serving=USER_SLOT["scorer"] is not None,
                 ),
                 "persona": dict(PERSONA),
+                "adapters": dict(ADAPTERS),
             })
 
     def do_POST(self):
@@ -2180,6 +2596,62 @@ class Handler(BaseHTTPRequestHandler):
             # run; the mind tab's button expects the full report back
             payload = derive_adapter(self.server.args, "manual")
             return self._json(200 if payload.get("status") == "ok" else 409, payload)
+        if self.path == "/adapter_derive":
+            # S4: a named adapter from a registered dataset - blocks
+            # through the run like persona_rederive; the command
+            # records the result in the runtime library
+            try:
+                req = json.loads(raw)
+            except Exception:
+                return self._json(400, {"status": "err",
+                                        "msg": "body must be JSON"})
+            spec = {"name": str(req.get("name") or ""),
+                    "dataset": str(req.get("dataset") or ""),
+                    "base": str(req.get("base") or "pointer"),
+                    "targets": str(req.get("targets") or ""),
+                    "rank": int(req.get("rank") or 0),
+                    "steps": int(req.get("steps") or 0)}
+            if not spec["name"] or not spec["dataset"]:
+                return self._json(400, {"status": "err",
+                                        "msg": "need name and dataset"})
+            try:
+                payload = derive_named_adapter(self.server.args, spec)
+            except Exception as e:
+                payload = {"status": "err", "msg": f"derive failed: {e}"}
+            return self._json(200 if payload.get("status") == "ok"
+                              else 409, payload)
+        if self.path in ("/adapter_apply", "/adapter_unapply"):
+            try:
+                req = json.loads(raw)
+            except Exception:
+                return self._json(400, {"status": "err",
+                                        "msg": "body must be JSON"})
+            name = str(req.get("name") or "")
+            if not name:
+                return self._json(400, {"status": "err",
+                                        "msg": "need name"})
+            with LOCK:
+                stack = list(ADAPTERS["stack"])
+            if self.path == "/adapter_apply":
+                if name in stack:
+                    return self._json(409, {"status": "err",
+                                            "msg": f"'{name}' is already "
+                                            "in the stack"})
+                new_stack = stack + [name]
+            else:
+                if name not in stack:
+                    return self._json(409, {"status": "err",
+                                            "msg": f"'{name}' is not in "
+                                            "the stack"})
+                new_stack = [n for n in stack if n != name]
+            try:
+                payload = apply_stack_gated(self.server.args, new_stack,
+                                            self.path.lstrip("/"))
+            except Exception as e:
+                payload = {"status": "err", "msg": f"stack change "
+                                                   f"failed: {e}"}
+            return self._json(200 if payload.get("status") == "ok"
+                              else 409, payload)
         return self._json(404, {"status": "err", "msg": "unknown path"})
 
 
