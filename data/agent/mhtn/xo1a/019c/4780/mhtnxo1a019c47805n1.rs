@@ -61,9 +61,30 @@ if !deduped {
     store.set_data("runtime", &cid, rec(&cid, cd));
 }
 
-// occurrence: always new
+// occurrence: minted unless the caller supplies one. A supplied id
+// makes put idempotent - capture derives ids by chaining hashes over
+// the conversation prefix, so a turn re-sent on every later request
+// records exactly once (the occurrence-level half of the dedup; the
+// content record is the text-level half).
 let now = time();
-let oid = format!("mo{}", unique_session_id());
+let id_t = id.trim().to_string();
+if !id_t.is_empty() {
+    if !id_t.starts_with("mo") {
+        return err("a supplied id must start with 'mo' (occurrence namespace)".to_string());
+    }
+    if store.exists("runtime", &id_t) {
+        let mut o = DataObject::new();
+        o.put_string("status", "ok");
+        o.put_string("id", &id_t);
+        o.put_string("content_id", &cid);
+        o.put_boolean("deduped", deduped);
+        o.put_boolean("occurrence_deduped", true);
+        o.put_boolean("indexed", false);
+        o.put_int("t", now);
+        return o;
+    }
+}
+let oid = if id_t.is_empty() { format!("mo{}", unique_session_id()) } else { id_t };
 let mut od = DataObject::new();
 od.put_int("t", now);
 od.put_string("role", &role_t);
@@ -99,6 +120,7 @@ o.put_string("status", "ok");
 o.put_string("id", &oid);
 o.put_string("content_id", &cid);
 o.put_boolean("deduped", deduped);
+o.put_boolean("occurrence_deduped", false);
 o.put_boolean("indexed", indexed);
 o.put_int("t", now);
 o

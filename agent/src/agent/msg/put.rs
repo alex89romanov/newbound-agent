@@ -5,7 +5,7 @@ use flowlang::flowlang::system::time::time;
 use flowlang::flowlang::system::unique_session_id::unique_session_id;
 pub fn execute(o: DataObject) -> DataObject {
     use std::panic;
-    for p in ["role", "venue", "content", "entity", "provenance"] {
+    for p in ["role", "venue", "content", "entity", "provenance", "id"] {
         if !o.has(p) {
             let mut e = DataObject::new();
             e.put_string("status", "err");
@@ -21,7 +21,8 @@ pub fn execute(o: DataObject) -> DataObject {
         let arg_2: String = o.get_string("content");
         let arg_3: String = o.get_string("entity");
         let arg_4: String = o.get_string("provenance");
-        put(arg_0, arg_1, arg_2, arg_3, arg_4)
+        let arg_5: String = o.get_string("id");
+        put(arg_0, arg_1, arg_2, arg_3, arg_4, arg_5)
     }));
     match ax {
         Ok(ax) => {
@@ -53,7 +54,7 @@ pub fn execute(o: DataObject) -> DataObject {
     }
 }
 
-pub fn put(role: String, venue: String, content: String, entity: String, provenance: String) -> DataObject {
+pub fn put(role: String, venue: String, content: String, entity: String, provenance: String, id: String) -> DataObject {
 // agent-msg-put - the message store's only writer (harvest H1).
 // Messages split in two, deliberately (docs/harvest-cycle.md H1):
 //   - a CONTENT record, id = "mc" + FNV-1a-128 of the text, holding
@@ -117,9 +118,30 @@ if !deduped {
     store.set_data("runtime", &cid, rec(&cid, cd));
 }
 
-// occurrence: always new
+// occurrence: minted unless the caller supplies one. A supplied id
+// makes put idempotent - capture derives ids by chaining hashes over
+// the conversation prefix, so a turn re-sent on every later request
+// records exactly once (the occurrence-level half of the dedup; the
+// content record is the text-level half).
 let now = time();
-let oid = format!("mo{}", unique_session_id());
+let id_t = id.trim().to_string();
+if !id_t.is_empty() {
+    if !id_t.starts_with("mo") {
+        return err("a supplied id must start with 'mo' (occurrence namespace)".to_string());
+    }
+    if store.exists("runtime", &id_t) {
+        let mut o = DataObject::new();
+        o.put_string("status", "ok");
+        o.put_string("id", &id_t);
+        o.put_string("content_id", &cid);
+        o.put_boolean("deduped", deduped);
+        o.put_boolean("occurrence_deduped", true);
+        o.put_boolean("indexed", false);
+        o.put_int("t", now);
+        return o;
+    }
+}
+let oid = if id_t.is_empty() { format!("mo{}", unique_session_id()) } else { id_t };
 let mut od = DataObject::new();
 od.put_int("t", now);
 od.put_string("role", &role_t);
@@ -155,6 +177,7 @@ o.put_string("status", "ok");
 o.put_string("id", &oid);
 o.put_string("content_id", &cid);
 o.put_boolean("deduped", deduped);
+o.put_boolean("occurrence_deduped", false);
 o.put_boolean("indexed", indexed);
 o.put_int("t", now);
 o
