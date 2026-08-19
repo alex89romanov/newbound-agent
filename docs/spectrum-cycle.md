@@ -390,8 +390,13 @@ degenerate placement is today's: one process, one GPU, time-shared.
 Then: same box, serve on GPU 0, train on 1..n; then multi-node
 training (torchrun/FSDP — `NANOCHAT_DIST` generalizes into placement
 config); then the engine seam's far end, where serving itself is an
-external engine and a promotion is an engine reload behind an
-unchanged pointer. The service keeps its single HTTP front door and
+external engine — installed only when configured, its own
+donefile-guarded stage, never in the default environment — and a
+promotion is an adapter hot-swap behind an unchanged pointer (what
+the posture ladder trains at that rung is exactly what the engine
+can swap live). Dialect fidelity through the wire is part of the
+engine adapter's acceptance; unparseable-escalates applies to remote
+verdicts unchanged. The service keeps its single HTTP front door and
 its command surface at every placement; `/status` reports the map and
 who is placed where. At the very top of the spectrum — a
 frontier-scale MoE on a B200 cluster — serving is external and
@@ -516,9 +521,15 @@ a different scale.
    pause, serving never does, the borrow published; with placement
    the bench takes spare GPUs instead. One-brick violations warn and
    are recorded honestly, never refused (S6).
-8. External engine at the far end (proposal: seam now, in-process HF
-   generate until a box actually needs vLLM; adapter hot-swap is the
-   promotion path there) (S7).
+8. **RULED (owner, 2026-08-18) — external engine as proposed.** The
+   seam lands in S3 (generation behind the scorer); the engine
+   itself stays out of the default environment, its install a
+   donefile-guarded bootstrap stage that runs only when an engine is
+   configured. Dialect fidelity through the wire is part of the
+   engine adapter's acceptance — unparseable-escalates applies to
+   remote verdicts unchanged — and promotion at that rung moves
+   adapters, not weights: hot-swap, which the posture ladder
+   guarantees is what there is to move (S7).
 9. Network posture for acquisition: HF hub fetches happen only inside
    the deliberate import/dataset commands; offline boxes use local
    paths (S1/S2).
