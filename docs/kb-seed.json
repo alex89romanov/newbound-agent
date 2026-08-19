@@ -1,5 +1,5 @@
 {
-  "time": 1786818880374,
+  "time": 1787098917839,
   "domains": [
     {
       "tags": "doctrine,owner",
@@ -394,6 +394,16 @@
           "tags": "doctrine,training,model-seed,correction",
           "confidence": "high",
           "time": 1786792327149
+        },
+        {
+          "claim": "Rule of thumb for housing user data: unless it needs table scans, it probably does not need a dedicated library. User settings and state go in the runtime library; user files go in the runtime folder.",
+          "detail": "Stated while ruling the spectrum charter registry question: models, datasets, recipes, and adapters are products of the system - user data - and live in the existing runtime homes, never in a shipped library. The app ships mechanism and compiled-in defaults only.",
+          "tags": "doctrine,storage,runtime",
+          "source": {
+            "doc": "the owner, in session, 2026-08-19"
+          },
+          "confidence": "high",
+          "time": 1787098886006
         }
       ],
       "name": "doctrine"
