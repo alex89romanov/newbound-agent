@@ -80,7 +80,42 @@ fn err(msg: String) -> DataObject {
     o
 }
 
-let checkpoint = prop("MODEL_CHECKPOINT", "stub");
+// spectrum S1: MODEL= names a registry record (runtime library,
+// ruling 1) and wins over the MODEL_CHECKPOINT alias. The record
+// supplies path + backend; an hf-backend record stages honestly and
+// refuses to serve until the S3 seam lands. No MODEL= set = the
+// unregistered-directory alias, byte-for-byte the old behavior.
+let model_name = prop("MODEL", "");
+let mut backend = "nanochat".to_string();
+let mut checkpoint = prop("MODEL_CHECKPOINT", "stub");
+if !model_name.is_empty() {
+    let rstore = DataStore::new();
+    let mut found = false;
+    if rstore.exists("runtime", "models") {
+        let d = rstore.get_data("runtime", "models").get_object("data");
+        if d.has("list") {
+            let list = d.get_array("list");
+            for i in 0..list.len() {
+                if let Ok(m) = list.try_get_object(i) {
+                    if m.has("name") && m.get_string("name") == model_name {
+                        checkpoint = m.get_string("path");
+                        if m.has("backend") { backend = m.get_string("backend"); }
+                        found = true;
+                        break;
+                    }
+                }
+            }
+        }
+    }
+    if !found {
+        return err(format!(
+            "MODEL='{}' names no registered model - agent-model-import it first, or unset MODEL=",
+            model_name));
+    }
+}
+// S3: the backend seam is live - hf records serve through HFScorer,
+// posture frozen until the S5 delta trainer.
+let _ = &backend;
 let port = prop("MODEL_SERVICE_PORT", "8077");
 let repo = prop("NANOCHAT_REPO", "https://github.com/karpathy/nanochat.git");
 
@@ -111,7 +146,7 @@ o.put_string("status", "ok");
 // could, and did).
 let nc = deps.join("nanochat");
 let mut nanochat_env = "not_needed".to_string();
-if checkpoint != "stub" {
+if checkpoint != "stub" && backend == "nanochat" {
     let sentinel = nc.join("env_ready");
     if sentinel.exists() && nc.join("venv").exists() {
         nanochat_env = "ready".to_string();
@@ -141,6 +176,45 @@ if checkpoint != "stub" {
 }
 o.put_string("nanochat_env", &nanochat_env);
 
+// stage 1.5 (S3): the hf serving environment - venv + torch +
+// transformers, only when an hf record is configured (ruled: heavy
+// deps stay out of the default env, each install its own
+// donefile-guarded stage). The sentinel is written by the script
+// itself on full success, so a half-failed pip retries from clean.
+let hf = deps.join("hf");
+let mut hf_env = "not_needed".to_string();
+if checkpoint != "stub" && backend == "hf" {
+    let sentinel = hf.join("env_ready");
+    if sentinel.exists() && hf.join("venv").exists() {
+        hf_env = "ready".to_string();
+    } else {
+        if hf.exists() { let _ = std::fs::remove_dir_all(&hf); }
+        let mut cmd = "set -e; mkdir -p ".to_string();
+        cmd += &hf.display().to_string();
+        cmd += &format!("; cd {}", hf.display());
+        cmd += "; python3 -m venv venv; source venv/bin/activate";
+        cmd += "; pip install --upgrade pip";
+        // some networks deny the pytorch CDN; PyPI's bundle imports
+        // fine on CPU boxes and is the honest fallback
+        cmd += "; if nvidia-smi -L >/dev/null 2>&1; then pip install torch; else pip install torch --index-url https://download.pytorch.org/whl/cpu || pip install torch; fi";
+        cmd += "; pip install transformers";
+        cmd += "; touch env_ready";
+        let mut x = DataArray::new();
+        x.push_string("bash");
+        x.push_string("-c");
+        x.push_string(&cmd);
+        let r = system_call(x);
+        println!("BOOTSTRAP HF ENV {}", r.to_string());
+        if sentinel.exists() {
+            hf_env = "installed".to_string();
+        } else {
+            hf_env = "install_failed".to_string();
+            o.put_string("status", "err");
+        }
+    }
+}
+o.put_string("hf_env", &hf_env);
+
 // stage 1.6: the model itself. If MODEL_CHECKPOINT has no loadable
 // checkpoint, the agent TRAINS one (owner, 2026-08-16: "isn't that the
 // whole point of the bootstrap?"). nanochat's own speedrun pipeline
@@ -159,7 +233,7 @@ o.put_string("nanochat_env", &nanochat_env);
 // chat_sft inherits device_batch_size from the pretrain meta, so one
 // setting sizes both stages.
 let mut training = "not_needed".to_string();
-if checkpoint != "stub" && nanochat_env != "install_failed" {
+if checkpoint != "stub" && backend == "nanochat" && nanochat_env != "install_failed" {
     let ckpath = std::path::Path::new(&checkpoint);
     let has_ckpt = ["base_checkpoints", "chatsft_checkpoints", "chatrl_checkpoints"]
         .iter().any(|d| ckpath.join(d).is_dir())
@@ -262,6 +336,11 @@ if was_stale || !probe() {
     // the clone, since the nanochat package is deliberately uninstalled.
     let (py, envprefix) = if checkpoint == "stub" {
         ("python3".to_string(), "".to_string())
+    } else if backend == "hf" {
+        // the hf venv's python; transformers is importable, no
+        // PYTHONPATH games needed
+        (hf.join("venv").join("bin").join("python").display().to_string(),
+         "".to_string())
     } else {
         (nc.join("venv").join("bin").join("python").display().to_string(),
          format!("PYTHONPATH='{}' ", nc.display()))
@@ -275,13 +354,20 @@ if was_stale || !probe() {
     let interval = prop("MODEL_TRAIN_INTERVAL", "10");
     let user_gate = prop("USER_GATE",
         "mode=manual,soak_s=21600,verdicts=100,agree=0.75,regress=0.05,check_s=300");
+    // S5: the posture solver's knobs ride the launch line too
+    let posture = prop("MODEL_POSTURE", "auto");
+    let ring_gb = prop("MODEL_RING_GB", "100");
+    let headroom = prop("MODEL_HEADROOM", "15");
+    // S7: placement roles and the external engine (ruling 8)
+    let placement = prop("MODEL_PLACEMENT", "");
+    let engine_url = prop("MODEL_ENGINE_URL", "");
     let lora = prop("USER_LORA",
         "mode=on,rank=8,alpha=16,lr=1e-3,steps=200,slack=0.1,min_gain=0.01,guard=0.2,targets=c_q.c_v");
     let mut cmd = "cd ".to_string();
     cmd += &root.display().to_string();
     cmd += &format!(
-        "; {}nohup '{}' runtime/agent/model/service.py --data-dir runtime/agent/model --port {} --checkpoint '{}' --train {} --mix '{}' --lr {} --gate '{}' --train-interval {} --user-gate '{}' --lora '{}' >> runtime/agent/model/service.log 2>&1 &",
-        envprefix, py, port, checkpoint, train, mix, lr, gate, interval, user_gate, lora);
+        "; {}nohup '{}' runtime/agent/model/service.py --data-dir runtime/agent/model --port {} --checkpoint '{}' --backend {} --posture '{}' --ring-gb {} --headroom {} --placement '{}' --engine-url '{}' --train {} --mix '{}' --lr {} --gate '{}' --train-interval {} --user-gate '{}' --lora '{}' >> runtime/agent/model/service.log 2>&1 &",
+        envprefix, py, port, checkpoint, backend, posture, ring_gb, headroom, placement, engine_url, train, mix, lr, gate, interval, user_gate, lora);
     let mut x = DataArray::new();
     x.push_string("bash");
     x.push_string("-c");
@@ -329,6 +415,8 @@ if service != "launch_failed" {
     }
 }
 o.put_string("service", &service);
+o.put_string("model", &model_name);
+o.put_string("backend", &backend);
 o.put_string("checkpoint", &checkpoint);
 o.put_string("port", &port);
 o.put_string("path", &modeldir.display().to_string());

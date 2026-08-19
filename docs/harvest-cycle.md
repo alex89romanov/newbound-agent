@@ -1,10 +1,18 @@
 # The harvest cycle — from environment to understanding to weights
 
-**Status: plan of record for the next cycle — drafted 2026-08-17,
-owner review pending.** Builds strictly on the shipped framework
+**Status: plan of record for the next cycle — drafted 2026-08-17;
+amended 2026-08-19 after the spectrum cycle landed (S1–S8,
+`docs/spectrum-cycle.md`).** Builds strictly on the shipped framework
 (perception contract, federated memory, the salience tier, the
-flywheel, the split pointer, the CLAUDECODE arm). Nothing here
-replaces an existing organ; every phase feeds one that already runs.
+flywheel, the split pointer, the CLAUDECODE arm — and now the
+registry, the dataset manager, the backend seam, the delta trainer,
+the bench, and the SFT gate). Nothing here replaces an existing
+organ; every phase feeds one that already runs. The amendment in one
+sentence: the banks this cycle fills are now REGISTERED DATASETS
+(the spectrum's feed contract — no orphan banks), and the "eventual
+chat-SFT refresh" this cycle only banked toward is no longer
+eventual — `agent-model-sft_run` exists, gated and soaked, waiting
+on the bank.
 
 ## Why this cycle
 
@@ -39,7 +47,10 @@ vLLM, a hosted API, the Claude Code bridge, someday the local model
 itself — every mechanism below treats it identically. The serving arm
 appears in captured rows as a provenance tag (so training data can be
 filtered by source later), and that is the only thing it is ever
-allowed to be.
+allowed to be. (The spectrum cycle extended this law to the resident
+itself — model identity and scale are never branch conditions — and
+to synthetic-data generators, which are provenance tags under the
+same rule: `docs/spectrum-cycle.md` standing rule 1 and ruling 10.)
 
 Four goals, one loop: **acquire** understanding, **ruminate** on it,
 **capture** the evidence as training data, and **assemble** it into
@@ -55,7 +66,7 @@ about us today and how the local model needs less context tomorrow
 | Archivist chat sweep | claims distilled from chat sessions | live |
 | Salience escalations + audits (incl. unparseable) | salience pairs → CPT curriculum | live |
 | Session-end deposits + promotes | manuals on subject controls | live (agent-driven) |
-| curriculum_export → ingest → replay/heldout | CPT docs in the serving dialect | live |
+| curriculum_export → stream datasets (`salience-pairs`, `memory`) + legacy ingest | CPT feedstock, registered and deduped | live (spectrum S2) |
 | Persona corpus | voice (authored, not harvested) | live |
 | hollis transcripts | stored, judged... then nothing | **the acoustic gap** |
 | Frontier req/resp | discarded (LLM_CAPTURE_DIR covers ask_llm only, off) | **the raw gap** |
@@ -102,13 +113,20 @@ appends one ID-referencing row to
 ask_llm-only Q/A text files (fold them in, same switch).
 
 Then teach `curriculum_export` a `chat` kind: captured turns rendered
-as nanochat chat-format conversations (`{"messages": [...]}`), banked
-into `runtime/agent/model/sft/` — **separate from the CPT stream**.
-The CPT trainer does not eat them yet; they accumulate as the
-feedstock for the eventual chat-SFT refresh of the local model:
-whatever frontier is serving, its in-domain answers become the local
-model's future textbook, and the provenance tag lets that future
-training run weigh sources as it sees fit.
+as conversation rows (`{"messages": [...]}` — the backend-neutral
+shape the persona, adapter, and SFT loaders already speak; the
+serving dialect renders at the seam, per-resident), swept into a
+REGISTERED STREAM DATASET (`chat-bank`, kind `sft`) through the
+spectrum's feed contract — **separate from the CPT streams, and
+never a loose directory** (no orphan banks; the original draft's
+`runtime/agent/model/sft/` predates the dataset manager). The CPT
+trainer does not eat it; it is `agent-model-sft_run`'s feedstock —
+the chat-SFT refresh is no longer "eventual": the run, its
+three-instrument gate, and the soak into the user pointer shipped as
+spectrum S8 (`docs/spectrum-s8.md`), and the day this bank holds
+8 train + 2 held-out conversations it is one command from a gated
+candidate. The provenance tag still rides every row, so the run can
+weigh sources as it sees fit.
 
 *Owner call:* capture default (proposal: off in the repo, on in your
 botd), and whether hollis-derived text is capture-eligible (proposal:
@@ -163,8 +181,11 @@ authors; our own commits carry rich rationale. Two harvesters:
   and ask: *why was this change made, and what does it teach about
   how this system works?* → (a) a claim on the subject control,
   hysteresis-guarded like any adjudication; (b) a synthetic QA pair
-  ("Q: why does bootstrap rewrite service.py? A: ...") into the SFT
-  bank with provenance back to the patch.
+  ("Q: why does bootstrap rewrite service.py? A: ...") into the
+  `chat-bank` dataset with provenance back to the patch. This IS
+  `dataset_derive`'s model-driven mode (spectrum ruling 10): the
+  generator is a provenance tag, the spend is deliberate or
+  drive-budgeted, never ambient, and the derived rows carry lineage.
 
 This is the code-domain harvest matching the charter's "exceptional
 at code first": the system explaining its own becoming, in trainable
@@ -255,19 +276,26 @@ but its frontier spend rides the same accounting.
 
 ### H6 — One export to rule them (close of cycle)
 
-`curriculum_export` v2: one command that sweeps every bank — salience
-pairs (CPT, serving dialect), claims and curation traces (CPT),
-captured chat + synthetic QA (SFT bank) — with per-kind counts
-reported and a mind-tab card showing the week's harvest: claims by
-domain and author, capture volume, SFT bank size, notions
-pending audit. What gets MEASURED gets grown; this is the
-gauge cluster for everything above.
+`curriculum_export` v2 — half of it landed with spectrum S2: the
+sweep already feeds the `salience-pairs` and `memory` stream
+datasets, deduped and self-registering, with per-kind counts
+reported. What remains for this cycle is extending the SAME feed
+contract to the new banks — the `chat` kind into `chat-bank` (H1)
+and the why-harvest's synthetic QA (H3) — plus the mind-tab card
+showing the week's harvest: claims by domain and author, capture
+volume, the banks' row counts (`agent-model-dataset_list` already
+carries them), notions pending audit, and the bench's reports
+beside them. What gets MEASURED gets grown; the gauge cluster is
+mostly wired — this cycle points it at the harvest.
 
 ## What this cycle does not do (deliberately)
 
-- No SFT training run — the bank accumulates; the chat-SFT refresh of
-  the local model is its own future phase with its own gate design
-  (it will ride the 8a user pointer, protected by the same soak).
+- No SFT training run fired by this cycle's phases — the bank
+  accumulates. (The run itself is no longer future work: spectrum S8
+  shipped it, gate design written first as this page demanded, and
+  it rides the 8a user pointer protected by the same soak — exactly
+  as predicted here. Filling the bank is this cycle's half of the
+  handshake; firing `sft_run` on it stays a deliberate owner act.)
 - No camera. H4's system sensor exercises the new-modality path
   cheaply first; camera follows the hollis template when hardware and
   appetite align.

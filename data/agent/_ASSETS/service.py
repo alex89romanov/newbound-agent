@@ -108,6 +108,279 @@ def append_metric(data_dir, row):
                         f.writelines(lines[-4000:])
     except Exception:
         pass
+
+
+RESOURCES_CACHE = {"at": 0.0, "val": None}
+
+
+def probe_resources(data_dir):
+    """The resource map (spectrum S1): GPUs + disk, cheap and honest.
+    torch when the venv has it, nvidia-smi when it doesn't, empty -
+    but present - on a box with neither. Cached briefly: /status is
+    polled and nvidia-smi is a subprocess. First customers: the S5
+    posture solver, ring byte-budget warnings, birth-run sizing."""
+    now = time.time()
+    if RESOURCES_CACHE["val"] is not None and now - RESOURCES_CACHE["at"] < 5:
+        return RESOURCES_CACHE["val"]
+    gpus = []
+    try:
+        import torch
+        if torch.cuda.is_available():
+            for i in range(torch.cuda.device_count()):
+                free, total = torch.cuda.mem_get_info(i)
+                gpus.append({"index": i,
+                             "name": torch.cuda.get_device_name(i),
+                             "total_mb": int(total / 1048576),
+                             "free_mb": int(free / 1048576)})
+    except Exception:
+        try:
+            import subprocess
+            out = subprocess.run(
+                ["nvidia-smi",
+                 "--query-gpu=index,name,memory.total,memory.free",
+                 "--format=csv,noheader,nounits"],
+                capture_output=True, text=True, timeout=5).stdout
+            for ln in out.strip().splitlines():
+                parts = [p.strip() for p in ln.split(",")]
+                if len(parts) >= 4:
+                    gpus.append({"index": int(parts[0]), "name": parts[1],
+                                 "total_mb": int(parts[2]),
+                                 "free_mb": int(parts[3])})
+        except Exception:
+            pass
+    disk_free_gb = None
+    try:
+        st = os.statvfs(data_dir)
+        disk_free_gb = round(st.f_bavail * st.f_frsize / 1073741824, 1)
+    except Exception:
+        pass
+    ram_free_mb = None
+    try:
+        with open("/proc/meminfo") as f:
+            for ln in f:
+                if ln.startswith("MemAvailable:"):
+                    ram_free_mb = int(ln.split()[1]) // 1024
+                    break
+    except Exception:
+        pass
+    val = {"gpus": gpus, "disk_free_gb": disk_free_gb,
+           "ram_free_mb": ram_free_mb}
+    RESOURCES_CACHE["at"] = now
+    RESOURCES_CACHE["val"] = val
+    return val
+
+
+def registry_info(data_dir):
+    """The registry's window into /status: names only. The record of
+    truth lives in the runtime library; the service reads only the
+    rendered registry.json (it never reads the store), picked up by
+    mtime like persona.jsonl."""
+    path = os.path.join(data_dir, "registry.json")
+    if not os.path.exists(path):
+        return None
+    try:
+        with open(path) as f:
+            reg = json.load(f)
+        return {"models": [m.get("name", "?") for m in reg.get("models", [])],
+                "datasets": [d.get("name", "?")
+                             for d in reg.get("datasets", [])],
+                "rendered_at": reg.get("rendered_at")}
+    except Exception as e:
+        return {"error": f"registry.json unreadable: {e}"}
+
+
+REGISTRY_DS = {"mtime": 0.0, "list": []}
+
+
+def load_registry_datasets(data_dir):
+    """Registered datasets from registry.json (the service's store-blind
+    window). Re-read when the file's mtime moves - the same pickup
+    signal the whole registry uses."""
+    path = os.path.join(data_dir, "registry.json")
+    try:
+        mt = os.path.getmtime(path)
+    except OSError:
+        REGISTRY_DS["list"] = []
+        return REGISTRY_DS["list"]
+    if mt != REGISTRY_DS["mtime"]:
+        try:
+            with open(path) as f:
+                REGISTRY_DS["list"] = json.load(f).get("datasets", [])
+            REGISTRY_DS["mtime"] = mt
+        except Exception:
+            pass
+    return REGISTRY_DS["list"]
+
+
+def dataset_paths(rec):
+    """The files carrying a registered dataset's rows, by its format."""
+    p = rec.get("path") or ""
+    fmt = rec.get("format") or "jsonl"
+    ext = {"jsonl": ".jsonl", "txt": ".txt",
+           "parquet": ".parquet"}.get(fmt, ".jsonl")
+    if os.path.isfile(p):
+        return [p]
+    if os.path.isdir(p):
+        out = []
+        for base, _dirs, files in os.walk(p):
+            out.extend(os.path.join(base, n)
+                       for n in sorted(files) if n.endswith(ext))
+        return sorted(out)
+    return []
+
+
+def load_dataset_docs(rec, limit=2048):
+    """(train_docs, holdout_docs) for one registered dataset. JSONL
+    rows render through render_sample so training speaks THE dialect
+    ({"text": ...} rows pass through); txt rows are docs as-is.
+    holdout_every=N reserves every Nth row, never trained - the
+    persona split pattern. Tail-capped so streams stay affordable."""
+    fmt = rec.get("format") or "jsonl"
+    if fmt == "parquet":
+        return [], []  # pyarrow territory; the standard pool covers it
+    lines = []
+    for path in dataset_paths(rec):
+        try:
+            with open(path) as f:
+                lines.extend(ln.rstrip("\n") for ln in f if ln.strip())
+        except OSError:
+            continue
+    lines = lines[-limit:]
+    hn = int(rec.get("holdout_every") or 0)
+    train, hold = [], []
+    for i, ln in enumerate(lines):
+        doc = ln
+        if fmt == "jsonl":
+            try:
+                o = json.loads(ln)
+                if isinstance(o, dict):
+                    doc = o["text"] if "text" in o else render_sample(o)
+            except Exception:
+                pass
+        (hold if hn > 0 and i % hn == hn - 1 else train).append(doc)
+    return train, hold[:64]
+
+
+def load_anchor_docs(args):
+    """Ruling 2: the forgetting guard reads its anchor through the
+    manager WHEN the serving model is registered with one - resolve
+    this service's checkpoint against the registry's model records,
+    follow the record's anchor to a registered dataset, load its docs.
+    Returns [] when unregistered or unanchored: the legacy base-dir
+    path then runs byte-for-byte (R1)."""
+    path = os.path.join(args.data_dir, "registry.json")
+    try:
+        with open(path) as f:
+            reg = json.load(f)
+    except Exception:
+        return []
+    try:
+        ck = os.path.realpath(args.checkpoint)
+    except OSError:
+        return []
+    anchor = None
+    for m in reg.get("models", []):
+        try:
+            if os.path.realpath(m.get("path") or "") == ck:
+                a = m.get("anchor") or ""
+                if a and a not in ("mint", "none"):
+                    anchor = a
+                break
+        except OSError:
+            continue
+    if not anchor:
+        return []
+    for rec in reg.get("datasets", []):
+        if rec.get("name") == anchor:
+            docs, _hold = load_dataset_docs(dict(rec, holdout_every=0),
+                                            limit=512)
+            if docs:
+                print(f"[trainer] anchor through the manager: "
+                      f"'{anchor}' ({len(docs)} docs)", flush=True)
+            return docs
+    return []
+
+
+MINT = {"running": False, "last": None}
+
+MINT_SEEDS = [
+    "Tell me about yourself.",
+    "What do you know a lot about?",
+    "Explain something interesting.",
+    "Describe a process you understand well.",
+    "What happened in the world recently?",
+    "Write a short story about a machine that learns.",
+    "Give me practical advice about computers.",
+    "What makes a good explanation?",
+    "Describe your ideal day.",
+    "How does the weather work?",
+    "What is the most important invention?",
+    "Continue this thought: The system was designed to",
+    "Summarize what you believe about language.",
+    "What would you teach a beginner first?",
+    "Describe a place you would like to visit.",
+    "Why do people tell stories?",
+]
+
+
+def mint_anchor_thread(args, path, out_name, n, backend="nanochat"):
+    """Ruling 2: an import without its pretraining data gets a MINTED
+    anchor - a frozen sample of the model's own voice at the door,
+    measuring drift-from-its-imported-self forever after. Loads its
+    own scorer from `path` (the serving slots are never touched),
+    samples with variety, writes datasets/<out_name>/anchor.jsonl +
+    meta.json, and frees the weights. Progress rides /status.mint."""
+    res = {"model": path, "name": out_name, "requested": int(n), "rows": 0,
+           "started": int(time.time() * 1000), "status": "running"}
+    with LOCK:
+        MINT["running"] = True
+        MINT["last"] = dict(res)
+    scorer = None
+    try:
+        # the seam covers minting too: whichever backend the weights
+        # are, generate_text is the one door (S3). The serving env must
+        # be able to import the backend - a mismatch records an honest
+        # error in /status.mint rather than half-minting.
+        dev = train_device(args)   # S7: minting is a training-side load
+        scorer = (HFScorer(path, device=dev) if backend == "hf"
+                  else NanochatScorer(path, device=dev))
+        outdir = os.path.join(args.data_dir, "datasets", out_name)
+        os.makedirs(outdir, exist_ok=True)
+        rows = 0
+        with open(os.path.join(outdir, "anchor.jsonl"), "w") as f:
+            for i in range(int(n)):
+                prompt = MINT_SEEDS[i % len(MINT_SEEDS)]
+                text = scorer.generate_text(
+                    [{"role": "user", "content": prompt}],
+                    max_tokens=256, temperature=0.8, top_k=50)
+                f.write(json.dumps({"text": text}) + "\n")
+                rows += 1
+                if rows % 25 == 0:
+                    with LOCK:
+                        MINT["last"] = dict(res, rows=rows)
+        meta = {"name": out_name, "kind": "anchor", "rows": rows,
+                "model_path": path, "frozen": True,
+                "at": int(time.time() * 1000)}
+        with open(os.path.join(outdir, "meta.json"), "w") as f:
+            json.dump(meta, f)
+        res.update(rows=rows, status="done",
+                   finished=int(time.time() * 1000))
+        print(f"[mint] anchor {out_name}: {rows} rows", flush=True)
+    except Exception as e:
+        res.update(status="error", error=str(e)[:500])
+        print(f"[mint] anchor {out_name} FAILED: {e}", flush=True)
+    finally:
+        del scorer
+        try:
+            import torch
+            torch.cuda.empty_cache()
+        except Exception:
+            pass
+    with LOCK:
+        MINT["running"] = False
+        MINT["last"] = res
+
+
 STATE = {
     "slots": {"A": None, "B": None},
     "live": "A",
@@ -160,6 +433,11 @@ def soak_key_for(scorer):
         return name.split(":", 1)[1]
     if name.startswith("nanochat:"):
         return "base:" + name.split(":", 1)[1]
+    if name.startswith("hf:"):
+        # the hf base soaks on the fast lane exactly like a birth
+        # checkpoint - same lineage, same canary, the standard user
+        # gate covers it with zero special cases (S3)
+        return "base:" + name
     return None
 
 
@@ -218,6 +496,11 @@ class StubScorer:
         score = min(0.95, base + 0.1 * min(int(bound), 3))
         return score, f"stub[{self.tag}]: kind base with {bound} bound claims"
 
+    def generate_text(self, messages, max_tokens=96, temperature=0.2,
+                      top_k=50):
+        last = str((messages or [{}])[-1].get("content", ""))[:120]
+        return f"[stub {self.tag}] heard: {last}"
+
 
 def salience_prompt(kind, text, matched, bound):
     """THE serving prompt - the skill the agreement gate measures is the
@@ -254,6 +537,114 @@ def parse_salience(completion):
     return None, f"unparseable reply: {completion[:120]!r}", False
 
 
+# ── the backend seam (spectrum S3) ──────────────────────────────────
+# Everything the serving side asks of a model goes through the scorer
+# surface: generate_text(messages) -> str, score(), .name, .meta,
+# .checkpoint. Two real backends implement it - nanochat and hf - and
+# nothing above the seam knows which is serving. The dialect
+# (salience_prompt + JSON answer + unparseable-escalates) is identical
+# by construction: score_via builds it once for every backend.
+
+def model_device(model):
+    """nanochat's GPT carries get_device(); HF models answer through
+    their parameters. One question, one place."""
+    if hasattr(model, "get_device"):
+        return model.get_device()
+    import torch
+    try:
+        return next(model.parameters()).device
+    except StopIteration:
+        return torch.device("cpu")
+
+
+def scorer_model(scorer):
+    """The underlying nn.Module: nanochat keeps it on the engine, hf
+    keeps it directly."""
+    if hasattr(scorer, "engine"):
+        return scorer.engine.model
+    return getattr(scorer, "model", None)
+
+
+def masked_lm_loss_t(model, tokenizer, ids, mask, device):
+    """One masked-LM loss (tensor, backward-able) on an UNSHIFTED token
+    sequence; mask=1 marks the tokens that train. The two backends
+    disagree structurally: nanochat's GPT takes pre-shifted (x, y)
+    with -1 ignore; HF models take aligned labels with -100 and shift
+    internally. The seam owns that bookkeeping so no caller ever
+    reimplements it wrong."""
+    import torch
+    if hasattr(tokenizer, "render_conversation"):  # nanochat
+        x = torch.tensor([ids[:-1]], device=device)
+        y = torch.tensor([[t if mask[i + 1] == 1 else -1
+                           for i, t in enumerate(ids[1:])]], device=device)
+        return model(x, y)
+    x = torch.tensor([ids], device=device)
+    labels = torch.tensor([[t if mask[i] == 1 else -100
+                            for i, t in enumerate(ids)]], device=device)
+    return model(input_ids=x, labels=labels).loss
+
+
+def plain_lm_loss_t(model, tokenizer, chunk, device):
+    """One plain LM loss (tensor) on a token chunk, same shift
+    bookkeeping as masked_lm_loss_t."""
+    import torch
+    if hasattr(tokenizer, "render_conversation"):  # nanochat
+        x = torch.tensor([chunk[:-1]], device=device)
+        y = torch.tensor([chunk[1:]], device=device)
+        return model(x, y)
+    x = torch.tensor([chunk], device=device)
+    return model(input_ids=x, labels=x.clone()).loss
+
+
+def encode_doc(tokenizer, doc):
+    """One doc -> token ids, per backend."""
+    if hasattr(tokenizer, "render_conversation"):
+        return tokenizer.encode(doc[:4000], prepend="<|bos|>")
+    return tokenizer(doc[:4000]).input_ids
+
+
+def render_masked(tokenizer, conv, max_tokens):
+    """(ids, mask) for a conversation: mask=1 on the tokens the loss
+    trains (the assistant's). nanochat's tokenizer owns this natively;
+    for HF the final message must be the assistant's and the mask is
+    its tail past the generation prompt - single-turn-pair exact,
+    multi-turn masks only the final reply (documented simplification
+    until the delta trainer needs more)."""
+    if hasattr(tokenizer, "render_conversation"):
+        return tokenizer.render_conversation(conv, max_tokens=max_tokens)
+    msgs = conv["messages"]
+    full = tokenizer.apply_chat_template(msgs, tokenize=True,
+                                         add_generation_prompt=False)
+    prompt = tokenizer.apply_chat_template(msgs[:-1], tokenize=True,
+                                           add_generation_prompt=True)
+    if hasattr(full, "input_ids"):
+        full = full.input_ids       # BatchEncoding on newer transformers
+    if hasattr(prompt, "input_ids"):
+        prompt = prompt.input_ids
+    ids = full[:max_tokens]
+    cut = min(len(prompt), len(ids))
+    mask = [0] * cut + [1] * (len(ids) - cut)
+    return ids, mask
+
+
+def score_via(scorer, perception, context):
+    """THE score path, backend-blind: the serving prompt, one
+    generation, the JSON parse with unparseable-escalates."""
+    payload = perception.get("payload") or {}
+    text = " ".join(str(v) for v in payload.values()
+                    if isinstance(v, str))[:600]
+    prompt = salience_prompt(perception.get("kind", "?"), text,
+                             context.get("matched") or 0,
+                             context.get("bound") or 0)
+    completion = scorer.generate_text(
+        [{"role": "user", "content": prompt}],
+        max_tokens=96, temperature=0.2, top_k=50)
+    sal, why, parsed = parse_salience(completion)
+    if sal is None:
+        return 0.5, "defaulting uncertain - " + why, False
+    return sal, why, parsed
+
+
 class NanochatScorer:
     """The real judge - a nanochat checkpoint served in-process.
 
@@ -270,7 +661,7 @@ class NanochatScorer:
 
     name = "nanochat"
 
-    def __init__(self, checkpoint):
+    def __init__(self, checkpoint, device=None):
         self.checkpoint = checkpoint
         # The base dir must be in the env BEFORE nanochat's modules
         # resolve it (get_base_dir also owns the tokenizer location).
@@ -279,7 +670,8 @@ class NanochatScorer:
         from nanochat.checkpoint_manager import load_model
         from nanochat.engine import Engine
         self.torch = torch
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        device = device or torch.device(
+            "cuda" if torch.cuda.is_available() else "cpu")
         last_err = None
         for source in ("rl", "sft", "base"):
             try:
@@ -331,23 +723,131 @@ class NanochatScorer:
         self.name = name
         return self
 
-    def score(self, perception, context):
-        payload = perception.get("payload") or {}
-        text = " ".join(str(v) for v in payload.values() if isinstance(v, str))[:600]
-        prompt = salience_prompt(perception.get("kind", "?"), text,
-                                 context.get("matched") or 0, context.get("bound") or 0)
-        conversation = {"messages": [
-            {"role": "user", "content": prompt},
-            {"role": "assistant", "content": ""},
-        ]}
+    def generate_text(self, messages, max_tokens=96, temperature=0.2,
+                      top_k=50):
+        conversation = {"messages": list(messages)
+                        + [{"role": "assistant", "content": ""}]}
         ids = self.tokenizer.render_for_completion(conversation)
         results, _masks = self.engine.generate_batch(
-            ids, num_samples=1, max_tokens=96, temperature=0.2, top_k=50)
-        completion = self.tokenizer.decode(results[0][len(ids):])
-        sal, why, parsed = parse_salience(completion)
-        if sal is None:
-            return 0.5, "defaulting uncertain - " + why, False
-        return sal, why, parsed
+            ids, num_samples=1, max_tokens=int(max_tokens),
+            temperature=float(temperature), top_k=int(top_k))
+        return self.tokenizer.decode(results[0][len(ids):])
+
+    def score(self, perception, context):
+        return score_via(self, perception, context)
+
+
+class HFScorer:
+    """The second backend (spectrum S3): an HF-format model dir served
+    in-process through transformers - the format's reference
+    implementation, the one third-party door the seam needs. Same
+    score()/generate_text() contracts, same dialect, same
+    unparseable-escalates. The CPT trainer does not run on this
+    backend yet: the delta trainer lands in S5, so an hf resident's
+    posture is frozen - and /status says so (standing rule 4)."""
+
+    name = "hf"
+
+    def __init__(self, checkpoint, device=None):
+        self.checkpoint = checkpoint
+        import torch
+        from transformers import AutoModelForCausalLM, AutoTokenizer
+        self.torch = torch
+        self.device = device or torch.device(
+            "cuda" if torch.cuda.is_available() else "cpu")
+        self.tokenizer = AutoTokenizer.from_pretrained(checkpoint)
+        dtype = torch.bfloat16 if self.device.type == "cuda" else torch.float32
+        self.model = AutoModelForCausalLM.from_pretrained(
+            checkpoint, torch_dtype=dtype, low_cpu_mem_usage=True
+        ).to(self.device)
+        self.model.eval()
+        ctx = int(getattr(self.model.config,
+                          "max_position_embeddings", 0) or 2048)
+        self.meta = {"model_config": {"sequence_len": ctx}}
+        self.name = f"hf:{os.path.basename(os.path.normpath(checkpoint))}"
+
+    def generate_text(self, messages, max_tokens=96, temperature=0.2,
+                      top_k=50):
+        import torch
+        tok = self.tokenizer
+        try:
+            ids = tok.apply_chat_template(list(messages),
+                                          add_generation_prompt=True,
+                                          return_tensors="pt")
+            if hasattr(ids, "input_ids"):
+                # newer transformers return a BatchEncoding here
+                ids = ids.input_ids
+        except Exception:
+            # no chat template shipped with the model: plain
+            # concatenation is the honest fallback
+            text = "\n".join(str(m.get("content", ""))
+                             for m in messages) + "\n"
+            ids = tok(text, return_tensors="pt").input_ids
+        ids = ids.to(self.device)
+        with torch.no_grad():
+            out = self.model.generate(
+                ids, max_new_tokens=int(max_tokens),
+                do_sample=float(temperature) > 0.05,
+                temperature=max(float(temperature), 0.05),
+                top_k=int(top_k),
+                pad_token_id=(tok.pad_token_id
+                              if tok.pad_token_id is not None
+                              else tok.eos_token_id))
+        return tok.decode(out[0][ids.shape[1]:], skip_special_tokens=True)
+
+    def score(self, perception, context):
+        return score_via(self, perception, context)
+
+
+class ExternalScorer:
+    """Ruling 8: the engine seam's far end - the residency ladder's
+    `external` rung. Serving crosses the wire to an OpenAI-compatible
+    chat-completions endpoint (vLLM-class); this class only
+    TRANSPORTS - score_via builds THE dialect and parses THE answer,
+    so unparseable-escalates applies to remote verdicts unchanged.
+    The weights live with the engine: posture is frozen here, nothing
+    derives or stacks locally, and promotion at this rung is adapter
+    hot-swap - wired when an engine that supports it is configured."""
+
+    name = "external"
+
+    def __init__(self, url, model_hint=""):
+        import urllib.request
+        self.url = url.rstrip("/")
+        self.checkpoint = f"engine:{self.url}"
+        self.meta = {"model_config": {"sequence_len": 4096}}
+        served = model_hint or ""
+        try:
+            with urllib.request.urlopen(self.url + "/v1/models",
+                                        timeout=5) as r:
+                d = json.loads(r.read().decode())
+                data = d.get("data") or []
+                if data:
+                    served = data[0].get("id", served)
+        except Exception:
+            pass
+        self.served_model = served or "default"
+        self.name = f"external:{self.served_model}"
+
+    def generate_text(self, messages, max_tokens=96, temperature=0.2,
+                      top_k=50):
+        import urllib.request
+        body = json.dumps({
+            "model": self.served_model,
+            "messages": list(messages),
+            "max_tokens": int(max_tokens),
+            "temperature": float(temperature),
+        }).encode()
+        req = urllib.request.Request(
+            self.url + "/v1/chat/completions", data=body,
+            headers={"Content-Type": "application/json"})
+        with urllib.request.urlopen(req, timeout=120) as r:
+            d = json.loads(r.read().decode())
+        return (((d.get("choices") or [{}])[0].get("message") or {})
+                .get("content") or "")
+
+    def score(self, perception, context):
+        return score_via(self, perception, context)
 
 
 def newest_ring(data_dir):
@@ -358,16 +858,24 @@ def newest_ring(data_dir):
     return dirs[-1] if dirs else None
 
 
-def make_scorer(checkpoint, data_dir):
+def make_scorer(checkpoint, data_dir, backend="nanochat", engine_url=""):
     if checkpoint == "stub":
         return StubScorer()
+    if engine_url:
+        # ruling 8: the external rung - the engine holds the weights
+        return ExternalScorer(engine_url,
+                              os.path.basename(os.path.normpath(checkpoint)))
+    if backend == "hf":
+        # gate-promoted CPT progress resumes across restarts on the
+        # lora rung too: re-merge the delta ring (S5)
+        return merge_ring_deltas(HFScorer(checkpoint), data_dir)
     ring = newest_ring(data_dir)
     if ring:
         try:
             return NanochatScorer.from_ring(checkpoint, ring)
         except Exception as e:
             print(f"[service] ring load failed ({e}); falling back to base dir", flush=True)
-    return NanochatScorer(checkpoint)
+    return merge_ring_deltas(NanochatScorer(checkpoint), data_dir)
 
 
 def newest_checkpoint(args):
@@ -447,8 +955,35 @@ def load_pointer_scorer(args, key):
     if key == "stub" or args.checkpoint == "stub":
         return StubScorer(tag=f"user:{key}")
     if key.startswith("base:"):
+        if getattr(args, "engine_url", ""):
+            return ExternalScorer(args.engine_url,
+                                  os.path.basename(
+                                      os.path.normpath(args.checkpoint)))
+        if getattr(args, "backend", "nanochat") == "hf":
+            return HFScorer(args.checkpoint)
         return NanochatScorer(args.checkpoint)
     ring_dir = os.path.join(args.data_dir, "checkpoints", key)
+    if os.path.isfile(os.path.join(ring_dir, "delta.pt")):
+        # a delta-ring key (S5's lora rung): base + every delta up to
+        # and including this checkpoint, chronologically
+        base = (HFScorer(args.checkpoint)
+                if getattr(args, "backend", "nanochat") == "hf"
+                else NanochatScorer(args.checkpoint))
+        if key.startswith("sft-"):
+            # S8: an SFT candidate rides on top of the CURRENT CPT
+            # state - base + every merged cpt delta + this candidate
+            import torch as _t
+            base = merge_ring_deltas(base, args.data_dir)
+            blob = _t.load(os.path.join(ring_dir, "delta.pt"),
+                           map_location="cpu", weights_only=False)
+            merge_adapter_blob(scorer_model(base), blob)
+            base.name = base.name + "+" + key
+            return base
+        return merge_ring_deltas(base, args.data_dir, upto=key)
+    if getattr(args, "backend", "nanochat") == "hf":
+        raise RuntimeError(
+            f"'{key}' is not a delta checkpoint - the hf backend rings "
+            "deltas only (full hf saves wait for their own ruling)")
     return NanochatScorer.from_ring(args.checkpoint, ring_dir)
 
 
@@ -462,14 +997,11 @@ def user_agreement(scorer, n=8):
     pairs = HELDOUT_PAIRS[-int(n):]
     total = 0.0
     for pr in pairs:
-        conversation = {"messages": [
-            {"role": "user", "content": salience_prompt("?", pr["input"], 0, 0)},
-            {"role": "assistant", "content": ""},
-        ]}
-        ids = scorer.tokenizer.render_for_completion(conversation)
-        results, _m = scorer.engine.generate_batch(
-            ids, num_samples=1, max_tokens=64, temperature=0.01, top_k=1)
-        sal, _why, _parsed = parse_salience(scorer.tokenizer.decode(results[0][len(ids):]))
+        completion = scorer.generate_text(
+            [{"role": "user",
+              "content": salience_prompt("?", pr["input"], 0, 0)}],
+            max_tokens=64, temperature=0.01, top_k=1)
+        sal, _why, _parsed = parse_salience(completion)
         if sal is None:
             sal = 0.5
         total += min(1.0, abs(sal - float(pr["target"])))
@@ -487,7 +1019,8 @@ def do_user_promote(args, reason):
         return False, {"status": "err", "msg": "no candidate is ready - "
                        "the user gate has not passed (soak/agree/regress)"}
     try:
-        scorer = apply_persona(args, load_pointer_scorer(args, key))
+        scorer = apply_persona_and_stack(args,
+                                         load_pointer_scorer(args, key))
     except Exception as e:
         return False, {"status": "err", "msg": f"user pointer load failed: {e}"}
     with LOCK:
@@ -496,7 +1029,8 @@ def do_user_promote(args, reason):
         USER["last_good"] = prev
         USER["pointer"] = key
         USER["name"] = ("user:" + key
-                        + ("+lora" if getattr(scorer, "name", "").endswith("+lora") else ""))
+                        + ("+lora" if "+lora" in getattr(scorer, "name", "") else "")
+                        + ("+adp" if "+adp" in getattr(scorer, "name", "") else ""))
         USER["promoted_at"] = int(time.time() * 1000)
         USER["eval"] = snapshot
         USER["ready"] = None
@@ -518,14 +1052,16 @@ def do_user_rollback(args, reason):
     if not target:
         return False, {"status": "err", "msg": "no last_good to roll back to"}
     try:
-        scorer = apply_persona(args, load_pointer_scorer(args, target))
+        scorer = apply_persona_and_stack(args,
+                                         load_pointer_scorer(args, target))
     except Exception as e:
         return False, {"status": "err", "msg": f"rollback load failed: {e}"}
     with LOCK:
         USER_SLOT["scorer"] = scorer
         USER["pointer"] = target
         USER["name"] = ("user:" + target
-                        + ("+lora" if getattr(scorer, "name", "").endswith("+lora") else ""))
+                        + ("+lora" if "+lora" in getattr(scorer, "name", "") else "")
+                        + ("+adp" if "+adp" in getattr(scorer, "name", "") else ""))
         USER["promoted_at"] = int(time.time() * 1000)
         USER["last_good"] = None    # one step back, deliberately - not a stack
         USER["rollbacks"] += 1
@@ -616,7 +1152,9 @@ def user_gate_loop(args):
             # first derivation fires on its own.
             lcfg = parse_kv_mixed(getattr(args, "lora", ""), PERSONA_LORA_DEFAULTS)
             if (str(lcfg.get("mode")) != "off" and user_scorer is not None
-                    and serving and not isinstance(user_scorer, StubScorer)
+                    and serving
+                    and not isinstance(user_scorer,
+                                       (StubScorer, ExternalScorer))
                     and not PERSONA["deriving"]):
                 _tr, _ho = load_persona_corpus(args.data_dir)
                 with LOCK:
@@ -628,9 +1166,10 @@ def user_gate_loop(args):
                     else:
                         seq2 = (user_scorer.meta["model_config"]["sequence_len"]
                                 if user_scorer.meta else 2048)
-                        probe = persona_eval(user_scorer.engine.model,
+                        _um = scorer_model(user_scorer)
+                        probe = persona_eval(_um,
                                              user_scorer.tokenizer, _ho,
-                                             user_scorer.engine.model.get_device(),
+                                             model_device(_um),
                                              seq2)
                         if probe is not None:
                             with LOCK:
@@ -648,6 +1187,44 @@ def user_gate_loop(args):
                         threading.Thread(target=derive_adapter,
                                          args=(args, "probe" if PERSONA["adapter"] else "first"),
                                          daemon=True).start()
+            # (2c) the stack probe (S4, ruling 3's cadence): each
+            # applied member's subject held-out loss on the SERVING
+            # model vs its derivation baseline; slip past slack is
+            # surfaced (status + metric), never silently acted on -
+            # unapply is the owner's deliberate act.
+            with LOCK:
+                probe_stack = list(ADAPTERS["stack"])
+            if (probe_stack and user_scorer is not None and serving
+                    and not isinstance(user_scorer, StubScorer)):
+                _pm = scorer_model(user_scorer)
+                _pdev = model_device(_pm)
+                _pseq = (user_scorer.meta["model_config"]["sequence_len"]
+                         if user_scorer.meta else 2048)
+                import torch as _torch
+                for _name in probe_stack:
+                    try:
+                        _blob = _torch.load(
+                            adapter_blob_path(args.data_dir, _name),
+                            map_location="cpu", weights_only=False)
+                        _tr2, _ho2 = load_dataset_convs(
+                            args, _blob["meta"].get("dataset", ""))
+                        _probe = persona_eval(_pm, user_scorer.tokenizer,
+                                              _ho2 or [], _pdev, _pseq)
+                        _basel = _blob["meta"].get("heldout_adapted")
+                        if _probe is not None:
+                            _slipped = (_basel is not None and _probe
+                                        > _basel * (1 + float(lcfg["slack"])))
+                            with LOCK:
+                                ADAPTERS["probes"][_name] = {
+                                    "probe": _probe, "baseline": _basel,
+                                    "slipped": _slipped}
+                            append_metric(args.data_dir, {
+                                "kind": "adapter_probe", "name": _name,
+                                "probe": _probe, "baseline": _basel,
+                                "slipped": _slipped})
+                    except Exception as _e:
+                        print(f"[adapters] probe of '{_name}' failed: "
+                              f"{_e}", flush=True)
             # (3) the watchdog re-audit
             if user_scorer is not None and serving:
                 fresh = user_agreement(user_scorer)
@@ -687,15 +1264,17 @@ def restore_user_pointer(args):
     except Exception as e:
         print(f"[user] persisted pointer {key} failed to load: {e}", flush=True)
         return
-    scorer = apply_persona(args, scorer)
+    scorer = apply_persona_and_stack(args, scorer)
     with LOCK:
         USER_SLOT["scorer"] = scorer
         for k in ("pointer", "name", "promoted_at", "eval", "last_good"):
             USER[k] = snap.get(k)
         USER["promotions"] = int(snap.get("promotions") or 0)
         USER["rollbacks"] = int(snap.get("rollbacks") or 0)
-        if getattr(scorer, "name", "").endswith("+lora"):
-            USER["name"] = f"user:{key}+lora"
+        marks = ("+lora" if "+lora" in getattr(scorer, "name", "") else "") \
+            + ("+adp" if "+adp" in getattr(scorer, "name", "") else "")
+        if marks:
+            USER["name"] = f"user:{key}{marks}"
     print(f"[user] restored pointer {key}", flush=True)
 
 
@@ -758,16 +1337,33 @@ def load_persona_corpus(data_dir):
 
 def lora_target_paths(model, targets):
     """Module paths for the adapter, from a dot-separated target spec
-    (c_q.c_v.attn_proj.c_fc.mlp_proj -> attention and MLP linears)."""
-    names = {"c_q": "attn.c_q", "c_k": "attn.c_k", "c_v": "attn.c_v",
-             "attn_proj": "attn.c_proj", "c_fc": "mlp.c_fc",
-             "mlp_proj": "mlp.c_proj"}
-    picked = [names[t] for t in str(targets).split(".") if t in names]
+    (c_q.c_v.attn_proj.c_fc.mlp_proj -> attention and MLP linears).
+    Backend-aware (S3): one target vocabulary, two namings - nanochat's
+    transformer.h.<i>.attn.c_q pattern, or the conventional q_proj/
+    v_proj/... leaf names an HF model's named_modules carry. The
+    hook-LoRA machinery downstream is architecture-blind either way -
+    no adapter library needed (doctrine: avoid third-party deps)."""
+    if hasattr(model, "transformer") and hasattr(model.transformer, "h"):
+        names = {"c_q": "attn.c_q", "c_k": "attn.c_k", "c_v": "attn.c_v",
+                 "attn_proj": "attn.c_proj", "c_fc": "mlp.c_fc",
+                 "mlp_proj": "mlp.c_proj"}
+        picked = [names[t] for t in str(targets).split(".") if t in names]
+        out = []
+        n_layer = len(model.transformer.h)
+        for i in range(n_layer):
+            for sub in picked:
+                out.append(f"transformer.h.{i}.{sub}")
+        return out
+    hf_names = {"c_q": "q_proj", "c_k": "k_proj", "c_v": "v_proj",
+                "attn_proj": "o_proj", "c_fc": "up_proj",
+                "mlp_proj": "down_proj"}
+    hf_picked = {hf_names[t] for t in str(targets).split(".")
+                 if t in hf_names}
     out = []
-    n_layer = len(model.transformer.h)
-    for i in range(n_layer):
-        for sub in picked:
-            out.append(f"transformer.h.{i}.{sub}")
+    for name, mod in model.named_modules():
+        leaf = name.rsplit(".", 1)[-1]
+        if leaf in hf_picked and hasattr(mod, "in_features"):
+            out.append(name)
     return out
 
 
@@ -783,16 +1379,14 @@ def persona_eval(model, tokenizer, convs, device, seq_len, limit=16):
     with torch.no_grad():
         for conv in convs[:limit]:
             try:
-                ids, mask = tokenizer.render_conversation(
-                    conv, max_tokens=min(int(seq_len), 1024))
+                ids, mask = render_masked(tokenizer, conv,
+                                          min(int(seq_len), 1024))
             except Exception:
                 continue
-            if len(ids) < 3 or sum(mask[1:]) == 0:
+            if len(ids) < 3 or sum(mask) == 0:
                 continue
-            x = torch.tensor([ids[:-1]], device=device)
-            y = torch.tensor([[t if mask[i + 1] == 1 else -1
-                               for i, t in enumerate(ids[1:])]], device=device)
-            tot += float(model(x, y))
+            tot += float(masked_lm_loss_t(model, tokenizer, ids, mask,
+                                          device))
             n += 1
     if was_training:
         model.train()
@@ -805,7 +1399,7 @@ def plain_lm_eval(model, tokenizer, docs, device, seq_len, limit=12):
     import torch
     toks = []
     for d in docs:
-        toks.extend(tokenizer.encode(d[:4000], prepend="<|bos|>"))
+        toks.extend(encode_doc(tokenizer, d))
     seq_len = min(int(seq_len), 2048)
     chunks = [toks[i:i + seq_len + 1]
               for i in range(0, len(toks) - seq_len - 1, seq_len)][:limit]
@@ -816,9 +1410,7 @@ def plain_lm_eval(model, tokenizer, docs, device, seq_len, limit=12):
     tot = 0.0
     with torch.no_grad():
         for c in chunks:
-            x = torch.tensor([c[:-1]], device=device)
-            y = torch.tensor([c[1:]], device=device)
-            tot += float(model(x, y))
+            tot += float(plain_lm_loss_t(model, tokenizer, c, device))
     if was_training:
         model.train()
     return round(tot / len(chunks), 4)
@@ -835,7 +1427,8 @@ def apply_persona(args, scorer):
     standing-skin-on-a-moving-base design - drift is what the probe
     watches. No-op in stub mode, with mode=off, or with no adapter."""
     cfg = parse_kv_mixed(getattr(args, "lora", ""), PERSONA_LORA_DEFAULTS)
-    if (str(cfg.get("mode")) == "off" or isinstance(scorer, StubScorer)
+    if (str(cfg.get("mode")) == "off"
+            or isinstance(scorer, (StubScorer, ExternalScorer))
             or not os.path.exists(adapter_path(args.data_dir))):
         return scorer
     try:
@@ -843,7 +1436,7 @@ def apply_persona(args, scorer):
         blob = torch.load(adapter_path(args.data_dir), map_location="cpu",
                           weights_only=False)
         scale = float(blob["alpha"]) / float(blob["rank"])
-        model = scorer.engine.model
+        model = scorer_model(scorer)
         applied = 0
         with torch.no_grad():
             for path, ab in blob["state"].items():
@@ -903,8 +1496,8 @@ def _derive_adapter_inner(args, cfg, key, reason):
                        f"persona/persona.jsonl"}
     t0 = time.time()
     scorer = load_pointer_scorer(args, key)   # a fresh copy; never the serving one
-    model, tokenizer = scorer.engine.model, scorer.tokenizer
-    device = model.get_device()
+    model, tokenizer = scorer_model(scorer), scorer.tokenizer
+    device = model_device(model)
     seq_len = scorer.meta["model_config"]["sequence_len"] if scorer.meta else 2048
     base_heldout = persona_eval(model, tokenizer, heldout, device, seq_len)
     standard = load_standard_docs(args, limit=64)
@@ -941,16 +1534,13 @@ def _derive_adapter_inner(args, cfg, key, reason):
     for step in range(steps):
         conv = train[_random.randrange(len(train))]
         try:
-            ids, mask = tokenizer.render_conversation(
-                conv, max_tokens=min(int(seq_len), 1024))
+            ids, mask = render_masked(tokenizer, conv,
+                                      min(int(seq_len), 1024))
         except Exception:
             continue
-        if len(ids) < 3 or sum(mask[1:]) == 0:
+        if len(ids) < 3 or sum(mask) == 0:
             continue
-        x = torch.tensor([ids[:-1]], device=device)
-        y = torch.tensor([[t if mask[i + 1] == 1 else -1
-                           for i, t in enumerate(ids[1:])]], device=device)
-        loss = model(x, y)
+        loss = masked_lm_loss_t(model, tokenizer, ids, mask, device)
         opt.zero_grad()
         loss.backward()
         opt.step()
@@ -984,8 +1574,9 @@ def _derive_adapter_inner(args, cfg, key, reason):
                           for p, (A, B) in ab.items()},
                 "rank": rank, "alpha": alpha, "meta": report},
                adapter_path(args.data_dir))
-    # swap serving: a fresh base + the new adapter merged
-    fresh = apply_persona(args, load_pointer_scorer(args, key))
+    # swap serving: a fresh base + the new adapter merged (and the
+    # named-adapter stack re-applied on top - S4)
+    fresh = apply_persona_and_stack(args, load_pointer_scorer(args, key))
     with LOCK:
         USER_SLOT["scorer"] = fresh
         USER["name"] = f"user:{key}+lora"
@@ -993,6 +1584,384 @@ def _derive_adapter_inner(args, cfg, key, reason):
         PERSONA["baseline"] = adapted_heldout
         PERSONA["probe"] = adapted_heldout
     return {"status": "ok", **report}
+
+
+# ── S4: adapters on demand ──────────────────────────────────────────
+# The persona pattern - corpus -> hook-LoRA -> gate -> apply -
+# generalized to NAMED adapters: derived from any registered dataset
+# against the serving pointer's base (or any registered model), gated
+# exactly as persona is, and stacked on the user pointer under ruling
+# 3: merged additive deltas commute, so there is no order - what is
+# gated is the COMBINATION, re-validated whole on every stack change.
+# Records live in the runtime library (the commands write them); the
+# service owns the blobs and the stack. Persona stays the standing
+# first skin - the stack stands on base+persona ground.
+
+ADAPTERS = {"stack": [], "deriving": False, "last_report": None,
+            "probes": {}}
+
+
+def adapters_dir(data_dir):
+    d = os.path.join(data_dir, "adapters")
+    os.makedirs(d, exist_ok=True)
+    return d
+
+
+def adapter_blob_path(data_dir, name):
+    return os.path.join(adapters_dir(data_dir), f"{name}.pt")
+
+
+def stack_state_path(data_dir):
+    return os.path.join(adapters_dir(data_dir), "stack.json")
+
+
+def save_stack_state(data_dir):
+    with LOCK:
+        stack = list(ADAPTERS["stack"])
+    try:
+        tmp = stack_state_path(data_dir) + ".tmp"
+        with open(tmp, "w") as f:
+            json.dump(stack, f)
+        os.replace(tmp, stack_state_path(data_dir))
+    except Exception as e:
+        print(f"[adapters] stack persist failed: {e}", flush=True)
+
+
+def load_dataset_convs(args, dataset_name):
+    """(train, heldout) conversations from a registered dataset - jsonl
+    rows in the persona shapes ({"user","assistant"} or
+    {"messages":[...]}). The dataset's holdout_every policy splits;
+    0 falls back to every 5th - a derivation must hold something out
+    for its gate to mean anything."""
+    for rec in load_registry_datasets(args.data_dir):
+        if rec.get("name") != dataset_name:
+            continue
+        hn = int(rec.get("holdout_every") or 0) or 5
+        train, hold = [], []
+        i = 0
+        for path in dataset_paths(dict(rec, format="jsonl")):
+            try:
+                with open(path) as f:
+                    for ln in f:
+                        ln = ln.strip()
+                        if not ln:
+                            continue
+                        try:
+                            o = json.loads(ln)
+                        except Exception:
+                            continue
+                        if "messages" in o:
+                            conv = {"messages": o["messages"]}
+                        elif "user" in o and "assistant" in o:
+                            conv = {"messages": [
+                                {"role": "user", "content": str(o["user"])},
+                                {"role": "assistant",
+                                 "content": str(o["assistant"])}]}
+                        else:
+                            continue
+                        (hold if i % hn == hn - 1 else train).append(conv)
+                        i += 1
+            except OSError:
+                continue
+        return train, hold
+    return None, None
+
+
+def load_base_scorer(args, base):
+    """The adapter's base: 'pointer' -> a fresh copy of the serving
+    user pointer's weights; a registered model name -> that record's
+    backend + path, loaded fresh."""
+    if base == "pointer":
+        with LOCK:
+            key = USER["pointer"]
+        if not key:
+            raise RuntimeError("no user pointer promoted - promote one "
+                               "or name a registered model as base")
+        return load_pointer_scorer(args, key), f"pointer:{key}"
+    path = os.path.join(args.data_dir, "registry.json")
+    try:
+        with open(path) as f:
+            reg = json.load(f)
+    except Exception:
+        reg = {}
+    for m in reg.get("models", []):
+        if m.get("name") == base:
+            dev = train_device(args)   # S7: fresh training loads place
+            if m.get("backend") == "hf":
+                return HFScorer(m.get("path"), device=dev), f"model:{base}"
+            return (NanochatScorer(m.get("path"), device=dev),
+                    f"model:{base}")
+    raise RuntimeError(f"'{base}' is neither 'pointer' nor a "
+                       "registered model")
+
+
+def merge_adapter_blob(model, blob):
+    """W += (alpha/rank) * B@A per target - the additive merge both
+    persona and the stack use. Returns how many linears took it."""
+    import torch
+    scale = float(blob["alpha"]) / float(blob["rank"])
+    applied = 0
+    with torch.no_grad():
+        for path, ab in blob["state"].items():
+            try:
+                w = model.get_submodule(path).weight
+            except AttributeError:
+                continue
+            delta = (ab["B"].float() @ ab["A"].float()) * scale
+            if delta.shape == w.shape:
+                w.add_(delta.to(w.device, w.dtype))
+                applied += 1
+    return applied
+
+
+def derive_named_adapter(args, spec):
+    """Derive one named adapter: corpus from a registered dataset,
+    base per spec, hook-LoRA training, the persona gate (min_gain on
+    the subject's held-out loss, guard on standard loss). Saves the
+    blob; never applies - apply is its own deliberate, gated act."""
+    import torch
+    cfg = parse_kv_mixed(getattr(args, "lora", ""), PERSONA_LORA_DEFAULTS)
+    name = spec["name"]
+    with LOCK:
+        if ADAPTERS["deriving"] or PERSONA["deriving"]:
+            return {"status": "err", "msg": "a derivation is already running"}
+        ADAPTERS["deriving"] = True
+    t0 = time.time()
+    try:
+        train, hold = load_dataset_convs(args, spec["dataset"])
+        if train is None:
+            return {"status": "err",
+                    "msg": f"dataset '{spec['dataset']}' is not registered"}
+        if len(train) < 4 or len(hold) < 1:
+            return {"status": "err",
+                    "msg": f"corpus too small ({len(train)} train / "
+                           f"{len(hold)} held-out; need 4/1)"}
+        scorer, base_ref = load_base_scorer(args, spec["base"])
+        if scorer_model(scorer) is None:
+            return {"status": "err",
+                    "msg": "the external rung holds no local weights - "
+                           "derive against a registered local model"}
+        model, tokenizer = scorer_model(scorer), scorer.tokenizer
+        device = model_device(model)
+        seq_len = (scorer.meta["model_config"]["sequence_len"]
+                   if scorer.meta else 2048)
+        base_heldout = persona_eval(model, tokenizer, hold, device, seq_len)
+        standard = load_standard_docs(args, limit=64)
+        base_std = plain_lm_eval(model, tokenizer, standard[:24], device,
+                                 seq_len)
+        rank = int(spec.get("rank") or cfg["rank"])
+        alpha = float(cfg["alpha"]) / float(cfg["rank"]) * rank
+        scale = alpha / rank
+        steps = int(spec.get("steps") or cfg["steps"])
+        paths = lora_target_paths(model, spec.get("targets")
+                                  or cfg["targets"])
+        ab, hooks = {}, []
+        for path in paths:
+            try:
+                lin = model.get_submodule(path)
+            except AttributeError:
+                continue
+            A = torch.zeros(rank, lin.in_features, device=device,
+                            dtype=torch.float32).normal_(0, 0.02
+                                                         ).requires_grad_(True)
+            Bm = torch.zeros(lin.out_features, rank, device=device,
+                             dtype=torch.float32).requires_grad_(True)
+            ab[path] = (A, Bm)
+
+            def mk_hook(A=A, Bm=Bm):
+                def hook(_mod, inputs, output):
+                    x = inputs[0]
+                    return output + (x.float() @ A.t() @ Bm.t()
+                                     ).to(output.dtype) * scale
+                return hook
+            hooks.append(lin.register_forward_hook(mk_hook()))
+        if not ab:
+            return {"status": "err",
+                    "msg": "no LoRA targets matched the base model"}
+        params = [t for pair in ab.values() for t in pair]
+        opt = torch.optim.AdamW(params, lr=float(cfg["lr"]))
+        model.train()
+        import random as _random
+        for _step in range(steps):
+            conv = train[_random.randrange(len(train))]
+            try:
+                ids, mask = render_masked(tokenizer, conv,
+                                          min(int(seq_len), 1024))
+            except Exception:
+                continue
+            if len(ids) < 3 or sum(mask) == 0:
+                continue
+            loss = masked_lm_loss_t(model, tokenizer, ids, mask, device)
+            opt.zero_grad()
+            loss.backward()
+            opt.step()
+        model.eval()
+        adapted_heldout = persona_eval(model, tokenizer, hold, device,
+                                       seq_len)
+        adapted_std = plain_lm_eval(model, tokenizer, standard[:24],
+                                    device, seq_len)
+        for h in hooks:
+            h.remove()
+        gain_ok = (adapted_heldout is not None and base_heldout is not None
+                   and adapted_heldout
+                   <= base_heldout * (1 - float(cfg["min_gain"])))
+        guard_ok = (adapted_std is None or base_std is None
+                    or adapted_std <= base_std * (1 + float(cfg["guard"])))
+        report = {
+            "name": name, "dataset": spec["dataset"], "base": base_ref,
+            "rank": rank, "alpha": alpha, "steps": steps,
+            "targets": spec.get("targets") or cfg["targets"],
+            "train_rows": len(train), "heldout_rows": len(hold),
+            "heldout_base": base_heldout,
+            "heldout_adapted": adapted_heldout,
+            "std_base": base_std, "std_adapted": adapted_std,
+            "gain_ok": gain_ok, "guard_ok": guard_ok,
+            "seconds": int(time.time() - t0),
+            "at": int(time.time() * 1000),
+        }
+        verdict = "accept" if (gain_ok and guard_ok) else "reject"
+        append_metric(args.data_dir, dict(report, kind="adapter_derive",
+                                          verdict=verdict))
+        with LOCK:
+            ADAPTERS["last_report"] = dict(report, verdict=verdict)
+        print(f"[adapters] derive {name}: {verdict} {report}", flush=True)
+        if verdict == "reject":
+            return {"status": "err",
+                    "msg": "derivation rejected by its gate", **report}
+        torch.save({"state": {p: {"A": A.detach().cpu(),
+                                  "B": B.detach().cpu()}
+                              for p, (A, B) in ab.items()},
+                    "rank": rank, "alpha": alpha, "meta": report},
+                   adapter_blob_path(args.data_dir, name))
+        del scorer
+        try:
+            torch.cuda.empty_cache()
+        except Exception:
+            pass
+        return {"status": "ok", **report}
+    finally:
+        with LOCK:
+            ADAPTERS["deriving"] = False
+
+
+def apply_stack_gated(args, new_stack, reason):
+    """Ruling 3, executed: rebuild the user scorer from a FRESH base +
+    persona + every member merged (additive deltas commute; rebuilding
+    beats subtracting in bf16), then gate the COMBINATION - every
+    member's subject held-out loss with the full stack applied must
+    still clear min_gain against the fresh bare base, and one standard
+    -loss guard covers the whole stack. Pass -> swap serving; fail ->
+    serving untouched, the numbers say which member broke."""
+    import torch
+    cfg = parse_kv_mixed(getattr(args, "lora", ""), PERSONA_LORA_DEFAULTS)
+    with LOCK:
+        key = USER["pointer"]
+    if not key:
+        return {"status": "err", "msg": "no user pointer promoted"}
+    try:
+        scorer = apply_persona(args, load_pointer_scorer(args, key))
+    except Exception as e:
+        return {"status": "err", "msg": f"base load failed: {e}"}
+    if isinstance(scorer, (StubScorer, ExternalScorer)):
+        return {"status": "err",
+                "msg": "no local weights to stack (stub, or the "
+                       "external rung - engine hot-swap when wired)"}
+    model, tokenizer = scorer_model(scorer), scorer.tokenizer
+    device = model_device(model)
+    seq_len = (scorer.meta["model_config"]["sequence_len"]
+               if scorer.meta else 2048)
+    holds, blobs = {}, {}
+    for name in new_stack:
+        try:
+            blobs[name] = torch.load(adapter_blob_path(args.data_dir, name),
+                                     map_location="cpu", weights_only=False)
+        except Exception as e:
+            return {"status": "err", "msg": f"adapter '{name}' blob "
+                                            f"unreadable: {e}"}
+        _tr, hold = load_dataset_convs(
+            args, blobs[name]["meta"].get("dataset", ""))
+        holds[name] = hold or []
+    bare = {name: persona_eval(model, tokenizer, holds[name], device,
+                               seq_len) for name in new_stack}
+    standard = load_standard_docs(args, limit=64)
+    std_bare = plain_lm_eval(model, tokenizer, standard[:24], device,
+                             seq_len)
+    for name in new_stack:
+        merge_adapter_blob(model, blobs[name])
+    stacked = {name: persona_eval(model, tokenizer, holds[name], device,
+                                  seq_len) for name in new_stack}
+    std_stacked = plain_lm_eval(model, tokenizer, standard[:24], device,
+                                seq_len)
+    members = {}
+    all_ok = True
+    for name in new_stack:
+        ok = (stacked[name] is None or bare[name] is None
+              or stacked[name] <= bare[name] * (1 - float(cfg["min_gain"])))
+        members[name] = {"bare": bare[name], "stacked": stacked[name],
+                         "gain_ok": ok}
+        all_ok = all_ok and ok
+    guard_ok = (std_stacked is None or std_bare is None
+                or std_stacked <= std_bare * (1 + float(cfg["guard"])))
+    report = {"stack": list(new_stack), "members": members,
+              "std_bare": std_bare, "std_stacked": std_stacked,
+              "guard_ok": guard_ok, "reason": reason,
+              "at": int(time.time() * 1000)}
+    verdict = "accept" if (all_ok and guard_ok) else "reject"
+    append_metric(args.data_dir, dict(report, kind="adapter_stack",
+                                      verdict=verdict))
+    with LOCK:
+        ADAPTERS["last_report"] = dict(report, verdict=verdict)
+    print(f"[adapters] stack {new_stack}: {verdict}", flush=True)
+    if verdict == "reject":
+        del model
+        return {"status": "err",
+                "msg": "stack rejected by the unit gate", **report}
+    if new_stack:
+        scorer.name = scorer.name + "+adp:" + ",".join(new_stack)
+    with LOCK:
+        USER_SLOT["scorer"] = scorer
+        USER["name"] = "user:" + key + (
+            "+lora" if "+lora" in getattr(scorer, "name", "") else "") + (
+            "+adp" if new_stack else "")
+        ADAPTERS["stack"] = list(new_stack)
+        ADAPTERS["probes"] = {}
+    save_stack_state(args.data_dir)
+    return {"status": "ok", **report}
+
+
+def apply_persona_and_stack(args, scorer):
+    """The re-apply path (promote, rollback, restart): persona first,
+    then the persisted stack merged UNGATED - the gate ran when the
+    stack was formed; base movement is re-audited by the watchdog's
+    stack probe on its own cadence."""
+    scorer = apply_persona(args, scorer)
+    if isinstance(scorer, (StubScorer, ExternalScorer)):
+        return scorer
+    try:
+        with open(stack_state_path(args.data_dir)) as f:
+            stack = json.load(f)
+    except Exception:
+        return scorer
+    if not stack:
+        return scorer
+    import torch
+    model = scorer_model(scorer)
+    applied = []
+    for name in stack:
+        try:
+            blob = torch.load(adapter_blob_path(args.data_dir, name),
+                              map_location="cpu", weights_only=False)
+            if merge_adapter_blob(model, blob):
+                applied.append(name)
+        except Exception as e:
+            print(f"[adapters] re-apply of '{name}' failed: {e}",
+                  flush=True)
+    if applied:
+        scorer.name = scorer.name + "+adp:" + ",".join(applied)
+        with LOCK:
+            ADAPTERS["stack"] = applied
+        print(f"[adapters] stack re-applied: {applied}", flush=True)
+    return scorer
 
 
 def load_standard_docs(args, limit=512):
@@ -1020,6 +1989,939 @@ def load_standard_docs(args, limit=512):
     return docs
 
 
+# ── S5: the posture solver and the delta trainer ────────────────────
+
+TRAIN_TLS = threading.local()
+
+
+def solve_posture(args, live):
+    """Ruling 4: fits = free memory minus the margin (the serving
+    model already resides, so 'free' is what remains beside it). The
+    ladder on this branch: full -> lora(r) -> frozen; full-sharded
+    waits for S7 placement, qlora for a quantization-dependency
+    ruling; full stays nanochat-only until the ring learns full hf
+    saves. MODEL_POSTURE= forces a rung, published; a forced rung
+    that does not fit REFUSES training - loudly, with the arithmetic -
+    rather than OOMing at step one. Unknown free memory is permissive
+    and says so ('source': none)."""
+    if isinstance(live, ExternalScorer):
+        return "frozen", {"backend": "external",
+                          "why": "the engine holds the weights; "
+                                 "promotion at this rung is adapter "
+                                 "hot-swap (ruling 8)"}
+    model = scorer_model(live)
+    params = sum(p.numel() for p in model.parameters())
+    try:
+        bytes_per = next(model.parameters()).element_size()
+    except StopIteration:
+        bytes_per = 4
+    weights_mb = int(params * bytes_per / 1048576)
+    res = probe_resources(args.data_dir)
+    gpus = res.get("gpus") or []
+    if gpus:
+        free_mb = gpus[0]["free_mb"]
+        total_mb = gpus[0]["total_mb"]
+        source = f"gpu{gpus[0]['index']}"
+    else:
+        free_mb = res.get("ram_free_mb")
+        total_mb = free_mb
+        source = "meminfo" if free_mb is not None else "none"
+    headroom_pct = float(getattr(args, "headroom", "15") or 15)
+    margin_mb = int((total_mb or 0) * headroom_pct / 100)
+    # full: a deepcopy candidate + fp32 AdamW moments + grads
+    need_full = weights_mb + int(params * 12 / 1048576)
+    # lora: tiny A/B + backward activations through the frozen base
+    need_lora = 500 + int(weights_mb * 0.05)
+    backend = "hf" if isinstance(live, HFScorer) else "nanochat"
+    arith = {"params": params, "weights_mb": weights_mb,
+             "free_mb": free_mb, "margin_mb": margin_mb,
+             "need_full_mb": need_full, "need_lora_mb": need_lora,
+             "source": source, "backend": backend}
+
+    def fits(need):
+        return free_mb is None or need + margin_mb <= free_mb
+
+    forced = str(getattr(args, "posture", "auto") or "auto")
+    if forced != "auto":
+        rung = forced.split("(", 1)[0]
+        ok = {"full": backend == "nanochat" and fits(need_full),
+              "lora": fits(need_lora),
+              "frozen": True}.get(rung)
+        if ok is None:
+            return "refused", dict(
+                arith, forced=forced,
+                why=f"unknown posture '{forced}' (full|lora|frozen)")
+        if not ok:
+            need = need_full if rung == "full" else need_lora
+            why = (f"forced '{forced}' does not fit: need {need}MB + "
+                   f"{margin_mb}MB margin, free {free_mb}MB ({source})"
+                   if backend != "hf" or rung != "full" else
+                   "full is nanochat-only until the ring learns full "
+                   "hf saves")
+            return "refused", dict(arith, forced=forced, why=why)
+        return rung, dict(arith, forced=forced)
+    if backend == "nanochat" and fits(need_full):
+        return "full", arith
+    if fits(need_lora):
+        return "lora", arith
+    return "frozen", arith
+
+
+def merge_ring_deltas(scorer, data_dir, upto=None):
+    """Reconstruct merged CPT state from a delta ring: each delta blob
+    was trained relative to the base plus every earlier merge, so
+    merging chronologically reconstructs exactly. upto=<dir basename>
+    stops after that checkpoint (a pointer's view); None merges all -
+    the restart-resume path."""
+    import glob as _g
+    import torch
+    model = scorer_model(scorer)
+    merged = 0
+    last = None
+    for d in sorted(_g.glob(os.path.join(data_dir, "checkpoints", "cpt-*"))):
+        f = os.path.join(d, "delta.pt")
+        if not os.path.isfile(f):
+            continue
+        try:
+            blob = torch.load(f, map_location="cpu", weights_only=False)
+        except Exception as e:
+            print(f"[service] delta {d} unreadable: {e}", flush=True)
+            continue
+        if merge_adapter_blob(model, blob):
+            merged += 1
+            last = os.path.basename(d)
+        if upto and os.path.basename(d) == upto:
+            break
+    if merged and last:
+        base = scorer.name.split(":cpt-", 1)[0]
+        step = last.rsplit("-", 1)[-1].lstrip("0") or "0"
+        scorer.name = f"{base}:cpt-{int(step)}"
+        print(f"[service] {merged} ring delta(s) merged -> {scorer.name}",
+              flush=True)
+    return scorer
+
+
+def prune_ring(args):
+    """Ruling 5: the ring prunes by BYTE budget, with two floors that
+    hold regardless - the protected user set never prunes, and neither
+    does the newest entry (the ring is the restart-recovery path and
+    must never empty). Full checkpoints and delta blobs meter the same
+    budget."""
+    ckroot = os.path.join(args.data_dir, "checkpoints")
+    if not os.path.isdir(ckroot):
+        return
+    budget = float(getattr(args, "ring_gb", "100") or 100) * 1073741824
+
+    def du(d):
+        t = 0
+        for base, _dd, files in os.walk(os.path.join(ckroot, d)):
+            for n in files:
+                try:
+                    t += os.path.getsize(os.path.join(base, n))
+                except OSError:
+                    pass
+        return t
+
+    entries = sorted(e for e in os.listdir(ckroot)
+                     if os.path.isdir(os.path.join(ckroot, e)))
+    if not entries:
+        return
+    sizes = {e: du(e) for e in entries}
+    with LOCK:
+        protected = {v for v in (USER["pointer"], USER["last_good"],
+                                 USER["ready"]) if v}
+    total = sum(sizes.values())
+    for old in entries[:-1]:
+        if total <= budget:
+            break
+        if old in protected:
+            continue
+        shutil.rmtree(os.path.join(ckroot, old), ignore_errors=True)
+        total -= sizes[old]
+
+
+def trainer_lora_loop(args, live, arith):
+    """The lora rung (S5): CPT as base + delta. The delta is hook-LoRA
+    on the SERVING model's own weights - zero-copy - with the hooks
+    gated per-thread (TRAIN_TLS): only the trainer thread flips its
+    thread-local on for its steps and candidate evals, so serving
+    threads never see the candidate. Same drain, same mix, same gates
+    as the full rung. Promotion MERGES the delta into the serving
+    weights (additive; a verdict generated mid-merge could straddle
+    old and new weights once - the epsilon audit is the standing net)
+    and rings the delta blob with its base ref: megabytes, not
+    gigabytes. Reset zeroes the delta."""
+    import torch
+    import random as _r
+    mix = parse_kv(args.mix, {"fresh": 0.25, "replay": 0.25,
+                              "standard": 0.5})
+    gate_cfg = parse_kv(args.gate, {"every": 50, "regress": 0.02,
+                                    "fails": 3, "agree_slack": 0.05,
+                                    "agree_n": 8})
+    cfg = parse_kv_mixed(getattr(args, "lora", ""), PERSONA_LORA_DEFAULTS)
+    model, tokenizer = scorer_model(live), live.tokenizer
+    device = model_device(model)
+    seq_len = min(int(live.meta["model_config"]["sequence_len"]
+                      if live.meta else 2048), 2048)
+    for p in model.parameters():
+        p.requires_grad_(False)
+    rank = int(cfg["rank"])
+    scale = 2.0  # alpha = 2 * rank
+    paths = lora_target_paths(model, cfg["targets"])
+    ab, hooks = {}, []
+    for path in paths:
+        try:
+            lin = model.get_submodule(path)
+        except AttributeError:
+            continue
+        A = torch.zeros(rank, lin.in_features, device=device,
+                        dtype=torch.float32).normal_(0, 0.02
+                                                     ).requires_grad_(True)
+        Bm = torch.zeros(lin.out_features, rank, device=device,
+                         dtype=torch.float32).requires_grad_(True)
+        ab[path] = (A, Bm)
+
+        def mk_hook(A=A, Bm=Bm):
+            def hook(_mod, inputs, output):
+                if not getattr(TRAIN_TLS, "on", False):
+                    return output
+                x = inputs[0]
+                return output + (x.float() @ A.t() @ Bm.t()
+                                 ).to(output.dtype) * scale
+            return hook
+        hooks.append(lin.register_forward_hook(mk_hook()))
+    if not ab:
+        with LOCK:
+            TRAINER["active"] = False
+            TRAINER["posture"] = "frozen - no LoRA targets matched"
+        return
+
+    def fresh_opt():
+        return torch.optim.AdamW([t for pr in ab.values() for t in pr],
+                                 lr=float(args.lr))
+
+    def zero_delta():
+        with torch.no_grad():
+            for A, Bm in ab.values():
+                A.normal_(0, 0.02)
+                Bm.zero_()
+
+    opt = fresh_opt()
+    replay_path = os.path.join(args.data_dir, "replay.jsonl")
+    heldout_path = os.path.join(args.data_dir, "heldout.jsonl")
+    pairs_path = os.path.join(args.data_dir, "heldout_pairs.jsonl")
+    replay = []
+    for path, dest in ((replay_path, replay), (heldout_path, HELDOUT_FRESH)):
+        if os.path.exists(path):
+            with open(path) as f:
+                dest.extend(ln.strip() for ln in f if ln.strip())
+    if os.path.exists(pairs_path) and not HELDOUT_PAIRS:
+        with open(pairs_path) as f:
+            for ln in f:
+                ln = ln.strip()
+                if ln:
+                    try:
+                        HELDOUT_PAIRS.append(json.loads(ln))
+                    except Exception:
+                        pass
+    standard = load_standard_docs(args)
+    anchor_docs = load_anchor_docs(args)
+    if anchor_docs:
+        heldout_std = anchor_docs[:24]
+    else:
+        heldout_std = standard[:24]
+        standard = standard[24:]
+    ds_pools = {}
+    ds_holdout = {}
+
+    def refresh_ds_pools():
+        for rec in load_registry_datasets(args.data_dir):
+            nm = rec.get("name")
+            if not nm or nm in ("fresh", "replay", "standard"):
+                continue
+            if mix.get(nm, 0) <= 0:
+                continue
+            tr, ho = load_dataset_docs(rec)
+            if tr:
+                ds_pools[nm] = tr
+            if ho:
+                ds_holdout[nm] = ho
+
+    refresh_ds_pools()
+    with LOCK:
+        TRAINER["active"] = True
+        TRAINER["mix"] = mix
+        TRAINER["standard_docs"] = len(standard)
+        TRAINER["replay_size"] = len(replay)
+        TRAINER["dataset_pools"] = {k: len(v) for k, v in ds_pools.items()}
+        TRAINER["anchor"] = bool(anchor_docs)
+
+    def chunks_of(docs):
+        toks = []
+        for d in docs:
+            toks.extend(encode_doc(tokenizer, d))
+        return [toks[i:i + seq_len + 1]
+                for i in range(0, len(toks) - seq_len - 1, seq_len)]
+
+    def delta_on(fn, *a):
+        TRAIN_TLS.on = True
+        try:
+            return fn(*a)
+        finally:
+            TRAIN_TLS.on = False
+
+    def eval_chunks(chs):
+        if not chs:
+            return None
+        import torch as _t
+        tot = 0.0
+        with _t.no_grad():
+            for c in chs[:16]:
+                tot += float(plain_lm_loss_t(model, tokenizer, c, device))
+        return tot / min(len(chs), 16)
+
+    def agreement(n, as_candidate):
+        pairs = HELDOUT_PAIRS[-int(n):]
+        if not pairs:
+            return None
+        total = 0.0
+        for pr in pairs:
+            def gen():
+                return live.generate_text(
+                    [{"role": "user",
+                      "content": salience_prompt("?", pr["input"], 0, 0)}],
+                    max_tokens=64, temperature=0.01, top_k=1)
+            completion = delta_on(gen) if as_candidate else gen()
+            sal, _w, _p = parse_salience(completion)
+            if sal is None:
+                sal = 0.5
+            total += min(1.0, abs(sal - float(pr["target"])))
+        return round(1.0 - total / len(pairs), 4)
+
+    heldout_std_chunks = chunks_of(heldout_std)
+    live_std = eval_chunks(heldout_std_chunks)
+    live_fresh = None
+    live_agree = None
+    fails = 0
+    ema = None
+    tick = 0
+    print(f"[trainer] lora rung on {live.name}: rank={rank} "
+          f"targets={len(ab)} mix={mix} gate={gate_cfg}", flush=True)
+    while True:
+        time.sleep(max(float(args.train_interval), 0.05))
+        if EXPERIMENT["running"] or SFT["running"]:
+            continue   # the bench/SFT borrows the time-share (ruling 7)
+        tick += 1
+        if tick % 30 == 1:
+            refresh_ds_pools()
+            with LOCK:
+                TRAINER["dataset_pools"] = {k: len(v)
+                                            for k, v in ds_pools.items()}
+        with LOCK:
+            fresh_in = list(TRAIN_Q)
+            TRAIN_Q.clear()
+        fresh_docs = []
+        for entry in fresh_in:
+            d = entry["doc"] if isinstance(entry, dict) else entry
+            pair = entry.get("pair") if isinstance(entry, dict) else None
+            if _r.random() < 0.1 and len(HELDOUT_FRESH) < 512:
+                with LOCK:
+                    HELDOUT_FRESH.append(d)
+                with open(heldout_path, "a") as f:
+                    f.write(d.replace("\n", " ") + "\n")
+                if pair:
+                    HELDOUT_PAIRS.append(pair)
+                    with open(pairs_path, "a") as f:
+                        f.write(json.dumps(pair) + "\n")
+                    live_agree = None
+                live_fresh = None
+            else:
+                fresh_docs.append(d)
+                replay.append(d)
+                with open(replay_path, "a") as f:
+                    f.write(d.replace("\n", " ") + "\n")
+        if len(replay) > 4096:
+            _r.shuffle(replay)
+            replay = replay[:4096]
+            with open(replay_path, "w") as f:
+                f.writelines(d + "\n" for d in replay)
+        pools = dict(ds_pools)
+        pools.update({"fresh": fresh_docs or replay, "replay": replay,
+                      "standard": standard})
+        avail = {k: p for k, p in pools.items() if p and mix.get(k, 0) > 0}
+        if not avail:
+            with LOCK:
+                TRAINER["replay_size"] = len(replay)
+            continue
+        total_w = sum(mix[k] for k in avail)
+        docs = []
+        for k, pool in avail.items():
+            n = max(1, round(6 * mix[k] / total_w))
+            docs.extend(_r.choice(pool) for _ in range(n))
+        chs = chunks_of(docs)
+        if not chs:
+            continue
+        _r.shuffle(chs)
+        try:
+            TRAIN_TLS.on = True
+            loss = plain_lm_loss_t(model, tokenizer, chs[0], device)
+            opt.zero_grad()
+            loss.backward()
+            opt.step()
+        except torch.cuda.OutOfMemoryError:
+            torch.cuda.empty_cache()
+            print("[trainer] lora step OOM - skipped", flush=True)
+            continue
+        finally:
+            TRAIN_TLS.on = False
+        lv = float(loss.detach())
+        ema = lv if ema is None else 0.98 * ema + 0.02 * lv
+        with LOCK:
+            TRAINER["steps"] += 1
+            TRAINER["loss_ema"] = round(ema, 4)
+            TRAINER["replay_size"] = len(replay)
+            steps = TRAINER["steps"]
+        if steps % 10 == 0:
+            append_metric(args.data_dir, {"kind": "loss", "step": steps,
+                                          "loss": round(ema, 4)})
+        if steps % int(gate_cfg["every"]) != 0:
+            continue
+        cand_std = delta_on(eval_chunks, heldout_std_chunks)
+        std_ok = (cand_std is None or live_std is None
+                  or cand_std <= live_std * (1 + gate_cfg["regress"]))
+        cand_fresh = live_fresh2 = cand_agree = None
+        ds_losses = {}
+        for nm, docs2 in ds_holdout.items():
+            dl = delta_on(eval_chunks, chunks_of(docs2[:24]))
+            if dl is not None:
+                ds_losses[nm] = dl
+        if len(HELDOUT_PAIRS) >= 4:
+            if live_agree is None:
+                live_agree = agreement(gate_cfg["agree_n"], False)
+            cand_agree = agreement(gate_cfg["agree_n"], True)
+            learn_ok = (cand_agree is None or live_agree is None
+                        or cand_agree >= live_agree - gate_cfg["agree_slack"])
+        else:
+            heldout_fresh_chunks = chunks_of(HELDOUT_FRESH[-64:])
+            if live_fresh is None:
+                live_fresh = eval_chunks(heldout_fresh_chunks)
+            live_fresh2 = live_fresh
+            cand_fresh = delta_on(eval_chunks, heldout_fresh_chunks)
+            learn_ok = (cand_fresh is None or live_fresh is None
+                        or cand_fresh <= live_fresh)
+        verdict = "promote" if (std_ok and learn_ok) else "hold"
+        gate_row = {"step": steps, "verdict": verdict,
+                    "cand_std": cand_std, "live_std": live_std,
+                    "cand_fresh": cand_fresh, "live_fresh": live_fresh2,
+                    "cand_agree": cand_agree, "live_agree": live_agree,
+                    "pairs": len(HELDOUT_PAIRS),
+                    "datasets": ds_losses or None,
+                    "posture": "lora"}
+        print(f"[trainer] gate: {gate_row}", flush=True)
+        with LOCK:
+            TRAINER["gates"] += 1
+            TRAINER["last_gate"] = gate_row
+        append_metric(args.data_dir, dict(gate_row, kind="gate"))
+        if verdict == "promote":
+            saved_key = None
+            try:
+                ckdir = os.path.join(
+                    args.data_dir, "checkpoints",
+                    f"cpt-{time.strftime('%Y%m%d%H%M%S')}-{steps:06d}")
+                os.makedirs(ckdir, exist_ok=True)
+                torch.save({"state": {p: {"A": A.detach().cpu(),
+                                          "B": B.detach().cpu()}
+                                      for p, (A, B) in ab.items()},
+                            "rank": rank, "alpha": scale * rank,
+                            "base_ref": live.name,
+                            "backend": arith.get("backend"),
+                            "step": steps},
+                           os.path.join(ckdir, "delta.pt"))
+                saved_key = os.path.basename(ckdir)
+            except Exception as e:
+                print(f"[trainer] delta ring save failed "
+                      f"(promoting anyway): {e}", flush=True)
+            with torch.no_grad():
+                for path, (A, Bm) in ab.items():
+                    try:
+                        w = model.get_submodule(path).weight
+                    except AttributeError:
+                        continue
+                    w.add_(((Bm.float() @ A.float()) * scale
+                            ).to(w.device, w.dtype))
+            zero_delta()
+            opt = fresh_opt()
+            base = live.name.split("+", 1)[0].split(":cpt-", 1)[0]
+            live.name = f"{base}:cpt-{steps}"
+            with LOCK:
+                STATE["promotions"] += 1
+                TRAINER["promotions"] += 1
+            set_soak(saved_key)
+            prune_ring(args)
+            live_std = eval_chunks(heldout_std_chunks)
+            live_fresh = None
+            live_agree = None
+            fails = 0
+            print(f"[trainer] PROMOTED (merge) -> {live.name}", flush=True)
+        else:
+            fails += 1
+            with LOCK:
+                TRAINER["fails"] = fails
+            if fails >= int(gate_cfg["fails"]):
+                zero_delta()
+                opt = fresh_opt()
+                fails = 0
+                with LOCK:
+                    TRAINER["resets"] += 1
+                    TRAINER["fails"] = 0
+                print("[trainer] lora candidate reset", flush=True)
+
+
+# ── S7: placement ───────────────────────────────────────────────────
+# Serve and train become placeable roles over the resource map. The
+# degenerate placement - one device, time-shared - is today's shipped
+# behavior and the fallback everywhere the config asks for hardware
+# the box does not have. On this branch the placed train device
+# carries the training-side FRESH loads (bench arms, adapter
+# derivations, mints); the full-rung candidate and multi-node stay
+# time-shared/birth-path until the owner-box run proves the split.
+
+def parse_placement(args):
+    """MODEL_PLACEMENT= 'serve=0,train=1' - GPU indices per role.
+    Empty = time-share (today). Roles asking for absent GPUs fall
+    back to serve, honestly, and /status.placement says so."""
+    spec = parse_kv(getattr(args, "placement", "") or "", {})
+    res = probe_resources(args.data_dir)
+    n = len(res.get("gpus") or [])
+    out = {"spec": getattr(args, "placement", "") or "",
+           "gpus_visible": n, "serve": None, "train": None,
+           "mode": "time-share"}
+    if n == 0:
+        return out
+    serve = int(spec.get("serve", 0))
+    out["serve"] = serve if serve < n else 0
+    if "train" in spec:
+        t = int(spec["train"])
+        if t < n and t != out["serve"]:
+            out["train"] = t
+            out["mode"] = "split"
+        else:
+            out["train"] = out["serve"]
+            out["mode"] = ("time-share (train GPU absent or same "
+                           "as serve)")
+    else:
+        out["train"] = out["serve"]
+    return out
+
+
+def train_device(args):
+    """Where training-side fresh loads go: the placed train GPU when
+    split, else wherever serving lives."""
+    import torch
+    if not torch.cuda.is_available():
+        return torch.device("cpu")
+    pl = parse_placement(args)
+    if pl["train"] is not None:
+        return torch.device(f"cuda:{pl['train']}")
+    return torch.device("cuda")
+
+
+# ── S6: the bench ───────────────────────────────────────────────────
+# Recipes snap the bricks together (records in the runtime library,
+# resolved by the commands and passed here whole - the service stays
+# store-blind); an experiment runs each arm as a fresh base + bounded
+# delta and scores with the gates' own instruments on eval material
+# PINNED at run start (ruling 7). On one card the bench borrows the
+# standing trainer's time-share: candidate steps pause, serving never
+# does, and the borrow is published.
+
+EXPERIMENT = {"running": False, "current": None, "last": None}
+
+
+def run_experiment_arm(args, recipe, budget_steps, eval_sets, pairs):
+    """One arm: fresh base, bare measurement, a bounded hook-LoRA delta
+    trained on the recipe's mix, delta measurement, weights freed. The
+    delta is always-on-hooks - this model is private to the arm, never
+    serving."""
+    import torch
+    import random as _r
+    scorer, base_ref = load_base_scorer(args, recipe.get("base") or "pointer")
+    if scorer_model(scorer) is None:
+        raise RuntimeError("the external rung holds no local weights - "
+                           "bench against a registered local model")
+    model, tokenizer = scorer_model(scorer), scorer.tokenizer
+    device = model_device(model)
+    seq_len = min(int(scorer.meta["model_config"]["sequence_len"]
+                      if scorer.meta else 2048), 2048)
+    for p in model.parameters():
+        p.requires_grad_(False)
+
+    def chunks_of(docs):
+        toks = []
+        for d in docs:
+            toks.extend(encode_doc(tokenizer, d))
+        return [toks[i:i + seq_len + 1]
+                for i in range(0, len(toks) - seq_len - 1, seq_len)]
+
+    eval_chunks = {nm: chunks_of(docs) for nm, docs in eval_sets.items()}
+
+    def eval_one(chs):
+        if not chs:
+            return None
+        tot = 0.0
+        with torch.no_grad():
+            for c in chs[:16]:
+                tot += float(plain_lm_loss_t(model, tokenizer, c, device))
+        return round(tot / min(len(chs), 16), 4)
+
+    def agreement():
+        if len(pairs) < 4:
+            return None
+        sel = pairs[-8:]
+        total = 0.0
+        for pr in sel:
+            completion = scorer.generate_text(
+                [{"role": "user",
+                  "content": salience_prompt("?", pr["input"], 0, 0)}],
+                max_tokens=64, temperature=0.01, top_k=1)
+            sal, _w, _p = parse_salience(completion)
+            if sal is None:
+                sal = 0.5
+            total += min(1.0, abs(sal - float(pr["target"])))
+        return round(1.0 - total / len(sel), 4)
+
+    def measure():
+        return {"evals": {nm: eval_one(chs)
+                          for nm, chs in eval_chunks.items()},
+                "agreement": agreement()}
+
+    before = measure()
+    mix = parse_kv(recipe.get("mix", ""), {})
+    pools = {}
+    for rec in load_registry_datasets(args.data_dir):
+        nm = rec.get("name")
+        if nm and mix.get(nm, 0) > 0:
+            tr, _ho = load_dataset_docs(rec)
+            if tr:
+                pools[nm] = tr
+    cfg = parse_kv_mixed(getattr(args, "lora", ""), PERSONA_LORA_DEFAULTS)
+    rank = int(cfg["rank"])
+    scale = 2.0
+    ab, hooks = {}, []
+    for path in lora_target_paths(model, cfg["targets"]):
+        try:
+            lin = model.get_submodule(path)
+        except AttributeError:
+            continue
+        A = torch.zeros(rank, lin.in_features, device=device,
+                        dtype=torch.float32).normal_(0, 0.02
+                                                     ).requires_grad_(True)
+        Bm = torch.zeros(lin.out_features, rank, device=device,
+                         dtype=torch.float32).requires_grad_(True)
+        ab[path] = (A, Bm)
+
+        def mk_hook(A=A, Bm=Bm):
+            def hook(_m, inputs, output):
+                x = inputs[0]
+                return output + (x.float() @ A.t() @ Bm.t()
+                                 ).to(output.dtype) * scale
+            return hook
+        hooks.append(lin.register_forward_hook(mk_hook()))
+    steps_run = 0
+    if ab and pools:
+        opt = torch.optim.AdamW([t for pr2 in ab.values() for t in pr2],
+                                lr=float(recipe.get("lr") or args.lr))
+        total_w = sum(mix[k] for k in pools)
+        model.train()
+        for _s in range(int(budget_steps)):
+            docs = []
+            for k, pool in pools.items():
+                n = max(1, round(4 * mix[k] / total_w))
+                docs.extend(_r.choice(pool) for _ in range(n))
+            chs = chunks_of(docs)
+            if not chs:
+                continue
+            loss = plain_lm_loss_t(model, tokenizer, chs[0], device)
+            opt.zero_grad()
+            loss.backward()
+            opt.step()
+            steps_run += 1
+        model.eval()
+    after = measure()
+    for h in hooks:
+        h.remove()
+    result = {"base": base_ref,
+              "pools": {k: len(v) for k, v in pools.items()},
+              "steps_run": steps_run, "before": before, "after": after}
+    del scorer, model
+    try:
+        torch.cuda.empty_cache()
+    except Exception:
+        pass
+    return result
+
+
+def run_experiment_thread(args, spec):
+    """One bench run: pin the eval material (ruling 7 - frozen at run
+    start, hashes recorded so the report names exactly what it
+    measured), run each arm, append the report to experiments.jsonl.
+    The standing trainer's candidate steps pause for the duration -
+    serving never does - and the borrow rides /status."""
+    with LOCK:
+        EXPERIMENT["running"] = True
+        EXPERIMENT["current"] = {"name": spec["name"],
+                                 "started": int(time.time() * 1000),
+                                 "arms": [a for a, _r2 in spec["arms"]]}
+        TRAINER["borrowed_by"] = spec["name"]
+    report = {"name": spec["name"], "budget_steps": spec["budget_steps"],
+              "bricks_changed": spec.get("bricks_changed"),
+              "one_brick": spec.get("one_brick"),
+              "started": int(time.time() * 1000)}
+    try:
+        eval_names = set()
+        for _a, recipe in spec["arms"]:
+            for nm in str(recipe.get("evals", "")).split(","):
+                if nm.strip():
+                    eval_names.add(nm.strip())
+            for k in parse_kv(recipe.get("mix", ""), {}):
+                eval_names.add(k)
+        eval_sets = {}
+        pinned = {}
+        for rec in load_registry_datasets(args.data_dir):
+            nm = rec.get("name")
+            if nm in eval_names:
+                tr, ho = load_dataset_docs(rec)
+                docs = ho or tr[:24]
+                if docs:
+                    eval_sets[nm] = docs[:24]
+                    pinned[nm] = rec.get("hash")
+        anchor_docs = load_anchor_docs(args)
+        std = (anchor_docs[:24] if anchor_docs
+               else load_standard_docs(args, limit=64)[:24])
+        if std:
+            eval_sets["standard"] = std
+            pinned["standard"] = "anchor" if anchor_docs else "base_data"
+        pairs = list(HELDOUT_PAIRS)
+        report["pinned"] = pinned
+        arms_out = {}
+        for arm_name, recipe in spec["arms"]:
+            arms_out[arm_name] = run_experiment_arm(
+                args, recipe, spec["budget_steps"], eval_sets, pairs)
+        report["arms"] = arms_out
+        report["status"] = "done"
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        report["status"] = "error"
+        report["error"] = str(e)[:500]
+    report["finished"] = int(time.time() * 1000)
+    try:
+        with open(os.path.join(args.data_dir, "experiments.jsonl"),
+                  "a") as f:
+            f.write(json.dumps(report) + "\n")
+    except Exception:
+        pass
+    append_metric(args.data_dir, {"kind": "experiment",
+                                  "name": spec["name"],
+                                  "status": report["status"]})
+    with LOCK:
+        EXPERIMENT["running"] = False
+        EXPERIMENT["current"] = None
+        EXPERIMENT["last"] = report
+        TRAINER["borrowed_by"] = None
+    print(f"[bench] {spec['name']}: {report['status']}", flush=True)
+
+
+# ── S8: SFT joins the loop ──────────────────────────────────────────
+# The gate design is docs/spectrum-s8.md, written first: the SFT gate
+# is the bench's instruments guarding the ENTRY to the ring; after the
+# ring, everything is the shipped soak-and-user-gate machinery. The
+# sft-* ring namespace is the safety: cpt-* deltas are by definition
+# already merged into serving (resume re-merges them); an accepted SFT
+# candidate is NOT, so resume never touches sft-* - only a deliberate
+# promote-by-key puts it on the fast lane for its soak.
+
+SFT = {"running": False, "current": None, "last": None}
+
+
+def run_sft_thread(args, spec):
+    import torch
+    import random as _r
+    cfg = parse_kv_mixed(getattr(args, "lora", ""), PERSONA_LORA_DEFAULTS)
+    name = spec["name"]
+    with LOCK:
+        SFT["running"] = True
+        SFT["current"] = {"name": name, "dataset": spec["dataset"],
+                          "started": int(time.time() * 1000)}
+        TRAINER["borrowed_by"] = f"sft:{name}"
+    report = {"name": name, "sft": True, "dataset": spec["dataset"],
+              "started": int(time.time() * 1000)}
+    t0 = time.time()
+    try:
+        train, hold = load_dataset_convs(args, spec["dataset"])
+        if train is None:
+            raise RuntimeError(
+                f"dataset '{spec['dataset']}' is not registered")
+        if len(train) < 8 or len(hold) < 2:
+            raise RuntimeError(
+                f"corpus too small ({len(train)} train / {len(hold)} "
+                "held-out; SFT needs 8/2)")
+        scorer, base_ref = load_base_scorer(args, spec["base"])
+        if scorer_model(scorer) is None:
+            raise RuntimeError("the external rung holds no local "
+                               "weights - SFT against a registered "
+                               "local model")
+        model, tokenizer = scorer_model(scorer), scorer.tokenizer
+        device = model_device(model)
+        seq_len = min(int(scorer.meta["model_config"]["sequence_len"]
+                          if scorer.meta else 2048), 2048)
+        for p in model.parameters():
+            p.requires_grad_(False)
+        # ── bare baselines, before any hook exists ──────────────────
+        base_subject = persona_eval(model, tokenizer, hold, device,
+                                    seq_len)
+        anchor_docs = load_anchor_docs(args)
+        std_docs = (anchor_docs[:24] if anchor_docs
+                    else load_standard_docs(args, limit=64)[:24])
+        base_std = plain_lm_eval(model, tokenizer, std_docs, device,
+                                 seq_len)
+
+        def agreement():
+            pairs = HELDOUT_PAIRS[-8:]
+            if len(pairs) < 4:
+                return None
+            total = 0.0
+            for pr in pairs:
+                completion = scorer.generate_text(
+                    [{"role": "user",
+                      "content": salience_prompt("?", pr["input"],
+                                                 0, 0)}],
+                    max_tokens=64, temperature=0.01, top_k=1)
+                sal, _w, _p = parse_salience(completion)
+                if sal is None:
+                    sal = 0.5
+                total += min(1.0, abs(sal - float(pr["target"])))
+            return round(1.0 - total / len(pairs), 4)
+
+        base_agree = agreement()
+        # ── the delta ───────────────────────────────────────────────
+        rank = int(spec.get("rank") or 16)
+        scale = 2.0
+        ab, hooks = {}, []
+        for path in lora_target_paths(model, cfg["targets"]):
+            try:
+                lin = model.get_submodule(path)
+            except AttributeError:
+                continue
+            A = torch.zeros(rank, lin.in_features, device=device,
+                            dtype=torch.float32).normal_(
+                                0, 0.02).requires_grad_(True)
+            Bm = torch.zeros(lin.out_features, rank, device=device,
+                             dtype=torch.float32).requires_grad_(True)
+            ab[path] = (A, Bm)
+
+            def mk_hook(A=A, Bm=Bm):
+                def hook(_m, inputs, output):
+                    x = inputs[0]
+                    return output + (x.float() @ A.t() @ Bm.t()
+                                     ).to(output.dtype) * scale
+                return hook
+            hooks.append(lin.register_forward_hook(mk_hook()))
+        if not ab:
+            raise RuntimeError("no LoRA targets matched the base")
+        opt = torch.optim.AdamW([t for pr2 in ab.values() for t in pr2],
+                                lr=float(cfg["lr"]))
+        steps = int(spec.get("steps") or 200)
+        model.train()
+        done = 0
+        for _s in range(steps):
+            conv = train[_r.randrange(len(train))]
+            try:
+                ids, mask = render_masked(tokenizer, conv,
+                                          min(int(seq_len), 1024))
+            except Exception:
+                continue
+            if len(ids) < 3 or sum(mask) == 0:
+                continue
+            loss = masked_lm_loss_t(model, tokenizer, ids, mask, device)
+            opt.zero_grad()
+            loss.backward()
+            opt.step()
+            done += 1
+            if done % 50 == 0:
+                with LOCK:
+                    SFT["current"] = dict(SFT["current"], steps=done)
+        model.eval()
+        # ── with the delta (hooks stay on for these) ────────────────
+        adapted_subject = persona_eval(model, tokenizer, hold, device,
+                                       seq_len)
+        adapted_std = plain_lm_eval(model, tokenizer, std_docs, device,
+                                    seq_len)
+        adapted_agree = agreement()
+        for h in hooks:
+            h.remove()
+        gain_ok = (adapted_subject is not None
+                   and base_subject is not None
+                   and adapted_subject
+                   <= base_subject * (1 - float(cfg["min_gain"])))
+        guard_ok = (adapted_std is None or base_std is None
+                    or adapted_std <= base_std * (1 + float(cfg["guard"])))
+        agree_ok = (adapted_agree is None or base_agree is None
+                    or adapted_agree >= base_agree - float(cfg["slack"]))
+        report.update({
+            "base": base_ref, "rank": rank, "steps_run": done,
+            "train_rows": len(train), "heldout_rows": len(hold),
+            "subject_base": base_subject,
+            "subject_adapted": adapted_subject,
+            "std_base": base_std, "std_adapted": adapted_std,
+            "agree_base": base_agree, "agree_adapted": adapted_agree,
+            "gain_ok": gain_ok, "guard_ok": guard_ok,
+            "agree_ok": agree_ok,
+            "seconds": int(time.time() - t0),
+        })
+        verdict = ("accept" if (gain_ok and guard_ok and agree_ok)
+                   else "reject")
+        report["status"] = verdict
+        if verdict == "accept":
+            ckdir = os.path.join(
+                args.data_dir, "checkpoints",
+                f"sft-{time.strftime('%Y%m%d%H%M%S')}-{name}")
+            os.makedirs(ckdir, exist_ok=True)
+            torch.save({"state": {p: {"A": A.detach().cpu(),
+                                      "B": B.detach().cpu()}
+                                  for p, (A, B) in ab.items()},
+                        "rank": rank, "alpha": scale * rank,
+                        "base_ref": base_ref, "sft": name},
+                       os.path.join(ckdir, "delta.pt"))
+            report["checkpoint"] = os.path.basename(ckdir)
+            prune_ring(args)
+        del scorer, model
+        try:
+            torch.cuda.empty_cache()
+        except Exception:
+            pass
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        report["status"] = "error"
+        report["error"] = str(e)[:500]
+    report["finished"] = int(time.time() * 1000)
+    try:
+        with open(os.path.join(args.data_dir, "experiments.jsonl"),
+                  "a") as f:
+            f.write(json.dumps(report) + "\n")
+    except Exception:
+        pass
+    append_metric(args.data_dir, {"kind": "sft", "name": name,
+                                  "status": report["status"]})
+    with LOCK:
+        SFT["running"] = False
+        SFT["current"] = None
+        SFT["last"] = report
+        TRAINER["borrowed_by"] = None
+    print(f"[sft] {name}: {report['status']}", flush=True)
+
+
 def trainer_real(args):
     """Continuous CPT on a candidate copy of the live model. Runs only
     once a NanochatScorer is live; steps forever at --train-interval."""
@@ -1028,9 +2930,25 @@ def trainer_real(args):
     while True:
         with LOCK:
             live = STATE["slots"][STATE["live"]]
-        if live is not None and live.name.startswith("nanochat"):
+        if live is not None and not isinstance(live, StubScorer):
             break
         time.sleep(5)
+    # S5: the posture solver rules how (and whether) the candidate
+    # trains - ruling 4's arithmetic, published (rule 4). full is the
+    # shipped deepcopy path below; lora is the delta rung; frozen and
+    # refused end here with the numbers on status.
+    posture, arith = solve_posture(args, live)
+    with LOCK:
+        TRAINER["posture"] = (posture if posture != "refused"
+                              else f"refused: {arith.get('why')}")
+        TRAINER["arithmetic"] = arith
+    print(f"[trainer] posture: {posture} {arith}", flush=True)
+    if posture in ("refused", "frozen"):
+        with LOCK:
+            TRAINER["active"] = False
+        return
+    if posture == "lora":
+        return trainer_lora_loop(args, live, arith)
     import torch
     mix = parse_kv(args.mix, {"fresh": 0.25, "replay": 0.25, "standard": 0.5})
     gate_cfg = parse_kv(args.gate, {"every": 50, "regress": 0.02, "fails": 3,
@@ -1060,13 +2978,44 @@ def trainer_real(args):
                     except Exception:
                         pass
     standard = load_standard_docs(args)
-    heldout_std = standard[:24]
-    standard = standard[24:]
+    # ruling 2: a registered model's anchor replaces the held-out
+    # standard sample - the gate reads through the manager. An
+    # unregistered or unanchored checkpoint takes the legacy split,
+    # byte-for-byte (R1).
+    anchor_docs = load_anchor_docs(args)
+    if anchor_docs:
+        heldout_std = anchor_docs[:24]
+    else:
+        heldout_std = standard[:24]
+        standard = standard[24:]
+    # S2: registered dataset pools join the built-ins, weighted by
+    # MODEL_MIX entries naming them. Nothing configured = exactly the
+    # three built-in pools - today's behavior. Mixing a dataset in or
+    # out is editing one weight.
+    ds_pools = {}
+    ds_holdout = {}
+
+    def refresh_ds_pools():
+        for rec in load_registry_datasets(args.data_dir):
+            nm = rec.get("name")
+            if not nm or nm in ("fresh", "replay", "standard"):
+                continue
+            if mix.get(nm, 0) <= 0:
+                continue
+            tr, ho = load_dataset_docs(rec)
+            if tr:
+                ds_pools[nm] = tr
+            if ho:
+                ds_holdout[nm] = ho
+
+    refresh_ds_pools()
     with LOCK:
         TRAINER["active"] = True
         TRAINER["mix"] = mix
         TRAINER["standard_docs"] = len(standard)
         TRAINER["replay_size"] = len(replay)
+        TRAINER["dataset_pools"] = {k: len(v) for k, v in ds_pools.items()}
+        TRAINER["anchor"] = bool(anchor_docs)
     print(f"[trainer] live: candidate of {live.name} on {device}, "
           f"mix={mix} gate={gate_cfg} lr={args.lr} seq_len={seq_len}", flush=True)
 
@@ -1128,8 +3077,20 @@ def trainer_real(args):
     live_agree = None
     fails = 0
     ema = None
+    tick = 0
     while True:
         time.sleep(max(float(args.train_interval), 0.05))
+        if EXPERIMENT["running"] or SFT["running"]:
+            continue   # the bench/SFT borrows the time-share (ruling 7)
+        # streams grow and datasets register mid-flight: refresh the
+        # registered pools at start and every ~30 ticks (registry.json
+        # itself is mtime-cached inside the loader)
+        tick += 1
+        if tick % 30 == 1:
+            refresh_ds_pools()
+            with LOCK:
+                TRAINER["dataset_pools"] = {
+                    k: len(v) for k, v in ds_pools.items()}
         # drain fresh curriculum; 1-in-10 goes to held-out, never trained
         with LOCK:
             fresh_in = list(TRAIN_Q)
@@ -1159,7 +3120,9 @@ def trainer_real(args):
             replay = replay[:4096]
             with open(replay_path, "w") as f:
                 f.writelines(d + "\n" for d in replay)
-        pools = {"fresh": fresh_docs or replay, "replay": replay, "standard": standard}
+        pools = dict(ds_pools)
+        pools.update({"fresh": fresh_docs or replay, "replay": replay,
+                      "standard": standard})
         avail = {k: p for k, p in pools.items() if p and mix.get(k, 0) > 0}
         if not avail:
             with LOCK:
@@ -1220,12 +3183,21 @@ def trainer_real(args):
             learn_ok = (cand_fresh is None or live_fresh is None
                         or cand_fresh <= live_fresh)
         verdict = "promote" if (std_ok and learn_ok) else "hold"
+        # per-dataset held-out losses: REPORTED, not gating - the
+        # bench's yardstick (ruling 7) accumulating before the bench
+        # exists. The standing gates keep their meaning unchanged.
+        ds_losses = {}
+        for nm, docs in ds_holdout.items():
+            dl = eval_loss(candidate, chunks_of(docs[:24]))
+            if dl is not None:
+                ds_losses[nm] = dl
         gate_row = {
             "step": steps, "verdict": verdict,
             "cand_std": cand_std, "live_std": live_std,
             "cand_fresh": cand_fresh, "live_fresh": live_fresh2,
             "cand_agree": cand_agree, "live_agree": live_agree,
             "pairs": len(HELDOUT_PAIRS),
+            "datasets": ds_losses or None,
         }
         print(f"[trainer] gate: {gate_row}", flush=True)
         with LOCK:
@@ -1242,16 +3214,8 @@ def trainer_real(args):
                                 {k: v.detach().cpu() for k, v in candidate.state_dict().items()},
                                 None, {"model_config": dict(live.meta["model_config"])})
                 saved_key = os.path.basename(ckdir)
-                # ring pruning - but never the user pointer's checkpoints
-                with LOCK:
-                    protected = {v for v in (USER["pointer"], USER["last_good"],
-                                             USER["ready"]) if v}
-                ring = sorted(os.listdir(os.path.join(args.data_dir, "checkpoints")))
-                for old in ring[:-5]:
-                    if old in protected:
-                        continue
-                    shutil.rmtree(os.path.join(args.data_dir, "checkpoints", old),
-                                  ignore_errors=True)
+                # ring pruning by byte budget (ruling 5), floors held
+                prune_ring(args)
             except Exception as e:
                 print(f"[trainer] ring save failed (promoting anyway): {e}", flush=True)
             promoted_model = _copy.deepcopy(candidate)
@@ -1377,6 +3341,10 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         if self.path != "/status":
             return self._json(404, {"status": "err", "msg": "unknown path"})
+        # computed OUTSIDE the lock: probe_resources may shell out to
+        # nvidia-smi, and /salience scoring shares this lock
+        res_map = probe_resources(self.server.args.data_dir)
+        reg_info = registry_info(self.server.args.data_dir)
         with LOCK:
             live = STATE["live"]
             scorer = STATE["slots"][live]
@@ -1413,6 +3381,16 @@ class Handler(BaseHTTPRequestHandler):
                     if n.endswith(".jsonl")]),
                 "checkpoints": sorted(os.listdir(ck)) if os.path.isdir(ck) else [],
                 "uptime_s": int(time.time() - START),
+                "resources": res_map,
+                "registry": reg_info,
+                "placement": parse_placement(self.server.args),
+                "mint": MINT["last"],
+                "experiment": {"running": EXPERIMENT["running"],
+                               "current": EXPERIMENT["current"],
+                               "last": EXPERIMENT["last"]},
+                "sft": {"running": SFT["running"],
+                        "current": SFT["current"],
+                        "last": SFT["last"]},
                 "trainer": dict(TRAINER),
                 "user": dict(
                     USER,
@@ -1423,6 +3401,7 @@ class Handler(BaseHTTPRequestHandler):
                     serving=USER_SLOT["scorer"] is not None,
                 ),
                 "persona": dict(PERSONA),
+                "adapters": dict(ADAPTERS),
             })
 
     def do_POST(self):
@@ -1468,6 +3447,158 @@ class Handler(BaseHTTPRequestHandler):
             with open(os.path.join(ingest, name), "w") as f:
                 f.write(raw)
             return self._json(200, {"status": "ok", "queued": name})
+        if self.path == "/derive":
+            # S2: procedural transforms run HERE so the dialect keeps
+            # one home - render_sample IS the render_dialect transform.
+            # Synchronous: rendering is line-at-a-time stdlib work, and
+            # it runs in stub mode too.
+            try:
+                req = json.loads(raw)
+            except Exception:
+                return self._json(400, {"status": "err",
+                                        "msg": "body must be JSON"})
+            spath = str(req.get("source_path") or "")
+            out_name = str(req.get("name") or "")
+            transform = str(req.get("transform") or "")
+            if transform != "render_dialect":
+                return self._json(400, {
+                    "status": "err",
+                    "msg": f"unknown transform '{transform}' - this "
+                           "branch ships render_dialect only"})
+            files = []
+            if os.path.isfile(spath):
+                files = [spath]
+            elif os.path.isdir(spath):
+                for base, _d, fs in os.walk(spath):
+                    files.extend(os.path.join(base, n)
+                                 for n in sorted(fs)
+                                 if n.endswith(".jsonl"))
+            if not files or not out_name:
+                return self._json(400, {"status": "err",
+                                        "msg": "need name and a jsonl "
+                                        f"source (got '{spath}')"})
+            outdir = os.path.join(self.server.args.data_dir,
+                                  "datasets", out_name)
+            os.makedirs(outdir, exist_ok=True)
+            rows = 0
+            outpath = os.path.join(outdir, "docs.txt")
+            with open(outpath, "w") as f:
+                for path in files:
+                    with open(path) as sf:
+                        for ln in sf:
+                            ln = ln.strip()
+                            if not ln:
+                                continue
+                            try:
+                                doc = render_sample(json.loads(ln))
+                            except Exception:
+                                doc = ln
+                            f.write(doc.replace("\n", " ") + "\n")
+                            rows += 1
+            return self._json(200, {"status": "ok", "rows": rows,
+                                    "path": outpath})
+        if self.path == "/experiment":
+            # S6: run a bench experiment - recipes arrive RESOLVED (the
+            # commands own the store; the service stays store-blind).
+            try:
+                req = json.loads(raw)
+            except Exception:
+                return self._json(400, {"status": "err",
+                                        "msg": "body must be JSON"})
+            if self.server.args.checkpoint == "stub":
+                return self._json(409, {"status": "err",
+                                        "msg": "stub mode has no weights "
+                                        "to bench"})
+            with LOCK:
+                if EXPERIMENT["running"]:
+                    return self._json(409, {
+                        "status": "err",
+                        "msg": "an experiment is already running",
+                        "current": EXPERIMENT["current"]})
+            name = str(req.get("name") or "")
+            control = req.get("control")
+            if not name or not isinstance(control, dict):
+                return self._json(400, {"status": "err",
+                                        "msg": "need name and a resolved "
+                                        "control recipe"})
+            arms = [("control", control)]
+            if isinstance(req.get("variant"), dict):
+                arms.append(("variant", req["variant"]))
+            spec = {"name": name, "arms": arms,
+                    "budget_steps": int(req.get("budget_steps") or 20),
+                    "bricks_changed": req.get("bricks_changed"),
+                    "one_brick": req.get("one_brick")}
+            threading.Thread(target=run_experiment_thread,
+                             args=(self.server.args, spec),
+                             daemon=True).start()
+            return self._json(200, {"status": "ok", "started": True,
+                                    "name": name,
+                                    "arms": [a for a, _r3 in arms]})
+        if self.path == "/sft_run":
+            # S8: an SFT run - gate design in docs/spectrum-s8.md.
+            try:
+                req = json.loads(raw)
+            except Exception:
+                return self._json(400, {"status": "err",
+                                        "msg": "body must be JSON"})
+            if self.server.args.checkpoint == "stub":
+                return self._json(409, {"status": "err",
+                                        "msg": "stub mode has no weights "
+                                        "to SFT"})
+            with LOCK:
+                if SFT["running"] or EXPERIMENT["running"]:
+                    return self._json(409, {
+                        "status": "err",
+                        "msg": "the time-share is borrowed (an SFT run "
+                               "or experiment is active)"})
+            name = str(req.get("name") or "")
+            dataset = str(req.get("dataset") or "")
+            if not name or not dataset:
+                return self._json(400, {"status": "err",
+                                        "msg": "need name and dataset"})
+            spec = {"name": name, "dataset": dataset,
+                    "base": str(req.get("base") or "pointer"),
+                    "rank": int(req.get("rank") or 16),
+                    "steps": int(req.get("steps") or 200)}
+            threading.Thread(target=run_sft_thread,
+                             args=(self.server.args, spec),
+                             daemon=True).start()
+            return self._json(200, {"status": "ok", "started": True,
+                                    "name": name})
+        if self.path == "/mint_anchor":
+            # ruling 2: mint a self-sampled anchor for an import. Loads
+            # its own scorer (never the serving slots); background
+            # thread; progress rides /status.mint. Stub mode has no
+            # torch to load with - refuse honestly.
+            try:
+                req = json.loads(raw)
+            except Exception:
+                return self._json(400, {"status": "err",
+                                        "msg": "body must be JSON"})
+            if self.server.args.checkpoint == "stub":
+                return self._json(409, {"status": "err",
+                                        "msg": "stub mode cannot mint - no "
+                                        "model environment; configure a real "
+                                        "checkpoint first"})
+            path = str(req.get("path") or "")
+            out_name = str(req.get("name") or "")
+            n = int(req.get("n") or 200)
+            if not path or not os.path.isdir(path) or not out_name:
+                return self._json(400, {"status": "err",
+                                        "msg": "need path (existing dir) "
+                                        "and name"})
+            with LOCK:
+                if MINT["running"]:
+                    return self._json(409, {"status": "err",
+                                            "msg": "a mint is already "
+                                            "running", "mint": MINT["last"]})
+            mbackend = str(req.get("backend") or "nanochat")
+            threading.Thread(target=mint_anchor_thread,
+                             args=(self.server.args, path, out_name, n,
+                                   mbackend),
+                             daemon=True).start()
+            return self._json(200, {"status": "ok", "started": True,
+                                    "name": out_name, "n": n})
         if self.path == "/shutdown":
             # The GPU off-switch: answer, then exit cleanly. Everything
             # durable survives on disk (ring checkpoints, replay,
@@ -1481,6 +3612,50 @@ class Handler(BaseHTTPRequestHandler):
         if self.path == "/promote":
             # double-buffer: load into the slot NOT being served, then swap.
             args2 = self.server.args
+            # S8: promote-by-key - the deliberate act that puts an
+            # accepted SFT candidate (or any ring key) on the fast
+            # lane for its soak. Body optional; empty keeps the
+            # shipped newest-ring behavior.
+            try:
+                req0 = json.loads(raw) if raw else {}
+            except Exception:
+                req0 = {}
+            want_key = str(req0.get("checkpoint") or "")
+            if want_key:
+                ckdir0 = os.path.join(args2.data_dir, "checkpoints",
+                                      want_key)
+                if not os.path.isdir(ckdir0):
+                    return self._json(404, {"status": "err",
+                                            "msg": f"no ring entry "
+                                            f"'{want_key}'"})
+                try:
+                    scorer = load_pointer_scorer(args2, want_key)
+                except Exception as e:
+                    return self._json(500, {"status": "err",
+                                            "msg": f"load failed: {e}"})
+                with LOCK:
+                    inactive = "B" if STATE["live"] == "A" else "A"
+                    STATE["slots"][inactive] = scorer
+                    STATE["live"] = inactive
+                    STATE["promotions"] += 1
+                    live2 = STATE["live"]
+                set_soak(want_key)
+                return self._json(200, {
+                    "status": "ok", "live_slot": live2,
+                    "loaded": want_key,
+                    "pointer": f"{live2}:{scorer.name}"})
+            if getattr(args2, "engine_url", ""):
+                return self._json(409, {
+                    "status": "err",
+                    "msg": "the external rung promotes by adapter "
+                           "hot-swap on the engine (ruling 8) - wired "
+                           "when a hot-swap-capable engine is "
+                           "configured"})
+            if getattr(args2, "backend", "nanochat") == "hf":
+                return self._json(409, {
+                    "status": "err",
+                    "msg": "the hf backend has no ring checkpoints to "
+                           "promote yet - the delta trainer lands in S5"})
             newest = (newest_ring(args2.data_dir)
                       if args2.checkpoint != "stub" else newest_checkpoint(args2))
             try:
@@ -1530,24 +3705,25 @@ class Handler(BaseHTTPRequestHandler):
                     "text": f"[stub user pointer] heard: {last}",
                     "pointer": pointer, "ms": int((time.time() - t0) * 1000)})
             # nanochat's chat template knows user/assistant only - fold
-            # any system content into the first user turn
-            sys_txt = "\n".join(str(m.get("content", "")) for m in messages
-                                if m.get("role") == "system").strip()
-            messages = [m for m in messages if m.get("role") != "system"]
-            if sys_txt and messages:
-                m0 = dict(messages[0])
-                m0["content"] = f"[system]\n{sys_txt}\n\n{m0.get('content', '')}"
-                messages = [m0] + messages[1:]
+            # any system content into the first user turn there; hf
+            # templates carry system natively, pass it through (S3)
+            if isinstance(scorer, NanochatScorer):
+                sys_txt = "\n".join(str(m.get("content", ""))
+                                    for m in messages
+                                    if m.get("role") == "system").strip()
+                messages = [m for m in messages
+                            if m.get("role") != "system"]
+                if sys_txt and messages:
+                    m0 = dict(messages[0])
+                    m0["content"] = (f"[system]\n{sys_txt}\n\n"
+                                     f"{m0.get('content', '')}")
+                    messages = [m0] + messages[1:]
             try:
-                conversation = {"messages": list(messages)
-                                + [{"role": "assistant", "content": ""}]}
-                ids = scorer.tokenizer.render_for_completion(conversation)
                 max_tokens = min(int(req.get("max_tokens") or 256), 1024)
                 temp = float(req.get("temperature") or 0.7)
-                results, _m = scorer.engine.generate_batch(
-                    ids, num_samples=1, max_tokens=max_tokens,
-                    temperature=temp, top_k=50)
-                text = scorer.tokenizer.decode(results[0][len(ids):])
+                text = scorer.generate_text(list(messages),
+                                            max_tokens=max_tokens,
+                                            temperature=temp, top_k=50)
             except Exception as e:
                 return self._json(500, {"status": "err",
                                         "msg": f"generation failed: {e}"})
@@ -1565,6 +3741,62 @@ class Handler(BaseHTTPRequestHandler):
             # run; the mind tab's button expects the full report back
             payload = derive_adapter(self.server.args, "manual")
             return self._json(200 if payload.get("status") == "ok" else 409, payload)
+        if self.path == "/adapter_derive":
+            # S4: a named adapter from a registered dataset - blocks
+            # through the run like persona_rederive; the command
+            # records the result in the runtime library
+            try:
+                req = json.loads(raw)
+            except Exception:
+                return self._json(400, {"status": "err",
+                                        "msg": "body must be JSON"})
+            spec = {"name": str(req.get("name") or ""),
+                    "dataset": str(req.get("dataset") or ""),
+                    "base": str(req.get("base") or "pointer"),
+                    "targets": str(req.get("targets") or ""),
+                    "rank": int(req.get("rank") or 0),
+                    "steps": int(req.get("steps") or 0)}
+            if not spec["name"] or not spec["dataset"]:
+                return self._json(400, {"status": "err",
+                                        "msg": "need name and dataset"})
+            try:
+                payload = derive_named_adapter(self.server.args, spec)
+            except Exception as e:
+                payload = {"status": "err", "msg": f"derive failed: {e}"}
+            return self._json(200 if payload.get("status") == "ok"
+                              else 409, payload)
+        if self.path in ("/adapter_apply", "/adapter_unapply"):
+            try:
+                req = json.loads(raw)
+            except Exception:
+                return self._json(400, {"status": "err",
+                                        "msg": "body must be JSON"})
+            name = str(req.get("name") or "")
+            if not name:
+                return self._json(400, {"status": "err",
+                                        "msg": "need name"})
+            with LOCK:
+                stack = list(ADAPTERS["stack"])
+            if self.path == "/adapter_apply":
+                if name in stack:
+                    return self._json(409, {"status": "err",
+                                            "msg": f"'{name}' is already "
+                                            "in the stack"})
+                new_stack = stack + [name]
+            else:
+                if name not in stack:
+                    return self._json(409, {"status": "err",
+                                            "msg": f"'{name}' is not in "
+                                            "the stack"})
+                new_stack = [n for n in stack if n != name]
+            try:
+                payload = apply_stack_gated(self.server.args, new_stack,
+                                            self.path.lstrip("/"))
+            except Exception as e:
+                payload = {"status": "err", "msg": f"stack change "
+                                                   f"failed: {e}"}
+            return self._json(200 if payload.get("status") == "ok"
+                              else 409, payload)
         return self._json(404, {"status": "err", "msg": "unknown path"})
 
 
@@ -1580,7 +3812,9 @@ def load_initial(args):
     answers 503 throughout, which the executive treats as no-verdict."""
     while True:
         try:
-            scorer = make_scorer(args.checkpoint, args.data_dir)
+            scorer = make_scorer(args.checkpoint, args.data_dir,
+                                 getattr(args, "backend", "nanochat"),
+                                 getattr(args, "engine_url", ""))
             with LOCK:
                 STATE["slots"]["A"] = scorer
                 STATE["loading"] = False
@@ -1604,7 +3838,32 @@ def main():
     ap.add_argument("--port", type=int, default=8077)
     ap.add_argument("--data-dir", default="runtime/agent/model")
     ap.add_argument("--checkpoint", default="stub",
-                    help="'stub' or a nanochat base directory")
+                    help="'stub', a nanochat base directory, or (with "
+                         "--backend hf) an HF model directory")
+    ap.add_argument("--backend", default="nanochat",
+                    choices=["nanochat", "hf"],
+                    help="which backend serves the checkpoint (S3); "
+                         "resolved from the model record by bootstrap")
+    ap.add_argument("--posture", default="auto",
+                    help="S5, ruling 4: auto (the solver decides) or a "
+                         "forced rung (full|lora|frozen) - published, "
+                         "and refused with the arithmetic when it "
+                         "does not fit")
+    ap.add_argument("--ring-gb", default="100",
+                    help="S5, ruling 5: the ring's byte budget in GB; "
+                         "the protected user set and the newest entry "
+                         "never prune")
+    ap.add_argument("--headroom", default="15",
+                    help="S5, ruling 4: the solver's safety margin as "
+                         "a percent of total memory")
+    ap.add_argument("--placement", default="",
+                    help="S7: GPU roles, e.g. serve=0,train=1; empty = "
+                         "time-share; absent hardware falls back "
+                         "honestly")
+    ap.add_argument("--engine-url", default="",
+                    help="S7, ruling 8: an OpenAI-compatible engine "
+                         "serving the resident (the external rung); "
+                         "empty = in-process")
     ap.add_argument("--train", default="on", choices=["on", "off"],
                     help="continuous CPT on a candidate of the live model")
     ap.add_argument("--mix", default="fresh=0.25,replay=0.25,standard=0.5",

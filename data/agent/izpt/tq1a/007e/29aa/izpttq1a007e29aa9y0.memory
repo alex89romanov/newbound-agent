@@ -105,5 +105,135 @@
     "tags": "model,salience,format-drift,escalation",
     "confidence": "high",
     "time": 1787014898796
+  },
+  {
+    "claim": "The spectrum cycle is chartered (docs/spectrum-cycle.md, 2026-08-18, owner review pending): the model subsystem must scale as a continuous spectrum - a nanochat d10 on one 3090 up to frontier-scale open weights on a cluster - and scale is a measured quantity, never a branch: no mechanism may test model family, name, or size class; only the posture solver reads the resource map and the model footprint, and only its published output varies.",
+    "detail": "Companion to harvest-cycle.md (harvest grows the food; spectrum grows the organism). Structure: the backend seam and the engine seam, candidate = base + delta, the recipe as the unit of composition. Standing rule 5: compatibility with the shipped 5b-8b loop is the FIRST acceptance gate of every phase. Phases S1-S8; ten owner calls collected at the end of the doc.",
+    "tags": "spectrum,charter,doctrine",
+    "source": {
+      "doc": "docs/spectrum-cycle.md @ 79d73b6 (claude/agent-resident-model-subsystem-evpfgw)"
+    },
+    "confidence": "high",
+    "time": 1787093843802
+  },
+  {
+    "claim": "General open-source weights cannot drop into the nanochat stack, and never will via conversion - the mismatch is architectural, not file-format (NanochatScorer constructs nanochat's own GPT class and pickled tokenizer); the route to open models is a second backend (HFScorer) behind the existing scorer seam. Checkpoints already in nanochat's base-dir layout DO drop in today: point MODEL_CHECKPOINT at the directory, honored as-is.",
+    "detail": "The nanochat weld is ~250 of service.py's 1648 lines plus bootstrap's env stage: load/serve (NanochatScorer:257, from_ring:301), dialect render (render_for_completion in score/gen_agreement/render_sample), loss forward model(x,y), ring save_checkpoint:1238, lora_target_paths:759 transformer.h.* names, render_conversation persona masking, sequence_len meta, base_data parquet standard docs:998, the three pool literals:1162, the venv build. Everything above the scorer seam - gates, double buffer, pointers, soak, persona probe - is already model-agnostic.",
+    "tags": "spectrum,nanochat,backend",
+    "source": {
+      "doc": "docs/spectrum-cycle.md weld inventory; verified against data/agent/_ASSETS/service.py 2026-08-18"
+    },
+    "confidence": "high",
+    "time": 1787093857826
+  },
+  {
+    "claim": "The CPT trainer's unwritten ceiling: the candidate is a full deepcopy of the live model with fp32 AdamW moments beside it, so serve-and-train-on-one-card holds only while the model fits roughly twice (params x ~20 bytes; a d20 is under 12GB all-in). The spectrum charter removes the ceiling by making the candidate base + delta, with a posture solver walking full -> full-sharded -> lora -> qlora -> frozen and taking the top rung that fits, arithmetic published.",
+    "detail": "frozen is a posture, not a failure: banking and measurement continue. The split pointer lets the two lanes sit at different spectrum points - a d20 salience judge training full beside an imported 8B user pointer serving frozen on the same card is the intended shape. Full posture's ring layout is unchanged on disk, so a live instance upgrades in place.",
+    "tags": "spectrum,trainer,cpt",
+    "source": {
+      "doc": "docs/spectrum-cycle.md fidelity ladder; trainer_real in data/agent/_ASSETS/service.py"
+    },
+    "confidence": "high",
+    "time": 1787093857888
+  },
+  {
+    "claim": "Owner direction 2026-08-18: the subsystem is also the lab, and the agent feeds it. The feed contract: every capture channel, live or chartered by the harvest cycle, terminates in a named managed dataset - no orphan banks; synthetic generation is a dataset operation (dataset_derive) with lineage recorded (source datasets + revisions, generator as a provenance tag never a branch, transform recipe); recipes snap base/datasets/posture/adapters/evals together and the bench answers data-vs-architecture through the one-brick discipline, scored with the gates' own instruments on frozen eval snapshots.",
+    "detail": "Streams vs snapshots: live channels feed append-only streams the standing CPT loop may ride (today's behavior); experiments and SFT runs pin frozen hashed snapshots for reproducibility. Purpose-built LoRAs on demand generalize derive_adapter (corpus -> LoRA -> gate -> apply) from persona special case to named adapter records - chartered as S4, early, because the pattern is already proven in service.py:870. Model-driven derivation spends tokens: deliberate command or drive budget, never ambient.",
+    "tags": "spectrum,datasets,bench,adapters",
+    "source": {
+      "doc": "docs/spectrum-cycle.md S2 feed contract + S4 + S6, owner direction in session 2026-08-18"
+    },
+    "confidence": "high",
+    "time": 1787093867455
+  },
+  {
+    "claim": "All ten spectrum-cycle owner calls are ruled (2026-08-18/19) and docs/spectrum-cycle.md is plan of record. Load-bearing rulings: registry records live in the runtime library and bytes in the runtime folder (user data, never shipped); anchors resolve by lineage (born-here models anchor to their training datasets, imports mint a self-sampled anchor at the door); adapters stack gated as a unit; two residents allowed with residency as a second solver-walked ladder (resident/quantized/offload/on-demand/external, fast lane priority, nothing refuses for RAM - it degrades visibly); derivation governance is uniform across generators, deliberate or drive-budgeted, never ambient.",
+    "detail": "Also ruled: solver fits = free VRAM minus computed serving reservation minus 15% margin, forced postures that do not fit refuse at launch with arithmetic shown; ring prunes by byte budget (100GB default) with two floors (protected set, newest entry); bench yardstick pinned as frozen snapshot at run start, one-brick violations warn never refuse; external engine installs only when configured, promotions there move adapters via hot-swap; acquisition only through the two deliberate doors, revision-pinned, HF_TOKEN only for gated models.",
+    "tags": "spectrum,charter,rulings",
+    "source": {
+      "doc": "docs/spectrum-cycle.md owner calls 1-10, ruled in session 2026-08-18/19"
+    },
+    "confidence": "high",
+    "time": 1787098886170
+  },
+  {
+    "claim": "S1 landed (claude/spectrum-s1s2-registry): the registry exists. agent-model-import is the deliberate door (local paths; hf: sources refuse until the fetch stage; backend-shape validation at the door; FNV fingerprint over names+sizes; footprint from metadata), records in the runtime library models record (list-shaped, salience_log idiom), registry.json rendered on every write as the service's store-blind window (mtime pickup, the persona.jsonl pattern). agent-model-models lists; agent-model-model_remove refuses while MODEL= names the record and purges bytes only inside the managed weights dir. Bootstrap resolves MODEL= to path+backend ahead of the MODEL_CHECKPOINT alias (absent MODEL= is byte-for-byte the old path); hf records stage but refuse to serve until S3. The resource map rides /status (torch view, computed outside the scoring lock) with agent-model-resources proxying and an nvidia-smi fallback; /mint_anchor self-samples an import's anchor in a background thread (own scorer, never the serving slots), refusing in stub mode - import records mint_pending and never blocks on it.",
+    "detail": "Battery on stubs passed: R1 (stub + bare MODEL_CHECKPOINT unchanged, stale-script convergence relaunched the new asset), import/list/remove round trip both backends, dup + hub + hf-serve + missing-MODEL refusals, purge guard left out-of-weights files alone, resources sane on a CPU-only box (empty gpus, real disk), stub mint 409, import mint deferral recorded. GPU-box items for the real battery: actual mint generation, MODEL= serving a real checkpoint.",
+    "tags": "spectrum,s1,registry",
+    "source": {
+      "doc": "docs/spectrum-s1s2.md S1; battery run in session 2026-08-19"
+    },
+    "confidence": "high",
+    "time": 1787100343894
+  },
+  {
+    "claim": "S2 landed (claude/spectrum-s1s2-registry): the dataset manager exists. Six commands - dataset_add (in-place registration, FNV content hash, read-time holdout_every policy so user files are never rewritten; anchor-kind registration flips anchor_status on waiting models), dataset_list, dataset_inspect (peek + re-verify; snapshot hash mismatch is a tamper alarm, stream hash is rolling by design), dataset_snapshot (frozen hashed cut copied into the managed dir, lineage snapshot:<source>@<rows>), dataset_derive (render_dialect runs IN THE SERVICE via /derive so the dialect keeps one home; lineage derived:<transform>:<source>), dataset_remove (refuses while MODEL_MIX names it; purge only inside the managed dir). The feed contract runs: curriculum_export sweeps into the salience-pairs and memory streams line-deduped (idempotent - second export appends zero), self-registering, legacy ingest untouched. The trainer builds pools from registry.json datasets joined with MODEL_MIX weights by name (built-ins unchanged when nothing is configured), reports per-dataset held-out losses at gate time without gating, and reads a registered model's anchor through the manager (unregistered checkpoint = legacy split, byte-for-byte).",
+    "detail": "Battery passed on stubs: add/inspect/verify round trip with tamper detection, export idempotence (212 swept, 0 on repeat), snapshot + derive with correct lineage, loader harness (191/21 split at every=10, jsonl streams render through render_sample, anchor resolves checkpoint->model->dataset->30 docs), R1 stub status healthy throughout. Bug found and fixed in-battery: the service may run with a relative --data-dir, so /derive's reply path only resolves from its cwd - registry records must always be written with absolute paths computed from the store root; dataset_derive now does. GPU-box items: pools actually training under mix weights, per-dataset gate losses on a real candidate.",
+    "tags": "spectrum,s2,datasets",
+    "source": {
+      "doc": "docs/spectrum-s1s2.md S2; battery run in session 2026-08-19"
+    },
+    "confidence": "high",
+    "time": 1787101226212
+  },
+  {
+    "claim": "S3 landed (claude/spectrum-s3-backend): the backend seam is real. Every scorer carries generate_text(messages); score_via builds THE dialect once for all backends with unparseable-escalates unchanged; /chat, the user watchdog, and minting route through it. HFScorer serves an HF dir via transformers (chat template or honest concatenation; bf16 on cuda else fp32; posture frozen and published until S5). The backends' structural loss difference - nanochat pre-shifted (x,y) with -1 ignore vs HF aligned labels with -100 and INTERNAL shift - lives in two seam helpers (masked_lm_loss_t, plain_lm_loss_t); getting this wrong is an off-by-one that silently corrupts every loss. Persona hook-LoRA is backend-blind (one target vocabulary onto nanochat paths or HF q_proj/v_proj leaves; no PEFT, per the no-third-party doctrine). An hf resident soaks as base:hf:<name>, so the STANDARD user gate covers it with zero special cases. Bootstrap: hf records get a donefile-guarded env stage (CPU wheels when no GPU, PyPI fallback where the pytorch CDN is denied) and --backend rides the launch line.",
+    "detail": "CPU battery passed end-to-end on a fabricated 147k-param model: served the salience lane (random-model gibberish exercised unparseable-escalates: 0.5, parsed:false), soak->READY->manual promote->/chat with native system messages, mint 40 rows through the seam, anchor registration flipped anchor_status, persona derivation on HF targets accepted (heldout 6.22->5.65) and merged (+lora serving), R1 restored to stub byte-for-byte. Two fixes found in-battery: newer transformers return BatchEncoding from apply_chat_template (normalize at the seam - the failure is an empty AttributeError deep in generate), and the pytorch CDN can be proxy-denied while PyPI is allowed (the env script falls back). Direct agent-crate builds need --features=serde_support,python_runtime (the upsert path always uses them). Owner-box battery still owed: a real open-weight model end to end.",
+    "tags": "spectrum,s3,backend,hf",
+    "source": {
+      "doc": "docs/spectrum-s3.md; battery run in session 2026-08-19"
+    },
+    "confidence": "high",
+    "time": 1787103684021
+  },
+  {
+    "claim": "S4 landed (claude/spectrum-s4-adapters): adapters on demand. agent-model-adapter_derive derives a named adapter from any registered dataset against the serving pointer's base or a registered model - hook-LoRA in the service, persona's gate (min_gain on subject held-out, standard-loss guard), knobs from USER_LORA, blob in the managed adapters dir, record with the gate report verbatim in the runtime library; deriving never applies. adapter_apply changes the user pointer's stack under ruling 3: rebuild from FRESH base + persona + every member (additive deltas commute - no order; rebuild beats subtracting in bf16), gate the COMBINATION (per-member subject probes with the full stack, one std guard); pass serves and persists across promotions/restarts, fail leaves serving untouched and names the member that broke. The watchdog probes each member's drift on cadence - surfaced, never silently acted on. Persona stays the standing first skin beneath the stack.",
+    "detail": "CPU battery passed: derive accept 6.21->5.95 on a 12-row dataset (holdout policy split 10/2); stack of one then two, both members re-clearing the unit gate on fresh ground; delete refused while applied; gated unapply; restart re-applied the stack. Bug found in-battery: the +lora/+adp name markers were endswith-checked and broke once stacked - all three sites now use containment. Owner-box battery owed: real model, real corpora, stack probe across a real promotion. Persona-into-records unification deferred to the S5 refactor.",
+    "tags": "spectrum,s4,adapters",
+    "source": {
+      "doc": "docs/spectrum-s4.md; battery run in session 2026-08-19"
+    },
+    "confidence": "high",
+    "time": 1787104308929
+  },
+  {
+    "claim": "S5 landed (claude/spectrum-s5-delta-trainer): the candidate is base + delta and the posture solver rules how it trains. solve_posture publishes fits arithmetic per ruling 4 (free memory measured from GPU or /proc/meminfo minus MODEL_HEADROOM percent margin; ladder full -> lora -> frozen on this branch; MODEL_POSTURE= forces a rung and a misfit refuses training loudly with the numbers, serving untouched). The lora rung trains the SERVING model zero-copy: hook-LoRA gated per-thread (TRAIN_TLS) so serving threads never see the candidate; same drain/mix/pools/gates as full; promotion merges the delta into the serving weights and rings the blob with its base ref (kilobytes); restart resume and pointer keys re-merge the delta ring chronologically - reconstruction is exact because each delta trained relative to base plus every earlier merge. CPT on an hf resident is real. Ring prunes by MODEL_RING_GB byte budget (ruling 5) with both floors; the full rung is the shipped deepcopy path byte-for-byte.",
+    "detail": "CPU battery: solver chose lora on meminfo (500MB need + 2245MB margin vs 14973MB free, published), trainer stepped the tiny hf resident on the memory stream, five merge-promotions to hf:tiny-hf:cpt-30 with 19KB deltas, stop/relaunch resumed at cpt-42, MODEL_POSTURE=full refused with reason, R1 restored. Deferred deliberately: USER_MODEL= two-residents (own branch), full-sharded (S7), qlora (quantization dependency needs a doctrine ruling), full hf saves (ring format ruling). Owner-box battery owed: real model, nanochat full-rung regression, budget-sized prune observed.",
+    "tags": "spectrum,s5,solver,delta",
+    "source": {
+      "doc": "docs/spectrum-s5.md; battery run in session 2026-08-19"
+    },
+    "confidence": "high",
+    "time": 1787104910469
+  },
+  {
+    "claim": "S6 landed (claude/spectrum-s6-bench): the lab is real. Recipes are runtime-library records - base x mix x posture x budget x lr x evals, validated against the registry at authoring, cloned with an edits object so one-brick variants are one edit. agent-model-experiment diffs the bricks (notes is free text, never a brick), WARNS with the list when more than one moved (never refuses, per ruling 7), and hands RESOLVED recipes to the service - the store-blind seam holds. Each arm: fresh base load, bare measure, bounded always-on hook-LoRA on the arm mix, with-delta measure, weights freed; instruments are the gates own (per-dataset holdout, anchor/standard, agreement); eval material pinned at run start with hashes in the report (a stream says rolling, a snapshot names its hash). Both trainer rungs skip candidate steps while the bench borrows (published as trainer.borrowed_by); serving never pauses. Reports append to experiments.jsonl; agent-model-experiments reads live + last ten.",
+    "detail": "CPU battery: one-brick mix experiment diffed exactly [mix], pinned hashes recorded, both arms ran fresh-base; the two eval sets scored identically - CORRECT and a real bench finding, since memory-docs is the render-dialect derivation of memory (same holdout text). Two-brick clone warned with the moved bricks and recorded honestly; unregistered mix dataset refused at authoring; R1 restored. Nit for backlog: a slow first hf load can outlive bootstrap 20s probe and report launch_failed for a service that comes up seconds later. Owner-box owed: real-scale experiment with genuinely diverging arms, borrow observed over a long run.",
+    "tags": "spectrum,s6,bench,recipes",
+    "source": {
+      "doc": "docs/spectrum-s6.md; battery run in session 2026-08-19"
+    },
+    "confidence": "high",
+    "time": 1787128593601
+  },
+  {
+    "claim": "S7 landed (claude/spectrum-s7-placement): placement and the external rung. MODEL_PLACEMENT= names GPU roles (serve=/train=), published with honest fallback in /status.placement; the placed train device carries the training-side fresh loads (bench arms, adapter derivations, mints) while the full-rung candidate split and multi-node CPT wait for owner-box proof. MODEL_ENGINE_URL= puts an OpenAI-compatible engine behind the scorer surface: ExternalScorer only transports - score_via builds THE dialect and parses THE answer, so unparseable-escalates applies to remote verdicts unchanged (ruling 8, verified through the wire). The engine holds the weights: solver answers frozen with the hot-swap note, derive/stack/persona paths refuse with reasons, /promote explains that this rung promotes by adapter hot-swap on the engine. No engine install stage: seam now, dependency when a box needs it.",
+    "detail": "CPU battery with a stdlib mock OpenAI server: external:mock-70b served the salience lane (model id discovered from /v1/models), parsed:true on good JSON and 0.5/parsed:false on deliberate garbage, /chat through the engine at 1ms, frozen posture with reason, /promote hot-swap message, degenerate placement published. R1 restored. Nits: a restored user pointer NAME keeps its persisted +lora suffix even when the serving scorer is bare (display drift only); pkill -f matching its own command line kills the invoking shell - use the [b]racket pattern. Owner-box owed: real vLLM behind the URL, split placement on two GPUs, hot-swap wiring.",
+    "tags": "spectrum,s7,placement,engine",
+    "source": {
+      "doc": "docs/spectrum-s7.md; battery run in session 2026-08-19"
+    },
+    "confidence": "high",
+    "time": 1787129123639
+  },
+  {
+    "claim": "S8 landed (claude/spectrum-s8-sft) and the spectrum cycle's chartered phases are all built. The SFT gate design (docs/spectrum-s8.md, written before the code per the harvest deferral rule): the SFT gate is the bench's instruments guarding the ENTRY to the ring - subject gain on held-out conversations, the forgetting guard through the anchor, agreement non-regression on held-out pairs (unmeasurable instruments report as such, never silently pass as measured) - and everything after the ring is shipped machinery. The sft-* ring namespace is the safety: cpt-* deltas are by definition already merged into serving and resume re-merges them; sft-* candidates are NOT, resume never touches them, and only the deliberate sft_promote (promote-by-key through the double buffer) puts one on the fast lane for its soak. From there the standard user gate qualifies READY, user_promote advances /chat, persona and the stack re-apply on top.",
+    "detail": "CPU battery: 24-conversation fabricated bank (kind sft, holdout every=5), sft_run rank 8 x 80 steps -> accept (subject 6.20->5.95; std and agree None on this box, reported not-measured), candidate sft-<ts>-voice-1 ringed; restart did NOT auto-merge it; sft_promote flipped to B:hf:tiny-hf+sft-*, soaked under the sft key, standard gate READY, user pointer advanced, /chat served it with persona re-applied (+lora). Reject path: 2-step run failed min_gain, no ring entry. R1 restored. sft_run refuses non-conversation dataset kinds at the command; runs borrow the time-share alongside bench runs. Owner-box owed: the real H1 chat bank on a capable imported base - the quality jump the charter predicted.",
+    "tags": "spectrum,s8,sft",
+    "source": {
+      "doc": "docs/spectrum-s8.md; battery run in session 2026-08-19"
+    },
+    "confidence": "high",
+    "time": 1787129643863
   }
 ]

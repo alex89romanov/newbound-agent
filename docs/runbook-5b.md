@@ -241,6 +241,13 @@ rotates the checkpoint ring:
     tools/nb-call.py agent-model-curriculum_export \
         '{"path": "runtime/agent/model/ingest/batch-day1.jsonl"}'
 
+**[S2, 2026-08-19]** The same sweep now also lands in stream datasets
+(`salience-pairs`, `memory` — deduped, idempotent, self-registering;
+see `agent-model-dataset_list`), which is the feed contract's path
+forward: the loose-file ingest batch above still works and still
+feeds the trainer, but it is the LEGACY path — the registered pools
+(`MODEL_MIX` weights naming datasets) supersede it as they prove out.
+
 ## 5b. Sharing the GPU
 
 The agent's entire GPU footprint is the one service process. To take
