@@ -62,6 +62,37 @@ let status_url = format!("http://127.0.0.1:{}/status",
 let mut o = DataObject::new();
 o.put_string("status", "ok");
 
+// host facts (one probe, two consumers - S1's solver reads these as
+// data, H4's system sensor emits their threshold-crossings as
+// perceptions; the map is grown here so a second probe never exists)
+{
+    let mut host = DataObject::new();
+    if let Ok(mi) = std::fs::read_to_string("/proc/meminfo") {
+        let grab = |key: &str| -> i64 {
+            mi.lines().find(|l| l.starts_with(key))
+              .and_then(|l| l.split_whitespace().nth(1))
+              .and_then(|v| v.parse::<i64>().ok()).unwrap_or(0) / 1024
+        };
+        host.put_int("mem_total_mb", grab("MemTotal:"));
+        host.put_int("mem_avail_mb", grab("MemAvailable:"));
+    }
+    if let Ok(la) = std::fs::read_to_string("/proc/loadavg") {
+        if let Some(l1) = la.split_whitespace().next()
+                .and_then(|v| v.parse::<f64>().ok()) {
+            host.put_float("load1", l1);
+        }
+    }
+    host.put_int("cpus", std::thread::available_parallelism()
+        .map(|n| n.get() as i64).unwrap_or(0));
+    // service liveness is an observation the sensor coalesces into
+    // up/down transitions; the probe just states it
+    let alive = ureq::AgentBuilder::new()
+        .timeout(std::time::Duration::from_millis(800))
+        .build().get(&status_url).call().is_ok();
+    host.put_boolean("service_alive", alive);
+    o.put_object("host", host);
+}
+
 // primary: the service's own view (torch's numbers)
 if let Ok(r) = ureq::AgentBuilder::new()
     .timeout(std::time::Duration::from_millis(2500))

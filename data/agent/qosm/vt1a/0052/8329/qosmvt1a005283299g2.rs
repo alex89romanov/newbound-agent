@@ -390,10 +390,47 @@ std::thread::spawn(move || {
             if drive > 0 && now >= next_at {
                 ex.put_string("phase", "deciding");
                 ex.put_int("next_act_time", now + 3600000 / drive);
-                let worked = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                    let cmd = Command::lookup("agent", "archivist", "epistemic_work");
-                    cmd.execute(DataObject::new())
+                // H4: the room is consulted first. consolidate_room's
+                // quiet gate and cursor make this a free no-op unless
+                // conversation happened AND subsided - only then does
+                // it spend, and the spend is this tick's act. The act
+                // repertoire proper (re-verify / connect / wonder)
+                // arrives with H5; epistemic work stays the fallback.
+                let mut acted_on_room = false;
+                let roomed = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    let cmd = Command::lookup("agent", "executive", "consolidate_room");
+                    let mut args = DataObject::new();
+                    args.put_int("min_quiet_s", 180);
+                    args.put_int("window", 60);
+                    args.put_int("budget", 600);
+                    cmd.execute(args)
                 }));
+                if let Ok(Ok(rr)) = roomed {
+                    if rr.has("a") {
+                        let aa = rr.get_object("a");
+                        if aa.has("consolidated") && aa.get_int("consolidated") > 0 {
+                            acted_on_room = true;
+                            let mut act = DataObject::new();
+                            act.put_string("kind", "consolidate_room");
+                            act.put_int("utterances", aa.get_int("consolidated"));
+                            if aa.has("claims_deposited") {
+                                act.put_int("claims", aa.get_int("claims_deposited"));
+                            }
+                            act.put_string("home", "kb.environment");
+                            act.put_int("time", now);
+                            ex.put_object("last_act", act);
+                            ex.put_int("acts_total", ex.get_int("acts_total") + 1);
+                        }
+                    }
+                }
+                let worked = if acted_on_room {
+                    Err(Box::new(()) as Box<dyn std::any::Any + Send>)
+                } else {
+                    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                        let cmd = Command::lookup("agent", "archivist", "epistemic_work");
+                        cmd.execute(DataObject::new())
+                    }))
+                };
                 if let Ok(Ok(r)) = worked {
                     if r.has("a") {
                         let a = r.get_object("a");
