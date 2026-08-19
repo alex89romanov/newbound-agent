@@ -1,9 +1,10 @@
 # FFI dynamic loading — drop libloading/notify, load crates at hot-swap time
 
-**Status:** in development — Phases 1–2 landed on the flow repo's
-`claude/ffi-dynamic-loading-design-vfwdi8` branch (`flowlang::hotswap` in
-`0659bca`, builder emission in `306d138`); Phases 3–5 open. Follow the
-phases in order.
+**Status:** in development — Phases 1–3 landed on the repos' matching
+`claude/ffi-dynamic-loading-design-vfwdi8` branches (flow: `hotswap` in
+`0659bca`, builder emission in `306d138`, Phase-3 fixes in `00fb146`;
+newbound: `9bbbb6d`); Phases 4–5 open. Until flowlang 0.3.34 publishes,
+the newbound branch builds only with the §5 `[patch.crates-io]` line.
 **Origin:** 2026-08-19 session (owner request).
 **Scope:** `mraiser/flow` (flowlang — most of the work), `mraiser/newbound`
 (dependency removal + `dev.code` command changes), `mraiser/newbound-agent`
@@ -384,16 +385,37 @@ touched dylib in a live server; a brand-new FFI library created via
 — including first-appearing in a *running* server, no restart; and
 `agent archivist queue_status` executed end-to-end via `exec`.
 
-**Phase 3 — platform (newbound repo).** Dependency removal + flowlang
-bump; regenerate the committed initializer; store-authored `dev.code`
-changes (`compile` explicit reload, `activate_lib` live-load, optional
-`newlib` rescan) with regenerated crate src committed together, per the
-process. One host rebuild + restart ships it. *Accept:* §7 end-to-end
-passes; `grep -rE 'libloading|notify' Cargo.toml Cargo.lock src/` finds
-nothing (`Cargo.lock` proves the transitive cut). Expect the regenerated
-initializer to **drop the `cmd` block**: no library in the store roots
-there, and the generator (old and new alike) only emits crates that
-store libraries declare — the manifest's `cmd` path dependency stays.
+**Phase 3 — platform (newbound repo).** ✅ **Landed** (newbound branch,
+commit `9bbbb6d`; companion flow fixes in `00fb146`). Dependency removal
+including the vestigial `hot-lib-reloader` + `reload` feature in BOTH
+manifests and the dead `src/main copy.rs`; the app library's store
+config also carried `hot-lib-reloader` in `cargo.dependencies` (re-fed
+to the manifest on every rebuild) and was cleaned via
+`save_library_config`. Initializer regenerated to the FFI-agnostic form
+(the `cmd` block dropped as predicted; `api.rs` picked up a pre-existing
+login-returntype regeneration drift). Store-authored via
+`upsert_command` → `compile` over one `newbound mcp` process, exactly as
+dry-run in the disposable instance first. *Accepted:* the §7 battery ran
+through ONE persistent MCP process — newlib → add_control →
+`activate_lib` answering **"OK: <lib> is live"** → upsert → the command
+executes → an edited body executes immediately after its upsert → a
+no-op compile stays OK (and no longer leaks a mapping) — zero restarts;
+`Cargo.toml` + `src/` grep-clean; the lock has no notify/hot-lib
+packages at all, and `libloading 0.7` only as `jni`'s transitive dep
+behind flowlang's optional `java_runtime` (out of scope — the gate is
+amended to that reality). Findings folded back into flow (`00fb146`):
+a new command whose only source delta is its mod-file wiring used to get
+a false "unchanged" verdict from the builder (no build, no reload, OK
+answered) — wiring now counts as change; and `hotswap::load`/`reload`
+skip when the on-disk dylib matches the loaded generation. §7 caveats:
+the delete-command step is blocked by the pre-existing additive
+mod-file issue (`docs/todo-flowlang-mod-regeneration.md`) — the
+stale-id sweep itself is proven at the hotswap layer; and `newlib` via
+bare `exec` fails at `load_library` (no `init_globals` in the exec
+path, pre-existing) — create libraries through a served surface.
+Residue for the owner: `data/app/meta.json` still carries a dormant
+`cargo.features.reload` string — the builder never applies features and
+no command edits them today.
 
 **Phase 4 — agent repo.** setup.sh re-keying, interim-process.md matrix
 flip, kb deposits + promote. *Accept:* fresh-clone setup.sh run is green
