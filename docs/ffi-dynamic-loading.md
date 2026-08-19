@@ -1,8 +1,9 @@
 # FFI dynamic loading — drop libloading/notify, load crates at hot-swap time
 
-**Status:** in development — Phase 1 landed on the flow repo's
-`claude/ffi-dynamic-loading-design-vfwdi8` branch (`flowlang::hotswap`,
-commit `0659bca`); Phases 2–5 open. Follow the phases in order.
+**Status:** in development — Phases 1–2 landed on the flow repo's
+`claude/ffi-dynamic-loading-design-vfwdi8` branch (`flowlang::hotswap` in
+`0659bca`, builder emission in `306d138`); Phases 3–5 open. Follow the
+phases in order.
 **Origin:** 2026-08-19 session (owner request).
 **Scope:** `mraiser/flow` (flowlang — most of the work), `mraiser/newbound`
 (dependency removal + `dev.code` command changes), `mraiser/newbound-agent`
@@ -365,13 +366,23 @@ generation-1 transform pointer surviving a reload, contract refusal).
 *Accepted:* `cargo test` green in flow (13 tests, 0 failures, no new
 warnings); zero dependency changes in `flow/Cargo.toml`.
 
-**Phase 2 — builder emission (flow repo).** Slim
-`generate_main_initializer`; scaffold template uses the canonical
-`Initializer` + contract symbol. Run `newbound rebuild` in a **scratch**
-newbound checkout (patched to local flowlang) and review the regenerated
-initializer diff. *Accept:* generated file contains no
-`libloading`/`notify` tokens and no FFI crate names; host builds; overlay
-dylibs load at startup via `hotswap::start`.
+**Phase 2 — builder emission (flow repo).** ✅ **Landed** (flow branch,
+commit `306d138`). `generate_main_initializer` emits static-crate blocks
+plus one `hotswap::start(magic)` call — no loader/watcher plumbing, no
+FFI crate names — factored into a pure, unit-tested
+`render_main_initializer` (deterministic: static crates sorted). The
+empty-project case emits the same shape, and flow's own committed
+initializer is regenerated to it. The FFI scaffold imports the canonical
+`flowlang::hotswap::Initializer` and exports `nb_ffi_contract_<crate>`
+via `contract_ptr()`. *Accepted against a disposable overlaid instance
+patched to local flowlang:* the regenerated initializer carried no
+`libloading`/`notify` tokens and no FFI crate names; the host rebuilt;
+all three overlay dylibs loaded at startup via store discovery (agent:
+65 commands, legacy warn-and-proceed path); the poller reloaded a
+touched dylib in a live server; a brand-new FFI library created via
+`app-app-newlib` + rebuild + cargo build loaded with a contract **match**
+— including first-appearing in a *running* server, no restart; and
+`agent archivist queue_status` executed end-to-end via `exec`.
 
 **Phase 3 — platform (newbound repo).** Dependency removal + flowlang
 bump; regenerate the committed initializer; store-authored `dev.code`
@@ -379,7 +390,10 @@ changes (`compile` explicit reload, `activate_lib` live-load, optional
 `newlib` rescan) with regenerated crate src committed together, per the
 process. One host rebuild + restart ships it. *Accept:* §7 end-to-end
 passes; `grep -rE 'libloading|notify' Cargo.toml Cargo.lock src/` finds
-nothing (`Cargo.lock` proves the transitive cut).
+nothing (`Cargo.lock` proves the transitive cut). Expect the regenerated
+initializer to **drop the `cmd` block**: no library in the store roots
+there, and the generator (old and new alike) only emits crates that
+store libraries declare — the manifest's `cmd` path dependency stays.
 
 **Phase 4 — agent repo.** setup.sh re-keying, interim-process.md matrix
 flip, kb deposits + promote. *Accept:* fresh-clone setup.sh run is green
