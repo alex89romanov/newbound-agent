@@ -1,7 +1,8 @@
 # The spectrum cycle — one substrate from d10 to the frontier
 
-**Status: charter for the model-subsystem cycle — drafted 2026-08-18,
-revised same day after owner direction; owner review pending.**
+**Status: plan of record for the model-subsystem cycle — drafted
+2026-08-18, revised same day after owner direction; all ten owner
+calls ruled in session, 2026-08-18/19.**
 Companion to `docs/harvest-cycle.md`, not its successor: the harvest
 cycle grows the feedstock; this cycle grows the organism that eats it.
 They interleave — S2 below is H6's landing zone, and S8 is the SFT
@@ -267,7 +268,10 @@ rule: a tag, never a branch), the transform recipe — so "did the win
 come from the raw data or the synthetic expansion?" is an ordinary
 one-brick bench question between a dataset and its derived sibling.
 Model-driven derivation spends tokens: it runs by deliberate command
-or under a drive budget like rumination, never ambiently.
+or under a drive budget like rumination, never ambiently — and
+governance is uniform across generators (ruled, 2026-08-19): frontier
+arm, resident, or procedural transform obey the same rule, the
+generator staying a provenance tag, never a branch.
 
 ### S3 — The backend seam
 
@@ -541,8 +545,11 @@ a different scale.
    the two doors. Downloads land under the runtime folder,
    filelock-guarded and resumable, so concurrent multi-node imports
    dedupe over NFS (S1/S2).
-10. Derivation governance and stream defaults: who may spend model
-    tokens generating synthetic datasets (proposal: deliberate
-    command always; drive-budgeted under the rumination budget once
-    H5 lands), and stream-vs-snapshot policy (proposal: the live loop
-    rides streams; the bench and SFT runs pin snapshots) (S2/S6).
+10. **RULED (owner, 2026-08-19) — derivation governance and stream
+    defaults as proposed.** Derivation runs by deliberate command
+    always, and as a drive-budgeted rumination act once H5 lands —
+    journaled, accounted, never ambient — with governance uniform
+    across generators: frontier arm, resident, or procedural
+    transform obey one rule, the generator a provenance tag, never a
+    branch. The live CPT loop rides streams; the bench and SFT runs
+    pin snapshots (S2/S6).
