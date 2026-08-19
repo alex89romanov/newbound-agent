@@ -1,5 +1,6 @@
 // This file is auto-generated and managed by the flowlang build script.
 use flowlang::rustcmd::Transform;
+pub mod why_harvest;
 pub mod dataset_feed;
 pub mod sft_promote;
 pub mod sft_run;
@@ -77,4 +78,5 @@ pub fn cmdinit(cmds: &mut Vec<(String, Transform, String)>) {
     cmds.push(("uoioiv1a01938479ci1".to_string(), sft_run::execute, "".to_string()));
     cmds.push(("zzzosn1a019385f6fn1".to_string(), sft_promote::execute, "".to_string()));
     cmds.push(("vvhumz1a019d18b18t1".to_string(), dataset_feed::execute, "".to_string()));
+    cmds.push(("gnvkzr1a01a0b0e05g1".to_string(), why_harvest::execute, "".to_string()));
 }
