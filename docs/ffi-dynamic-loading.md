@@ -92,7 +92,9 @@ after that is invisible until regenerate + host rebuild + restart
    `RUST_COMMANDS` still holds raw pointers into the old mapping until the
    rewrite completes, and other threads may be *executing* old transforms.
    Any command deleted from the new build keeps a permanently dangling
-   pointer.
+   pointer. This is the observed **crash on hot-swap of a library with
+   code running in a thread**: dlclose unmaps the code segment under the
+   running thread's instruction pointer, and the next fetch faults.
 2. **Compile/reload race.** The 2s debounce means "compile OK" precedes
    "new code live"; an exec issued immediately after a compile can run the
    old code.
@@ -281,7 +283,16 @@ pub fn initialize_all_commands(magic: (&'static str, NDataConfig)) {
   design removes it: every loaded generation stays mapped for the life of
   the process. Cost: one dylib mapping (a few MB) leaked per reload,
   dev-time only, bounded by reload count. This *fixes* defect #1 — today's
-  code dlcloses live libraries.
+  code dlcloses live libraries — including the known crash when a library
+  is hot-swapped while one of its threads is running: the thread now
+  finishes on the old, still-mapped code. Calibrate expectations, though:
+  the surviving thread is **safe, not upgraded**. A thread spawned by an
+  old generation keeps executing that generation's code and its
+  crate-local statics until it exits (shared *data* is fine — the mirror
+  handshake shares the host's ndata heaps across generations). A library
+  that keeps a persistent worker thread needs a cooperative handoff to
+  adopt new code: the old thread observes a generation bump and exits,
+  and the new generation respawns it.
 - **Stale-id sweep.** On reload, ids registered by the previous generation
   but absent from the new one are removed from `RUST_COMMANDS`, so a
   deleted command fails cleanly ("No such command") instead of silently
@@ -382,10 +393,16 @@ over MCP / `tools/nb-call.py`:
    reload guarantee).
 6. Delete the command from the store; compile; execute — clean "no such
    command" error, not the old marker (stale-id sweep).
-7. Out-of-band: run `cargo build --release` directly in `hotdemo/`
+7. **Thread-survival (the historical crash).** Add a command that spawns
+   a thread which loops for ~30s writing a heartbeat into the store, and
+   invoke it. While the thread runs, edit and recompile the library
+   (twice, for good measure). Verify: the process does not crash, the
+   heartbeats continue uninterrupted (old code, still mapped), and a
+   fresh invocation after the reload runs the new generation.
+8. Out-of-band: run `cargo build --release` directly in `hotdemo/`
    after touching a src file; within ~2 poll ticks the reload log line
    appears (poller backstop).
-8. Regression: rows 1–3 of the restart matrix unchanged — facet writes
+9. Regression: rows 1–3 of the restart matrix unchanged — facet writes
    live-serve; an `agent`-lib command edit hot-reloads; a `dev.code`
    command edit still requires host rebuild + restart. Run the smoke
    battery (`tools/smoke`).
