@@ -1,5 +1,8 @@
 // This file is auto-generated and managed by the flowlang build script.
 use flowlang::rustcmd::Transform;
+pub mod wonder;
+pub mod connect;
+pub mod reverify;
 pub mod decay;
 pub mod epistemic_work;
 pub mod adjudicate;
@@ -23,4 +26,7 @@ pub fn cmdinit(cmds: &mut Vec<(String, Transform, String)>) {
     cmds.push(("ytjnql1a006791e27h1".to_string(), adjudicate::execute, "".to_string()));
     cmds.push(("ixhqrg1a0068b1a0cx1".to_string(), epistemic_work::execute, "".to_string()));
     cmds.push(("mttpgg1a0068b31e0u3".to_string(), decay::execute, "".to_string()));
+    cmds.push(("xknmpg1a01a30b0bdw1".to_string(), reverify::execute, "".to_string()));
+    cmds.push(("slxnyn1a01a32718ar1".to_string(), connect::execute, "".to_string()));
+    cmds.push(("thpngr1a01a328e34q1".to_string(), wonder::execute, "".to_string()));
 }

@@ -7,10 +7,11 @@
       "lib": "agent",
       "ctl": "agentloop",
       "facet": "js",
-      "hash": "6569fbeed2ace744"
+      "hash": "18e725718f2d6a5e"
     },
     "confidence": "high",
-    "time": 1785964641067
+    "time": 1785964641067,
+    "reverified": 1787145845593
   },
   {
     "claim": "Anthropic's Messages API cannot be reached through the OPENAI arm: it is a distinct wire, not chat-completions with a different key.",

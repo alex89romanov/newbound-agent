@@ -467,7 +467,64 @@ std::thread::spawn(move || {
                         }
                     }
                 }
-                let worked = if acted_on_room {
+                // H5: the act repertoire. When the room needed
+                // nothing, the tick rotates through the garden -
+                // reverify, reverify, connect, wonder, distill (owner
+                // call 4's 2/1/1 proposal, distill appended per H3's
+                // sequencing note). Every act is a governed command:
+                // journaled, hysteresis-guarded, spend-capped. An act
+                // that finds nothing to do costs nothing; the stale
+                // fallback below (epistemic_work + decay) remains the
+                // no-frontier floor when the arm is down.
+                let mut acted_in_garden = false;
+                if !acted_on_room {
+                    let rot = if ex.has("rum_rot") { ex.get_int("rum_rot") } else { 0 };
+                    ex.put_int("rum_rot", rot + 1);
+                    let (alib, actl, acmd, mut aargs) = match rot % 5 {
+                        0 | 1 => {
+                            let mut a = DataObject::new();
+                            a.put_int("limit", 1);
+                            ("agent", "archivist", "reverify", a)
+                        }
+                        2 => {
+                            let mut a = DataObject::new();
+                            a.put_string("subject", "");
+                            ("agent", "archivist", "connect", a)
+                        }
+                        3 => ("agent", "archivist", "wonder", DataObject::new()),
+                        _ => {
+                            let mut a = DataObject::new();
+                            a.put_string("name", "code-why");
+                            a.put_string("out_name", "code-why-qa");
+                            a.put_string("transform", "distill_why");
+                            a.put_int("limit", 1);
+                            ("agent", "model", "dataset_derive", a)
+                        }
+                    };
+                    let acted = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                        let cmd = Command::lookup(alib, actl, acmd);
+                        cmd.execute(aargs.deep_copy())
+                    }));
+                    if let Ok(Ok(rr)) = acted {
+                        if rr.has("a") {
+                            let aa = rr.get_object("a");
+                            let did = (aa.has("spent") && aa.get_int("spent") > 0)
+                                || (aa.has("deposited") && aa.get_int("deposited") > 0)
+                                || (aa.has("added") && aa.get_int("added") > 0)
+                                || (aa.has("distilled") && aa.get_int("distilled") > 0);
+                            if did {
+                                acted_in_garden = true;
+                                let mut act = DataObject::new();
+                                act.put_string("kind", acmd);
+                                act.put_string("home", &format!("{}.{}", alib, actl));
+                                act.put_int("time", now);
+                                ex.put_object("last_act", act);
+                                ex.put_int("acts_total", ex.get_int("acts_total") + 1);
+                            }
+                        }
+                    }
+                }
+                let worked = if acted_on_room || acted_in_garden {
                     Err(Box::new(()) as Box<dyn std::any::Any + Send>)
                 } else {
                     std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
