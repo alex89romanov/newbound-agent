@@ -1,10 +1,12 @@
 # FFI dynamic loading — drop libloading/notify, load crates at hot-swap time
 
-**Status:** in development — Phases 1–3 landed on the repos' matching
+**Status:** in development — Phases 1–4 landed on the repos' matching
 `claude/ffi-dynamic-loading-design-vfwdi8` branches (flow: `hotswap` in
 `0659bca`, builder emission in `306d138`, Phase-3 fixes in `00fb146`;
-newbound: `9bbbb6d`); Phases 4–5 open. Until flowlang 0.3.34 publishes,
-the newbound branch builds only with the §5 `[patch.crates-io]` line.
+newbound: `9bbbb6d` + the promoted dev manuals). Only Phase 5 (the
+flowlang 0.3.34 release + pin bumps, owner's) remains. Until it
+publishes, builds need the transitional patch — setup.sh now writes it
+to `.cargo/config.toml` in both checkout roots automatically.
 **Origin:** 2026-08-19 session (owner request).
 **Scope:** `mraiser/flow` (flowlang — most of the work), `mraiser/newbound`
 (dependency removal + `dev.code` command changes), `mraiser/newbound-agent`
@@ -417,9 +419,30 @@ Residue for the owner: `data/app/meta.json` still carries a dormant
 `cargo.features.reload` string — the builder never applies features and
 no command edits them today.
 
-**Phase 4 — agent repo.** setup.sh re-keying, interim-process.md matrix
-flip, kb deposits + promote. *Accept:* fresh-clone setup.sh run is green
-end to end; docs match observed behavior.
+**Phase 4 — agent repo.** ✅ **Landed.** The overlay crates' `lib.rs`
+regenerated to the canonical handshake (deleted, rebuilt by the builder,
+copied back) — all three now load with contract **matches**, no legacy
+warnings. setup.sh re-keyed: step 4 keys on the workspace exclude +
+`hotswap::start` (the initializer no longer names FFI crates), and a
+transitional step writes the flowlang `[patch.crates-io]` into
+`.cargo/config.toml` in **both** checkout roots (cargo resolves
+symlinked build cwds physically, so the newbound-root config never
+covers dylib builds) and skip-worktrees `Cargo.lock` — all local-only,
+deleted when 0.3.34 ships. interim-process.md matrix flipped (rows 2 and
+4) and the hot-path paragraph rewritten; README.md de-watcher-ified. kb
+deposits made (platform-api: hotswap ownership, FFI-agnostic
+initializer, compile/activate semantics, upsert-compiles-internally;
+workflow: transitional patch discipline + corrected restart boundaries
+and fresh-build steps), `promote lib:dev` shipped the subject claims
+onto dev's manuals (committed in newbound), and the seed re-exported
+(+3 workflow claims, nothing removed). *Accepted:* the updated setup.sh
+ran green end to end on the real checkout — transitional patch, overlay,
+rebuild, dylibs, staging, hygiene, kb bootstrap, and all seven
+overlay-probe checks PASS including agent dylib dispatch. Residue: the
+two superseded watcher claims remain in brain and seed beside their
+corrections — `adjudicate` had no LLM for judgment here (defaulted to
+insert) and `decay` rightly refused (prose `doc` sources carry no drift
+hash); a future adjudication session with an LLM steps them down.
 
 **Phase 5 — release.** Owner publishes flowlang 0.3.34; pin bumps land in
 newbound and the overlay crates; patch lines are gone from every manifest.
