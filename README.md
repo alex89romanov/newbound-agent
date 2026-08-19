@@ -30,10 +30,13 @@ path/to/newbound-agent/tools/setup.sh    # finds the sibling checkout;
 ```
 
 Idempotent: on a fresh clone it is the complete first-time sequence
-(symlink overlay → `cmd/` scaffold if absent → host build →
-`newbound rebuild` → host build with the FFI blocks → the three dylibs
-→ agent-app staging), finishing with the git hygiene below and the
-overlay probe as proof. On an already-set-up checkout every step
+(symlink overlay → `cmd/` scaffold if absent → the transitional flowlang
+patch while 0.3.34 is unpublished → host build → `newbound rebuild`,
+which writes the workspace exclude and regenerates scaffolds/api.rs —
+the initializer is FFI-agnostic since the hotswap upgrade
+(`docs/ffi-dynamic-loading.md`), nothing is baked in → host build → the
+three dylibs → agent-app staging), finishing with the git hygiene below
+and the overlay probe as proof. On an already-set-up checkout every step
 short-circuits and the whole run takes seconds. Afterwards
 `./target/release/newbound` serves the web UI (the agent app at
 `/agent/index.html`, port per `config.properties`) and
@@ -55,17 +58,20 @@ The overlay symlinks `data/agent`, `data/kb`, `data/scratch`, `agent/`,
 `kb/`, `scratch/` into the checkout and marks the tracked scratch
 skeleton files skip-worktree in this repo. Library discovery follows
 symlinks (`read_dir` + `Path::is_dir()` — verified), so the platform,
-`flowb`, the hot-reload watcher, and `newbound mcp` see ordinary
-directories.
+`flowb`, the hotswap loader and its poller, and `newbound mcp` see
+ordinary directories.
 
 The git hygiene handles the two kinds of builder-written local state so
 neither can land in an accidental commit:
 
 - **newbound repo**: `newbound rebuild` rewrites `Cargo.toml` (the
-  workspace exclude), `src/generated_initializer.rs`, and
-  `newbound_core/src/api.rs`. Never committed there — the agent is
-  optional by design — so setup marks them skip-worktree
+  workspace exclude) and `newbound_core/src/api.rs` with overlay
+  knowledge. Never committed there — the agent is optional by design —
+  so setup marks them skip-worktree
   (undo: `git update-index --no-skip-worktree <file>`).
+  `src/generated_initializer.rs` stays in the skip-worktree set out of
+  caution, but since the hotswap upgrade it regenerates byte-identical
+  with or without the overlay — nothing FFI is baked in anymore.
 - **this repo**: the rebuild regenerates each FFI crate's `src/api.rs`
   against the libraries present in *that* checkout, deleting stubs for
   libraries installed elsewhere (`camera`, `hollis`, …). Setup reverts

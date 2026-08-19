@@ -16,7 +16,6 @@ ureq = { version = "2.9", features = ["json"] }
 [features]
 serde_support = ["serde","serde_json","flowlang/serde_support","ndata/serde_support"]
 python_runtime = ["flowlang/python_runtime"]
-reload = []
 default = []
 
 

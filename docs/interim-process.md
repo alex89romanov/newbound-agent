@@ -147,17 +147,23 @@ store's files (unchanged rule). Where the edit lands decides the rhythm:
 | Target | Mechanism | Restart? **[verified]** |
 |---|---|---|
 | Facets (js/html/css/scene/flow/data) in any library | `dev.code` patch/write commands | never — served from the store |
-| Rust commands in `agent`, `kb`, `scratch` | `upsert_command` → `compile` | **no** — the watcher hot-reloads the dylib |
+| Rust commands in `agent`, `kb`, `scratch` | `upsert_command` (compiles internally) | **no** — a successful compile hot-reloads the dylib synchronously: OK means the new code is executable now |
 | Rust commands in `newbound_core`-rooted libs (`app`, `dev`, `peer`, `security`, `flow`), incl. `dev.code` itself | upsert → compile → host rebuild | **yes** — static rlib, restart the process |
-| A **new** FFI crate (new root) | `newbound rebuild` regenerates the initializer | **yes** — watcher list + init blocks are baked in at rebuild time |
+| A **new** FFI crate (new root) | `newlib` → `add_control` → `activate_lib` | **no** — loaded live from store metadata; activate answers "OK: \<lib\> is live" |
 
-The hot path is verified end to end: `initialize_all_commands` arms the
-watcher before the `mcp` subcommand dispatches; the watcher observes
-`{agent,kb,scratch}/target/release`, reloads a changed dylib from a fresh
-temp copy (first appearance handled too), and rewrites `RUST_COMMANDS`;
-flowlang's `tools/list` walks the store fresh per request and `tools/call`
-does `Command::lookup` per call. New commands appear and new code runs
-inside one long-running `newbound mcp` process.
+The hot path is verified end to end: `initialize_all_commands` hands off
+to `flowlang::hotswap::start`, which discovers FFI roots from the store's
+meta.json files (`root` + `cargo.ffi`), loads each dylib from a fresh temp
+copy, and rewrites `RUST_COMMANDS` — old generations are deliberately
+never unloaded, so a reload under a running thread is safe (the thread
+finishes on the old, still-mapped code). An FFI-rooted `compile` reloads
+synchronously before answering; a std-only mtime poller (~2s tick,
+`NEWBOUND_FFI_POLL_MS`, two-tick quiesce) backstops out-of-band cargo
+builds and first appearances. flowlang's `tools/list` walks the store
+fresh per request and `tools/call` does `Command::lookup` per call. New
+libraries and new commands appear and new code runs inside one
+long-running `newbound mcp` process; `docs/ffi-dynamic-loading.md` is the
+full design and verification record.
 
 Disciplines that ride along: fill `desc` at creation (`tools/list` omits
 blank-desc commands — desc *is* discovery, and it is also the curation

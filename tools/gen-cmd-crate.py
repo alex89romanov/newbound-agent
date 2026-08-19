@@ -40,7 +40,6 @@ serde_json = "1.0"
 serde_support = []
 python_runtime = []
 javascript_runtime = []
-reload = []
 default = []
 """)
 with open(os.path.join(cmd, "src", "lib.rs"), "w") as f:
