@@ -225,5 +225,15 @@
     },
     "confidence": "high",
     "time": 1787129123639
+  },
+  {
+    "claim": "S8 landed (claude/spectrum-s8-sft) and the spectrum cycle's chartered phases are all built. The SFT gate design (docs/spectrum-s8.md, written before the code per the harvest deferral rule): the SFT gate is the bench's instruments guarding the ENTRY to the ring - subject gain on held-out conversations, the forgetting guard through the anchor, agreement non-regression on held-out pairs (unmeasurable instruments report as such, never silently pass as measured) - and everything after the ring is shipped machinery. The sft-* ring namespace is the safety: cpt-* deltas are by definition already merged into serving and resume re-merges them; sft-* candidates are NOT, resume never touches them, and only the deliberate sft_promote (promote-by-key through the double buffer) puts one on the fast lane for its soak. From there the standard user gate qualifies READY, user_promote advances /chat, persona and the stack re-apply on top.",
+    "detail": "CPU battery: 24-conversation fabricated bank (kind sft, holdout every=5), sft_run rank 8 x 80 steps -> accept (subject 6.20->5.95; std and agree None on this box, reported not-measured), candidate sft-<ts>-voice-1 ringed; restart did NOT auto-merge it; sft_promote flipped to B:hf:tiny-hf+sft-*, soaked under the sft key, standard gate READY, user pointer advanced, /chat served it with persona re-applied (+lora). Reject path: 2-step run failed min_gain, no ring entry. R1 restored. sft_run refuses non-conversation dataset kinds at the command; runs borrow the time-share alongside bench runs. Owner-box owed: the real H1 chat bank on a capable imported base - the quality jump the charter predicted.",
+    "tags": "spectrum,s8,sft",
+    "source": {
+      "doc": "docs/spectrum-s8.md; battery run in session 2026-08-19"
+    },
+    "confidence": "high",
+    "time": 1787129643863
   }
 ]
