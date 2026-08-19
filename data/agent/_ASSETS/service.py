@@ -2222,6 +2222,8 @@ def trainer_lora_loop(args, live, arith):
           f"targets={len(ab)} mix={mix} gate={gate_cfg}", flush=True)
     while True:
         time.sleep(max(float(args.train_interval), 0.05))
+        if EXPERIMENT["running"]:
+            continue   # the bench borrows the time-share (ruling 7)
         tick += 1
         if tick % 30 == 1:
             refresh_ds_pools()
@@ -2388,6 +2390,209 @@ def trainer_lora_loop(args, live, arith):
                 print("[trainer] lora candidate reset", flush=True)
 
 
+# ── S6: the bench ───────────────────────────────────────────────────
+# Recipes snap the bricks together (records in the runtime library,
+# resolved by the commands and passed here whole - the service stays
+# store-blind); an experiment runs each arm as a fresh base + bounded
+# delta and scores with the gates' own instruments on eval material
+# PINNED at run start (ruling 7). On one card the bench borrows the
+# standing trainer's time-share: candidate steps pause, serving never
+# does, and the borrow is published.
+
+EXPERIMENT = {"running": False, "current": None, "last": None}
+
+
+def run_experiment_arm(args, recipe, budget_steps, eval_sets, pairs):
+    """One arm: fresh base, bare measurement, a bounded hook-LoRA delta
+    trained on the recipe's mix, delta measurement, weights freed. The
+    delta is always-on-hooks - this model is private to the arm, never
+    serving."""
+    import torch
+    import random as _r
+    scorer, base_ref = load_base_scorer(args, recipe.get("base") or "pointer")
+    model, tokenizer = scorer_model(scorer), scorer.tokenizer
+    device = model_device(model)
+    seq_len = min(int(scorer.meta["model_config"]["sequence_len"]
+                      if scorer.meta else 2048), 2048)
+    for p in model.parameters():
+        p.requires_grad_(False)
+
+    def chunks_of(docs):
+        toks = []
+        for d in docs:
+            toks.extend(encode_doc(tokenizer, d))
+        return [toks[i:i + seq_len + 1]
+                for i in range(0, len(toks) - seq_len - 1, seq_len)]
+
+    eval_chunks = {nm: chunks_of(docs) for nm, docs in eval_sets.items()}
+
+    def eval_one(chs):
+        if not chs:
+            return None
+        tot = 0.0
+        with torch.no_grad():
+            for c in chs[:16]:
+                tot += float(plain_lm_loss_t(model, tokenizer, c, device))
+        return round(tot / min(len(chs), 16), 4)
+
+    def agreement():
+        if len(pairs) < 4:
+            return None
+        sel = pairs[-8:]
+        total = 0.0
+        for pr in sel:
+            completion = scorer.generate_text(
+                [{"role": "user",
+                  "content": salience_prompt("?", pr["input"], 0, 0)}],
+                max_tokens=64, temperature=0.01, top_k=1)
+            sal, _w, _p = parse_salience(completion)
+            if sal is None:
+                sal = 0.5
+            total += min(1.0, abs(sal - float(pr["target"])))
+        return round(1.0 - total / len(sel), 4)
+
+    def measure():
+        return {"evals": {nm: eval_one(chs)
+                          for nm, chs in eval_chunks.items()},
+                "agreement": agreement()}
+
+    before = measure()
+    mix = parse_kv(recipe.get("mix", ""), {})
+    pools = {}
+    for rec in load_registry_datasets(args.data_dir):
+        nm = rec.get("name")
+        if nm and mix.get(nm, 0) > 0:
+            tr, _ho = load_dataset_docs(rec)
+            if tr:
+                pools[nm] = tr
+    cfg = parse_kv_mixed(getattr(args, "lora", ""), PERSONA_LORA_DEFAULTS)
+    rank = int(cfg["rank"])
+    scale = 2.0
+    ab, hooks = {}, []
+    for path in lora_target_paths(model, cfg["targets"]):
+        try:
+            lin = model.get_submodule(path)
+        except AttributeError:
+            continue
+        A = torch.zeros(rank, lin.in_features, device=device,
+                        dtype=torch.float32).normal_(0, 0.02
+                                                     ).requires_grad_(True)
+        Bm = torch.zeros(lin.out_features, rank, device=device,
+                         dtype=torch.float32).requires_grad_(True)
+        ab[path] = (A, Bm)
+
+        def mk_hook(A=A, Bm=Bm):
+            def hook(_m, inputs, output):
+                x = inputs[0]
+                return output + (x.float() @ A.t() @ Bm.t()
+                                 ).to(output.dtype) * scale
+            return hook
+        hooks.append(lin.register_forward_hook(mk_hook()))
+    steps_run = 0
+    if ab and pools:
+        opt = torch.optim.AdamW([t for pr2 in ab.values() for t in pr2],
+                                lr=float(recipe.get("lr") or args.lr))
+        total_w = sum(mix[k] for k in pools)
+        model.train()
+        for _s in range(int(budget_steps)):
+            docs = []
+            for k, pool in pools.items():
+                n = max(1, round(4 * mix[k] / total_w))
+                docs.extend(_r.choice(pool) for _ in range(n))
+            chs = chunks_of(docs)
+            if not chs:
+                continue
+            loss = plain_lm_loss_t(model, tokenizer, chs[0], device)
+            opt.zero_grad()
+            loss.backward()
+            opt.step()
+            steps_run += 1
+        model.eval()
+    after = measure()
+    for h in hooks:
+        h.remove()
+    result = {"base": base_ref,
+              "pools": {k: len(v) for k, v in pools.items()},
+              "steps_run": steps_run, "before": before, "after": after}
+    del scorer, model
+    try:
+        torch.cuda.empty_cache()
+    except Exception:
+        pass
+    return result
+
+
+def run_experiment_thread(args, spec):
+    """One bench run: pin the eval material (ruling 7 - frozen at run
+    start, hashes recorded so the report names exactly what it
+    measured), run each arm, append the report to experiments.jsonl.
+    The standing trainer's candidate steps pause for the duration -
+    serving never does - and the borrow rides /status."""
+    with LOCK:
+        EXPERIMENT["running"] = True
+        EXPERIMENT["current"] = {"name": spec["name"],
+                                 "started": int(time.time() * 1000),
+                                 "arms": [a for a, _r2 in spec["arms"]]}
+        TRAINER["borrowed_by"] = spec["name"]
+    report = {"name": spec["name"], "budget_steps": spec["budget_steps"],
+              "bricks_changed": spec.get("bricks_changed"),
+              "one_brick": spec.get("one_brick"),
+              "started": int(time.time() * 1000)}
+    try:
+        eval_names = set()
+        for _a, recipe in spec["arms"]:
+            for nm in str(recipe.get("evals", "")).split(","):
+                if nm.strip():
+                    eval_names.add(nm.strip())
+            for k in parse_kv(recipe.get("mix", ""), {}):
+                eval_names.add(k)
+        eval_sets = {}
+        pinned = {}
+        for rec in load_registry_datasets(args.data_dir):
+            nm = rec.get("name")
+            if nm in eval_names:
+                tr, ho = load_dataset_docs(rec)
+                docs = ho or tr[:24]
+                if docs:
+                    eval_sets[nm] = docs[:24]
+                    pinned[nm] = rec.get("hash")
+        anchor_docs = load_anchor_docs(args)
+        std = (anchor_docs[:24] if anchor_docs
+               else load_standard_docs(args, limit=64)[:24])
+        if std:
+            eval_sets["standard"] = std
+            pinned["standard"] = "anchor" if anchor_docs else "base_data"
+        pairs = list(HELDOUT_PAIRS)
+        report["pinned"] = pinned
+        arms_out = {}
+        for arm_name, recipe in spec["arms"]:
+            arms_out[arm_name] = run_experiment_arm(
+                args, recipe, spec["budget_steps"], eval_sets, pairs)
+        report["arms"] = arms_out
+        report["status"] = "done"
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        report["status"] = "error"
+        report["error"] = str(e)[:500]
+    report["finished"] = int(time.time() * 1000)
+    try:
+        with open(os.path.join(args.data_dir, "experiments.jsonl"),
+                  "a") as f:
+            f.write(json.dumps(report) + "\n")
+    except Exception:
+        pass
+    append_metric(args.data_dir, {"kind": "experiment",
+                                  "name": spec["name"],
+                                  "status": report["status"]})
+    with LOCK:
+        EXPERIMENT["running"] = False
+        EXPERIMENT["current"] = None
+        EXPERIMENT["last"] = report
+        TRAINER["borrowed_by"] = None
+    print(f"[bench] {spec['name']}: {report['status']}", flush=True)
+
+
 def trainer_real(args):
     """Continuous CPT on a candidate copy of the live model. Runs only
     once a NanochatScorer is live; steps forever at --train-interval."""
@@ -2546,6 +2751,8 @@ def trainer_real(args):
     tick = 0
     while True:
         time.sleep(max(float(args.train_interval), 0.05))
+        if EXPERIMENT["running"]:
+            continue   # the bench borrows the time-share (ruling 7)
         # streams grow and datasets register mid-flight: refresh the
         # registered pools at start and every ~30 ticks (registry.json
         # itself is mtime-cached inside the loader)
@@ -2848,6 +3055,9 @@ class Handler(BaseHTTPRequestHandler):
                 "resources": res_map,
                 "registry": reg_info,
                 "mint": MINT["last"],
+                "experiment": {"running": EXPERIMENT["running"],
+                               "current": EXPERIMENT["current"],
+                               "last": EXPERIMENT["last"]},
                 "trainer": dict(TRAINER),
                 "user": dict(
                     USER,
@@ -2954,6 +3164,43 @@ class Handler(BaseHTTPRequestHandler):
                             rows += 1
             return self._json(200, {"status": "ok", "rows": rows,
                                     "path": outpath})
+        if self.path == "/experiment":
+            # S6: run a bench experiment - recipes arrive RESOLVED (the
+            # commands own the store; the service stays store-blind).
+            try:
+                req = json.loads(raw)
+            except Exception:
+                return self._json(400, {"status": "err",
+                                        "msg": "body must be JSON"})
+            if self.server.args.checkpoint == "stub":
+                return self._json(409, {"status": "err",
+                                        "msg": "stub mode has no weights "
+                                        "to bench"})
+            with LOCK:
+                if EXPERIMENT["running"]:
+                    return self._json(409, {
+                        "status": "err",
+                        "msg": "an experiment is already running",
+                        "current": EXPERIMENT["current"]})
+            name = str(req.get("name") or "")
+            control = req.get("control")
+            if not name or not isinstance(control, dict):
+                return self._json(400, {"status": "err",
+                                        "msg": "need name and a resolved "
+                                        "control recipe"})
+            arms = [("control", control)]
+            if isinstance(req.get("variant"), dict):
+                arms.append(("variant", req["variant"]))
+            spec = {"name": name, "arms": arms,
+                    "budget_steps": int(req.get("budget_steps") or 20),
+                    "bricks_changed": req.get("bricks_changed"),
+                    "one_brick": req.get("one_brick")}
+            threading.Thread(target=run_experiment_thread,
+                             args=(self.server.args, spec),
+                             daemon=True).start()
+            return self._json(200, {"status": "ok", "started": True,
+                                    "name": name,
+                                    "arms": [a for a, _r3 in arms]})
         if self.path == "/mint_anchor":
             # ruling 2: mint a self-sampled anchor for an import. Loads
             # its own scorer (never the serving slots); background

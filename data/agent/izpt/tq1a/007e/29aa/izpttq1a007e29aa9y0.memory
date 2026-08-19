@@ -205,5 +205,15 @@
     },
     "confidence": "high",
     "time": 1787104910469
+  },
+  {
+    "claim": "S6 landed (claude/spectrum-s6-bench): the lab is real. Recipes are runtime-library records - base x mix x posture x budget x lr x evals, validated against the registry at authoring, cloned with an edits object so one-brick variants are one edit. agent-model-experiment diffs the bricks (notes is free text, never a brick), WARNS with the list when more than one moved (never refuses, per ruling 7), and hands RESOLVED recipes to the service - the store-blind seam holds. Each arm: fresh base load, bare measure, bounded always-on hook-LoRA on the arm mix, with-delta measure, weights freed; instruments are the gates own (per-dataset holdout, anchor/standard, agreement); eval material pinned at run start with hashes in the report (a stream says rolling, a snapshot names its hash). Both trainer rungs skip candidate steps while the bench borrows (published as trainer.borrowed_by); serving never pauses. Reports append to experiments.jsonl; agent-model-experiments reads live + last ten.",
+    "detail": "CPU battery: one-brick mix experiment diffed exactly [mix], pinned hashes recorded, both arms ran fresh-base; the two eval sets scored identically - CORRECT and a real bench finding, since memory-docs is the render-dialect derivation of memory (same holdout text). Two-brick clone warned with the moved bricks and recorded honestly; unregistered mix dataset refused at authoring; R1 restored. Nit for backlog: a slow first hf load can outlive bootstrap 20s probe and report launch_failed for a service that comes up seconds later. Owner-box owed: real-scale experiment with genuinely diverging arms, borrow observed over a long run.",
+    "tags": "spectrum,s6,bench,recipes",
+    "source": {
+      "doc": "docs/spectrum-s6.md; battery run in session 2026-08-19"
+    },
+    "confidence": "high",
+    "time": 1787128593601
   }
 ]
