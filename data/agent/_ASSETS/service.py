@@ -313,7 +313,7 @@ MINT_SEEDS = [
 ]
 
 
-def mint_anchor_thread(args, path, out_name, n):
+def mint_anchor_thread(args, path, out_name, n, backend="nanochat"):
     """Ruling 2: an import without its pretraining data gets a MINTED
     anchor - a frozen sample of the model's own voice at the door,
     measuring drift-from-its-imported-self forever after. Loads its
@@ -327,22 +327,21 @@ def mint_anchor_thread(args, path, out_name, n):
         MINT["last"] = dict(res)
     scorer = None
     try:
-        scorer = NanochatScorer(path)
+        # the seam covers minting too: whichever backend the weights
+        # are, generate_text is the one door (S3). The serving env must
+        # be able to import the backend - a mismatch records an honest
+        # error in /status.mint rather than half-minting.
+        scorer = (HFScorer(path) if backend == "hf"
+                  else NanochatScorer(path))
         outdir = os.path.join(args.data_dir, "datasets", out_name)
         os.makedirs(outdir, exist_ok=True)
         rows = 0
         with open(os.path.join(outdir, "anchor.jsonl"), "w") as f:
             for i in range(int(n)):
                 prompt = MINT_SEEDS[i % len(MINT_SEEDS)]
-                conversation = {"messages": [
-                    {"role": "user", "content": prompt},
-                    {"role": "assistant", "content": ""},
-                ]}
-                ids = scorer.tokenizer.render_for_completion(conversation)
-                results, _m = scorer.engine.generate_batch(
-                    ids, num_samples=1, max_tokens=256,
-                    temperature=0.8, top_k=50)
-                text = scorer.tokenizer.decode(results[0][len(ids):])
+                text = scorer.generate_text(
+                    [{"role": "user", "content": prompt}],
+                    max_tokens=256, temperature=0.8, top_k=50)
                 f.write(json.dumps({"text": text}) + "\n")
                 rows += 1
                 if rows % 25 == 0:
@@ -423,6 +422,11 @@ def soak_key_for(scorer):
         return name.split(":", 1)[1]
     if name.startswith("nanochat:"):
         return "base:" + name.split(":", 1)[1]
+    if name.startswith("hf:"):
+        # the hf base soaks on the fast lane exactly like a birth
+        # checkpoint - same lineage, same canary, the standard user
+        # gate covers it with zero special cases (S3)
+        return "base:" + name
     return None
 
 
@@ -481,6 +485,11 @@ class StubScorer:
         score = min(0.95, base + 0.1 * min(int(bound), 3))
         return score, f"stub[{self.tag}]: kind base with {bound} bound claims"
 
+    def generate_text(self, messages, max_tokens=96, temperature=0.2,
+                      top_k=50):
+        last = str((messages or [{}])[-1].get("content", ""))[:120]
+        return f"[stub {self.tag}] heard: {last}"
+
 
 def salience_prompt(kind, text, matched, bound):
     """THE serving prompt - the skill the agreement gate measures is the
@@ -515,6 +524,110 @@ def parse_salience(completion):
         return (max(0.0, min(1.0, float(m.group(0)))),
                 f"unparseable reply, salvaged number: {completion[:120]!r}", False)
     return None, f"unparseable reply: {completion[:120]!r}", False
+
+
+# ── the backend seam (spectrum S3) ──────────────────────────────────
+# Everything the serving side asks of a model goes through the scorer
+# surface: generate_text(messages) -> str, score(), .name, .meta,
+# .checkpoint. Two real backends implement it - nanochat and hf - and
+# nothing above the seam knows which is serving. The dialect
+# (salience_prompt + JSON answer + unparseable-escalates) is identical
+# by construction: score_via builds it once for every backend.
+
+def model_device(model):
+    """nanochat's GPT carries get_device(); HF models answer through
+    their parameters. One question, one place."""
+    if hasattr(model, "get_device"):
+        return model.get_device()
+    import torch
+    try:
+        return next(model.parameters()).device
+    except StopIteration:
+        return torch.device("cpu")
+
+
+def scorer_model(scorer):
+    """The underlying nn.Module: nanochat keeps it on the engine, hf
+    keeps it directly."""
+    if hasattr(scorer, "engine"):
+        return scorer.engine.model
+    return getattr(scorer, "model", None)
+
+
+def masked_lm_loss_t(model, tokenizer, ids, mask, device):
+    """One masked-LM loss (tensor, backward-able) on an UNSHIFTED token
+    sequence; mask=1 marks the tokens that train. The two backends
+    disagree structurally: nanochat's GPT takes pre-shifted (x, y)
+    with -1 ignore; HF models take aligned labels with -100 and shift
+    internally. The seam owns that bookkeeping so no caller ever
+    reimplements it wrong."""
+    import torch
+    if hasattr(tokenizer, "render_conversation"):  # nanochat
+        x = torch.tensor([ids[:-1]], device=device)
+        y = torch.tensor([[t if mask[i + 1] == 1 else -1
+                           for i, t in enumerate(ids[1:])]], device=device)
+        return model(x, y)
+    x = torch.tensor([ids], device=device)
+    labels = torch.tensor([[t if mask[i] == 1 else -100
+                            for i, t in enumerate(ids)]], device=device)
+    return model(input_ids=x, labels=labels).loss
+
+
+def plain_lm_loss_t(model, tokenizer, chunk, device):
+    """One plain LM loss (tensor) on a token chunk, same shift
+    bookkeeping as masked_lm_loss_t."""
+    import torch
+    if hasattr(tokenizer, "render_conversation"):  # nanochat
+        x = torch.tensor([chunk[:-1]], device=device)
+        y = torch.tensor([chunk[1:]], device=device)
+        return model(x, y)
+    x = torch.tensor([chunk], device=device)
+    return model(input_ids=x, labels=x.clone()).loss
+
+
+def encode_doc(tokenizer, doc):
+    """One doc -> token ids, per backend."""
+    if hasattr(tokenizer, "render_conversation"):
+        return tokenizer.encode(doc[:4000], prepend="<|bos|>")
+    return tokenizer(doc[:4000]).input_ids
+
+
+def render_masked(tokenizer, conv, max_tokens):
+    """(ids, mask) for a conversation: mask=1 on the tokens the loss
+    trains (the assistant's). nanochat's tokenizer owns this natively;
+    for HF the final message must be the assistant's and the mask is
+    its tail past the generation prompt - single-turn-pair exact,
+    multi-turn masks only the final reply (documented simplification
+    until the delta trainer needs more)."""
+    if hasattr(tokenizer, "render_conversation"):
+        return tokenizer.render_conversation(conv, max_tokens=max_tokens)
+    msgs = conv["messages"]
+    full = tokenizer.apply_chat_template(msgs, tokenize=True,
+                                         add_generation_prompt=False)
+    prompt = tokenizer.apply_chat_template(msgs[:-1], tokenize=True,
+                                           add_generation_prompt=True)
+    ids = full[:max_tokens]
+    cut = min(len(prompt), len(ids))
+    mask = [0] * cut + [1] * (len(ids) - cut)
+    return ids, mask
+
+
+def score_via(scorer, perception, context):
+    """THE score path, backend-blind: the serving prompt, one
+    generation, the JSON parse with unparseable-escalates."""
+    payload = perception.get("payload") or {}
+    text = " ".join(str(v) for v in payload.values()
+                    if isinstance(v, str))[:600]
+    prompt = salience_prompt(perception.get("kind", "?"), text,
+                             context.get("matched") or 0,
+                             context.get("bound") or 0)
+    completion = scorer.generate_text(
+        [{"role": "user", "content": prompt}],
+        max_tokens=96, temperature=0.2, top_k=50)
+    sal, why, parsed = parse_salience(completion)
+    if sal is None:
+        return 0.5, "defaulting uncertain - " + why, False
+    return sal, why, parsed
 
 
 class NanochatScorer:
@@ -594,23 +707,77 @@ class NanochatScorer:
         self.name = name
         return self
 
-    def score(self, perception, context):
-        payload = perception.get("payload") or {}
-        text = " ".join(str(v) for v in payload.values() if isinstance(v, str))[:600]
-        prompt = salience_prompt(perception.get("kind", "?"), text,
-                                 context.get("matched") or 0, context.get("bound") or 0)
-        conversation = {"messages": [
-            {"role": "user", "content": prompt},
-            {"role": "assistant", "content": ""},
-        ]}
+    def generate_text(self, messages, max_tokens=96, temperature=0.2,
+                      top_k=50):
+        conversation = {"messages": list(messages)
+                        + [{"role": "assistant", "content": ""}]}
         ids = self.tokenizer.render_for_completion(conversation)
         results, _masks = self.engine.generate_batch(
-            ids, num_samples=1, max_tokens=96, temperature=0.2, top_k=50)
-        completion = self.tokenizer.decode(results[0][len(ids):])
-        sal, why, parsed = parse_salience(completion)
-        if sal is None:
-            return 0.5, "defaulting uncertain - " + why, False
-        return sal, why, parsed
+            ids, num_samples=1, max_tokens=int(max_tokens),
+            temperature=float(temperature), top_k=int(top_k))
+        return self.tokenizer.decode(results[0][len(ids):])
+
+    def score(self, perception, context):
+        return score_via(self, perception, context)
+
+
+class HFScorer:
+    """The second backend (spectrum S3): an HF-format model dir served
+    in-process through transformers - the format's reference
+    implementation, the one third-party door the seam needs. Same
+    score()/generate_text() contracts, same dialect, same
+    unparseable-escalates. The CPT trainer does not run on this
+    backend yet: the delta trainer lands in S5, so an hf resident's
+    posture is frozen - and /status says so (standing rule 4)."""
+
+    name = "hf"
+
+    def __init__(self, checkpoint):
+        self.checkpoint = checkpoint
+        import torch
+        from transformers import AutoModelForCausalLM, AutoTokenizer
+        self.torch = torch
+        self.device = torch.device(
+            "cuda" if torch.cuda.is_available() else "cpu")
+        self.tokenizer = AutoTokenizer.from_pretrained(checkpoint)
+        dtype = torch.bfloat16 if self.device.type == "cuda" else torch.float32
+        self.model = AutoModelForCausalLM.from_pretrained(
+            checkpoint, torch_dtype=dtype, low_cpu_mem_usage=True
+        ).to(self.device)
+        self.model.eval()
+        ctx = int(getattr(self.model.config,
+                          "max_position_embeddings", 0) or 2048)
+        self.meta = {"model_config": {"sequence_len": ctx}}
+        self.name = f"hf:{os.path.basename(os.path.normpath(checkpoint))}"
+
+    def generate_text(self, messages, max_tokens=96, temperature=0.2,
+                      top_k=50):
+        import torch
+        tok = self.tokenizer
+        try:
+            ids = tok.apply_chat_template(list(messages),
+                                          add_generation_prompt=True,
+                                          return_tensors="pt")
+        except Exception:
+            # no chat template shipped with the model: plain
+            # concatenation is the honest fallback
+            text = "\n".join(str(m.get("content", ""))
+                             for m in messages) + "\n"
+            ids = tok(text, return_tensors="pt").input_ids
+        ids = ids.to(self.device)
+        with torch.no_grad():
+            out = self.model.generate(
+                ids, max_new_tokens=int(max_tokens),
+                do_sample=float(temperature) > 0.05,
+                temperature=max(float(temperature), 0.05),
+                top_k=int(top_k),
+                pad_token_id=(tok.pad_token_id
+                              if tok.pad_token_id is not None
+                              else tok.eos_token_id))
+        return tok.decode(out[0][ids.shape[1]:], skip_special_tokens=True)
+
+    def score(self, perception, context):
+        return score_via(self, perception, context)
 
 
 def newest_ring(data_dir):
@@ -621,9 +788,11 @@ def newest_ring(data_dir):
     return dirs[-1] if dirs else None
 
 
-def make_scorer(checkpoint, data_dir):
+def make_scorer(checkpoint, data_dir, backend="nanochat"):
     if checkpoint == "stub":
         return StubScorer()
+    if backend == "hf":
+        return HFScorer(checkpoint)
     ring = newest_ring(data_dir)
     if ring:
         try:
@@ -710,7 +879,13 @@ def load_pointer_scorer(args, key):
     if key == "stub" or args.checkpoint == "stub":
         return StubScorer(tag=f"user:{key}")
     if key.startswith("base:"):
+        if getattr(args, "backend", "nanochat") == "hf":
+            return HFScorer(args.checkpoint)
         return NanochatScorer(args.checkpoint)
+    if getattr(args, "backend", "nanochat") == "hf":
+        raise RuntimeError(
+            f"hf backend has no ring checkpoints yet (key '{key}') - "
+            "the delta trainer lands in S5")
     ring_dir = os.path.join(args.data_dir, "checkpoints", key)
     return NanochatScorer.from_ring(args.checkpoint, ring_dir)
 
@@ -725,14 +900,11 @@ def user_agreement(scorer, n=8):
     pairs = HELDOUT_PAIRS[-int(n):]
     total = 0.0
     for pr in pairs:
-        conversation = {"messages": [
-            {"role": "user", "content": salience_prompt("?", pr["input"], 0, 0)},
-            {"role": "assistant", "content": ""},
-        ]}
-        ids = scorer.tokenizer.render_for_completion(conversation)
-        results, _m = scorer.engine.generate_batch(
-            ids, num_samples=1, max_tokens=64, temperature=0.01, top_k=1)
-        sal, _why, _parsed = parse_salience(scorer.tokenizer.decode(results[0][len(ids):]))
+        completion = scorer.generate_text(
+            [{"role": "user",
+              "content": salience_prompt("?", pr["input"], 0, 0)}],
+            max_tokens=64, temperature=0.01, top_k=1)
+        sal, _why, _parsed = parse_salience(completion)
         if sal is None:
             sal = 0.5
         total += min(1.0, abs(sal - float(pr["target"])))
@@ -891,9 +1063,10 @@ def user_gate_loop(args):
                     else:
                         seq2 = (user_scorer.meta["model_config"]["sequence_len"]
                                 if user_scorer.meta else 2048)
-                        probe = persona_eval(user_scorer.engine.model,
+                        _um = scorer_model(user_scorer)
+                        probe = persona_eval(_um,
                                              user_scorer.tokenizer, _ho,
-                                             user_scorer.engine.model.get_device(),
+                                             model_device(_um),
                                              seq2)
                         if probe is not None:
                             with LOCK:
@@ -1021,16 +1194,33 @@ def load_persona_corpus(data_dir):
 
 def lora_target_paths(model, targets):
     """Module paths for the adapter, from a dot-separated target spec
-    (c_q.c_v.attn_proj.c_fc.mlp_proj -> attention and MLP linears)."""
-    names = {"c_q": "attn.c_q", "c_k": "attn.c_k", "c_v": "attn.c_v",
-             "attn_proj": "attn.c_proj", "c_fc": "mlp.c_fc",
-             "mlp_proj": "mlp.c_proj"}
-    picked = [names[t] for t in str(targets).split(".") if t in names]
+    (c_q.c_v.attn_proj.c_fc.mlp_proj -> attention and MLP linears).
+    Backend-aware (S3): one target vocabulary, two namings - nanochat's
+    transformer.h.<i>.attn.c_q pattern, or the conventional q_proj/
+    v_proj/... leaf names an HF model's named_modules carry. The
+    hook-LoRA machinery downstream is architecture-blind either way -
+    no adapter library needed (doctrine: avoid third-party deps)."""
+    if hasattr(model, "transformer") and hasattr(model.transformer, "h"):
+        names = {"c_q": "attn.c_q", "c_k": "attn.c_k", "c_v": "attn.c_v",
+                 "attn_proj": "attn.c_proj", "c_fc": "mlp.c_fc",
+                 "mlp_proj": "mlp.c_proj"}
+        picked = [names[t] for t in str(targets).split(".") if t in names]
+        out = []
+        n_layer = len(model.transformer.h)
+        for i in range(n_layer):
+            for sub in picked:
+                out.append(f"transformer.h.{i}.{sub}")
+        return out
+    hf_names = {"c_q": "q_proj", "c_k": "k_proj", "c_v": "v_proj",
+                "attn_proj": "o_proj", "c_fc": "up_proj",
+                "mlp_proj": "down_proj"}
+    hf_picked = {hf_names[t] for t in str(targets).split(".")
+                 if t in hf_names}
     out = []
-    n_layer = len(model.transformer.h)
-    for i in range(n_layer):
-        for sub in picked:
-            out.append(f"transformer.h.{i}.{sub}")
+    for name, mod in model.named_modules():
+        leaf = name.rsplit(".", 1)[-1]
+        if leaf in hf_picked and hasattr(mod, "in_features"):
+            out.append(name)
     return out
 
 
@@ -1046,16 +1236,14 @@ def persona_eval(model, tokenizer, convs, device, seq_len, limit=16):
     with torch.no_grad():
         for conv in convs[:limit]:
             try:
-                ids, mask = tokenizer.render_conversation(
-                    conv, max_tokens=min(int(seq_len), 1024))
+                ids, mask = render_masked(tokenizer, conv,
+                                          min(int(seq_len), 1024))
             except Exception:
                 continue
-            if len(ids) < 3 or sum(mask[1:]) == 0:
+            if len(ids) < 3 or sum(mask) == 0:
                 continue
-            x = torch.tensor([ids[:-1]], device=device)
-            y = torch.tensor([[t if mask[i + 1] == 1 else -1
-                               for i, t in enumerate(ids[1:])]], device=device)
-            tot += float(model(x, y))
+            tot += float(masked_lm_loss_t(model, tokenizer, ids, mask,
+                                          device))
             n += 1
     if was_training:
         model.train()
@@ -1068,7 +1256,7 @@ def plain_lm_eval(model, tokenizer, docs, device, seq_len, limit=12):
     import torch
     toks = []
     for d in docs:
-        toks.extend(tokenizer.encode(d[:4000], prepend="<|bos|>"))
+        toks.extend(encode_doc(tokenizer, d))
     seq_len = min(int(seq_len), 2048)
     chunks = [toks[i:i + seq_len + 1]
               for i in range(0, len(toks) - seq_len - 1, seq_len)][:limit]
@@ -1079,9 +1267,7 @@ def plain_lm_eval(model, tokenizer, docs, device, seq_len, limit=12):
     tot = 0.0
     with torch.no_grad():
         for c in chunks:
-            x = torch.tensor([c[:-1]], device=device)
-            y = torch.tensor([c[1:]], device=device)
-            tot += float(model(x, y))
+            tot += float(plain_lm_loss_t(model, tokenizer, c, device))
     if was_training:
         model.train()
     return round(tot / len(chunks), 4)
@@ -1106,7 +1292,7 @@ def apply_persona(args, scorer):
         blob = torch.load(adapter_path(args.data_dir), map_location="cpu",
                           weights_only=False)
         scale = float(blob["alpha"]) / float(blob["rank"])
-        model = scorer.engine.model
+        model = scorer_model(scorer)
         applied = 0
         with torch.no_grad():
             for path, ab in blob["state"].items():
@@ -1166,8 +1352,8 @@ def _derive_adapter_inner(args, cfg, key, reason):
                        f"persona/persona.jsonl"}
     t0 = time.time()
     scorer = load_pointer_scorer(args, key)   # a fresh copy; never the serving one
-    model, tokenizer = scorer.engine.model, scorer.tokenizer
-    device = model.get_device()
+    model, tokenizer = scorer_model(scorer), scorer.tokenizer
+    device = model_device(model)
     seq_len = scorer.meta["model_config"]["sequence_len"] if scorer.meta else 2048
     base_heldout = persona_eval(model, tokenizer, heldout, device, seq_len)
     standard = load_standard_docs(args, limit=64)
@@ -1204,16 +1390,13 @@ def _derive_adapter_inner(args, cfg, key, reason):
     for step in range(steps):
         conv = train[_random.randrange(len(train))]
         try:
-            ids, mask = tokenizer.render_conversation(
-                conv, max_tokens=min(int(seq_len), 1024))
+            ids, mask = render_masked(tokenizer, conv,
+                                      min(int(seq_len), 1024))
         except Exception:
             continue
-        if len(ids) < 3 or sum(mask[1:]) == 0:
+        if len(ids) < 3 or sum(mask) == 0:
             continue
-        x = torch.tensor([ids[:-1]], device=device)
-        y = torch.tensor([[t if mask[i + 1] == 1 else -1
-                           for i, t in enumerate(ids[1:])]], device=device)
-        loss = model(x, y)
+        loss = masked_lm_loss_t(model, tokenizer, ids, mask, device)
         opt.zero_grad()
         loss.backward()
         opt.step()
@@ -1291,7 +1474,20 @@ def trainer_real(args):
     while True:
         with LOCK:
             live = STATE["slots"][STATE["live"]]
+        if live is not None and isinstance(live, HFScorer):
+            # ruled posture: the delta trainer lands in S5; until then
+            # an hf resident serves frozen - and says so (rule 4).
+            # Banking continues; only candidate training pauses.
+            with LOCK:
+                TRAINER["active"] = False
+                TRAINER["posture"] = ("frozen - hf backend serves "
+                                      "without training until the S5 "
+                                      "delta trainer")
+            print("[trainer] posture: frozen (hf backend)", flush=True)
+            return
         if live is not None and live.name.startswith("nanochat"):
+            with LOCK:
+                TRAINER["posture"] = "full"
             break
         time.sleep(5)
     import torch
@@ -1867,8 +2063,10 @@ class Handler(BaseHTTPRequestHandler):
                     return self._json(409, {"status": "err",
                                             "msg": "a mint is already "
                                             "running", "mint": MINT["last"]})
+            mbackend = str(req.get("backend") or "nanochat")
             threading.Thread(target=mint_anchor_thread,
-                             args=(self.server.args, path, out_name, n),
+                             args=(self.server.args, path, out_name, n,
+                                   mbackend),
                              daemon=True).start()
             return self._json(200, {"status": "ok", "started": True,
                                     "name": out_name, "n": n})
@@ -1885,6 +2083,11 @@ class Handler(BaseHTTPRequestHandler):
         if self.path == "/promote":
             # double-buffer: load into the slot NOT being served, then swap.
             args2 = self.server.args
+            if getattr(args2, "backend", "nanochat") == "hf":
+                return self._json(409, {
+                    "status": "err",
+                    "msg": "the hf backend has no ring checkpoints to "
+                           "promote yet - the delta trainer lands in S5"})
             newest = (newest_ring(args2.data_dir)
                       if args2.checkpoint != "stub" else newest_checkpoint(args2))
             try:
@@ -1934,24 +2137,25 @@ class Handler(BaseHTTPRequestHandler):
                     "text": f"[stub user pointer] heard: {last}",
                     "pointer": pointer, "ms": int((time.time() - t0) * 1000)})
             # nanochat's chat template knows user/assistant only - fold
-            # any system content into the first user turn
-            sys_txt = "\n".join(str(m.get("content", "")) for m in messages
-                                if m.get("role") == "system").strip()
-            messages = [m for m in messages if m.get("role") != "system"]
-            if sys_txt and messages:
-                m0 = dict(messages[0])
-                m0["content"] = f"[system]\n{sys_txt}\n\n{m0.get('content', '')}"
-                messages = [m0] + messages[1:]
+            # any system content into the first user turn there; hf
+            # templates carry system natively, pass it through (S3)
+            if isinstance(scorer, NanochatScorer):
+                sys_txt = "\n".join(str(m.get("content", ""))
+                                    for m in messages
+                                    if m.get("role") == "system").strip()
+                messages = [m for m in messages
+                            if m.get("role") != "system"]
+                if sys_txt and messages:
+                    m0 = dict(messages[0])
+                    m0["content"] = (f"[system]\n{sys_txt}\n\n"
+                                     f"{m0.get('content', '')}")
+                    messages = [m0] + messages[1:]
             try:
-                conversation = {"messages": list(messages)
-                                + [{"role": "assistant", "content": ""}]}
-                ids = scorer.tokenizer.render_for_completion(conversation)
                 max_tokens = min(int(req.get("max_tokens") or 256), 1024)
                 temp = float(req.get("temperature") or 0.7)
-                results, _m = scorer.engine.generate_batch(
-                    ids, num_samples=1, max_tokens=max_tokens,
-                    temperature=temp, top_k=50)
-                text = scorer.tokenizer.decode(results[0][len(ids):])
+                text = scorer.generate_text(list(messages),
+                                            max_tokens=max_tokens,
+                                            temperature=temp, top_k=50)
             except Exception as e:
                 return self._json(500, {"status": "err",
                                         "msg": f"generation failed: {e}"})
@@ -1984,7 +2188,8 @@ def load_initial(args):
     answers 503 throughout, which the executive treats as no-verdict."""
     while True:
         try:
-            scorer = make_scorer(args.checkpoint, args.data_dir)
+            scorer = make_scorer(args.checkpoint, args.data_dir,
+                                 getattr(args, "backend", "nanochat"))
             with LOCK:
                 STATE["slots"]["A"] = scorer
                 STATE["loading"] = False
@@ -2008,7 +2213,12 @@ def main():
     ap.add_argument("--port", type=int, default=8077)
     ap.add_argument("--data-dir", default="runtime/agent/model")
     ap.add_argument("--checkpoint", default="stub",
-                    help="'stub' or a nanochat base directory")
+                    help="'stub', a nanochat base directory, or (with "
+                         "--backend hf) an HF model directory")
+    ap.add_argument("--backend", default="nanochat",
+                    choices=["nanochat", "hf"],
+                    help="which backend serves the checkpoint (S3); "
+                         "resolved from the model record by bootstrap")
     ap.add_argument("--train", default="on", choices=["on", "off"],
                     help="continuous CPT on a candidate of the live model")
     ap.add_argument("--mix", default="fresh=0.25,replay=0.25,standard=0.5",
