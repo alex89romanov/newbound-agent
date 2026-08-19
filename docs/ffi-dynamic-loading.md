@@ -1,6 +1,8 @@
 # FFI dynamic loading — drop libloading/notify, load crates at hot-swap time
 
-**Status:** design approved for development — follow the phases in order.
+**Status:** in development — Phase 1 landed on the flow repo's
+`claude/ffi-dynamic-loading-design-vfwdi8` branch (`flowlang::hotswap`,
+commit `0659bca`); Phases 2–5 open. Follow the phases in order.
 **Origin:** 2026-08-19 session (owner request).
 **Scope:** `mraiser/flow` (flowlang — most of the work), `mraiser/newbound`
 (dependency removal + `dev.code` command changes), `mraiser/newbound-agent`
@@ -304,12 +306,17 @@ pub fn initialize_all_commands(magic: (&'static str, NDataConfig)) {
   holds (crates pin `flowlang = "=0.3.33"`, `ndata = "=0.3.17"`), but make
   it checkable: scaffold an additional
   `#[no_mangle] pub extern "C" fn nb_ffi_contract_<root>() -> *const c_char`
-  returning a static string like `"flowlang=0.3.34;ndata=0.3.17;profile=release"`
-  (versions via `env!("CARGO_PKG_VERSION")` on each side of the boundary).
-  The loader compares before calling `mirror_<root>`; a missing symbol is
-  a legacy crate → warn and proceed; a mismatch → refuse the load with a
-  clear error. Advisory in v1 (existing crates lack the symbol), strict
-  once the overlay crates regenerate.
+  returning `flowlang::hotswap::contract_ptr()` — each side's own flowlang
+  copy computes its string, so they only agree when the copies agree. As
+  implemented, the string carries the flowlang version, the profile, and
+  the **layout sizes** of `Initializer` and `NDataConfig`
+  (`flowlang=…;profile=…;ptr=…;init_size=…;cfg_size=…`): dependency
+  versions aren't visible to `env!`, and comparing the handshake struct's
+  actual layout is the stronger check anyway. The loader compares before
+  calling `mirror_<root>`; a missing symbol is a legacy crate → warn and
+  proceed; a mismatch → refuse the load with a clear error. Advisory in
+  v1 (existing crates lack the symbol), strict once the overlay crates
+  regenerate.
 - **`Initializer` field order is ABI.** It now has one definition
   (`flowlang::hotswap`); document "never reorder/retype fields" on the
   struct. Existing crates' local copies must match it byte-for-byte until
@@ -340,15 +347,23 @@ overlay crates pin `=0.3.33`. So:
 
 ## 6. Work plan
 
-**Phase 1 — flowlang runtime (flow repo).** `src/hotswap.rs`: `DynLib`
-(unix + windows), registry, `Initializer`, `start`/`load`/`reload`/
-`rescan`, poller, contract check; `DataStore::lib_crate_info`; delete
-`builder/loader.rs`. Tests: a fixture crate compiled by the test itself
-(cargo in a tempdir) exporting a known `mirror_*`; assert load, reload
-with changed behavior, stale-id sweep, two-tick quiesce, never-unload
-(pointer from generation 1 still callable after generation 2 loads).
-*Accept:* `cargo test` green in flow; no new dependencies in
-`flow/Cargo.toml`.
+**Phase 1 — flowlang runtime (flow repo).** ✅ **Landed** (flow branch
+`claude/ffi-dynamic-loading-design-vfwdi8`, commit `0659bca`).
+`src/hotswap.rs`: `DynLib` (unix + windows), registry, `Initializer`,
+`start`/`load`/`reload`/`rescan`, a `loaded()` introspection helper,
+poller (with failed stats not retried until they change), contract
+check; `DataStore::lib_crate_info` + `datastore::crate_info_from_meta`
+with `builder::util::get_crate_info` delegating; `builder/loader.rs`
+deleted. Tests as specified, with the fixtures compiled by plain rustc
+against the test build's own ndata rlib (same compiler, same ndata,
+offline) instead of cargo-in-a-tempdir: unit coverage for quiesce/
+contract/meta-parsing/register-sweep, a two-generation `DynLib`
+never-unload test, and `tests/hotswap_e2e.rs` driving the full mirror
+handshake (store discovery, execution through the shared heap,
+deterministic reload with changed behavior, stale-id sweep, a
+generation-1 transform pointer surviving a reload, contract refusal).
+*Accepted:* `cargo test` green in flow (13 tests, 0 failures, no new
+warnings); zero dependency changes in `flow/Cargo.toml`.
 
 **Phase 2 — builder emission (flow repo).** Slim
 `generate_main_initializer`; scaffold template uses the canonical
