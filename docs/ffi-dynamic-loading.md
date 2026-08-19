@@ -419,6 +419,17 @@ Residue for the owner: `data/app/meta.json` still carries a dormant
 `cargo.features.reload` string — the builder never applies features and
 no command edits them today.
 
+**Follow-up (same branches): the `reload` cargo feature is fully
+retired.** The builder's crate template and `tools/gen-cmd-crate.py` no
+longer emit `reload = []`; the overlay crates' and `cmd`'s manifests
+dropped theirs; and `dev.dev.compile` / `dev.dev.check` lost their dead
+`#[cfg(feature="reload")]` forwarding blocks (store-authored). One
+compatibility note: a host binary predating this branch that was built
+`--features=reload` would fail to compile newly scaffolded crates — no
+known instance was (the feature only ever pulled the abandoned
+hot-lib-reloader). The meta.json string above is the single remaining
+trace.
+
 **Phase 4 — agent repo.** ✅ **Landed.** The overlay crates' `lib.rs`
 regenerated to the canonical handshake (deleted, rebuilt by the builder,
 copied back) — all three now load with contract **matches**, no legacy
