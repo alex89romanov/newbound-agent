@@ -530,9 +530,17 @@ a different scale.
    remote verdicts unchanged — and promotion at that rung moves
    adapters, not weights: hot-swap, which the posture ladder
    guarantees is what there is to move (S7).
-9. Network posture for acquisition: HF hub fetches happen only inside
-   the deliberate import/dataset commands; offline boxes use local
-   paths (S1/S2).
+9. **RULED (owner, 2026-08-18) — acquisition as proposed.** The only
+   network touches in the subsystem are inside the two deliberate
+   doors, `agent-model-import` and `dataset_add`; each takes a hub
+   reference or a local path, and offline boxes lose nothing. Hub
+   fetches are revision-pinned — the registry records the exact
+   revision hash, never a floating latest; a newer revision is a new
+   record with its own lineage, not a mutation of the old. No token
+   by default; `HF_TOKEN` covers gated models and is read only by
+   the two doors. Downloads land under the runtime folder,
+   filelock-guarded and resumable, so concurrent multi-node imports
+   dedupe over NFS (S1/S2).
 10. Derivation governance and stream defaults: who may spend model
     tokens generating synthetic datasets (proposal: deliberate
     command always; drive-budgeted under the rumination budget once
