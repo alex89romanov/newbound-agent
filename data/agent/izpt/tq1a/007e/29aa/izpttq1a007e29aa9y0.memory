@@ -242,5 +242,12 @@
     "tags": "dataset_feed,feed-contract,curriculum_export",
     "confidence": "high",
     "time": 1787139770973
+  },
+  {
+    "claim": "H3 landed: why_harvest (procedural - patches journals + git history into code-why cpt, trailers stripped, idempotent; 1,026 rows on first sweep) and dataset_derive's distill_why (model-driven, 1-25 row spend cap per deliberate run, done-set prevents re-spend, H2 coding context per row, QA rows into code-why-qa sft with generator/src-pin/row-hash provenance, claims via adjudicate for patch rows). The generator-address rule holds: render_dialect dispatches to the service, distill_why runs in the agent library behind ask_llm - where a generator EXECUTES picks the path; which model answers is only a tag",
+    "detail": "Distill quality verified live on the CLAUDECODE arm (4 rows, 0 unparseable, ~12s/row). The adjudicate claim path is code-complete but not yet exercised live: the newest source rows are commit rows (no lib.ctl home), and claims fire only for patch rows - the first deep run will cross them. H5's rumination act is the drive-budgeted caller.",
+    "tags": "harvest,h3,code-why",
+    "confidence": "high",
+    "time": 1787143707461
   }
 ]
