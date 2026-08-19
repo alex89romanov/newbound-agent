@@ -358,13 +358,16 @@ if was_stale || !probe() {
     let posture = prop("MODEL_POSTURE", "auto");
     let ring_gb = prop("MODEL_RING_GB", "100");
     let headroom = prop("MODEL_HEADROOM", "15");
+    // S7: placement roles and the external engine (ruling 8)
+    let placement = prop("MODEL_PLACEMENT", "");
+    let engine_url = prop("MODEL_ENGINE_URL", "");
     let lora = prop("USER_LORA",
         "mode=on,rank=8,alpha=16,lr=1e-3,steps=200,slack=0.1,min_gain=0.01,guard=0.2,targets=c_q.c_v");
     let mut cmd = "cd ".to_string();
     cmd += &root.display().to_string();
     cmd += &format!(
-        "; {}nohup '{}' runtime/agent/model/service.py --data-dir runtime/agent/model --port {} --checkpoint '{}' --backend {} --posture '{}' --ring-gb {} --headroom {} --train {} --mix '{}' --lr {} --gate '{}' --train-interval {} --user-gate '{}' --lora '{}' >> runtime/agent/model/service.log 2>&1 &",
-        envprefix, py, port, checkpoint, backend, posture, ring_gb, headroom, train, mix, lr, gate, interval, user_gate, lora);
+        "; {}nohup '{}' runtime/agent/model/service.py --data-dir runtime/agent/model --port {} --checkpoint '{}' --backend {} --posture '{}' --ring-gb {} --headroom {} --placement '{}' --engine-url '{}' --train {} --mix '{}' --lr {} --gate '{}' --train-interval {} --user-gate '{}' --lora '{}' >> runtime/agent/model/service.log 2>&1 &",
+        envprefix, py, port, checkpoint, backend, posture, ring_gb, headroom, placement, engine_url, train, mix, lr, gate, interval, user_gate, lora);
     let mut x = DataArray::new();
     x.push_string("bash");
     x.push_string("-c");

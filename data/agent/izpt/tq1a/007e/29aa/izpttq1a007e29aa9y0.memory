@@ -215,5 +215,15 @@
     },
     "confidence": "high",
     "time": 1787128593601
+  },
+  {
+    "claim": "S7 landed (claude/spectrum-s7-placement): placement and the external rung. MODEL_PLACEMENT= names GPU roles (serve=/train=), published with honest fallback in /status.placement; the placed train device carries the training-side fresh loads (bench arms, adapter derivations, mints) while the full-rung candidate split and multi-node CPT wait for owner-box proof. MODEL_ENGINE_URL= puts an OpenAI-compatible engine behind the scorer surface: ExternalScorer only transports - score_via builds THE dialect and parses THE answer, so unparseable-escalates applies to remote verdicts unchanged (ruling 8, verified through the wire). The engine holds the weights: solver answers frozen with the hot-swap note, derive/stack/persona paths refuse with reasons, /promote explains that this rung promotes by adapter hot-swap on the engine. No engine install stage: seam now, dependency when a box needs it.",
+    "detail": "CPU battery with a stdlib mock OpenAI server: external:mock-70b served the salience lane (model id discovered from /v1/models), parsed:true on good JSON and 0.5/parsed:false on deliberate garbage, /chat through the engine at 1ms, frozen posture with reason, /promote hot-swap message, degenerate placement published. R1 restored. Nits: a restored user pointer NAME keeps its persisted +lora suffix even when the serving scorer is bare (display drift only); pkill -f matching its own command line kills the invoking shell - use the [b]racket pattern. Owner-box owed: real vLLM behind the URL, split placement on two GPUs, hot-swap wiring.",
+    "tags": "spectrum,s7,placement,engine",
+    "source": {
+      "doc": "docs/spectrum-s7.md; battery run in session 2026-08-19"
+    },
+    "confidence": "high",
+    "time": 1787129123639
   }
 ]
