@@ -357,7 +357,9 @@ control + variant pair — to a stated budget (steps or hours) and
 scores every result with the instruments the gates already enforce
 with: agreement on held-out pairs, anchor loss, per-dataset held-out
 loss, persona loss where an adapter rides — on named `eval` datasets
-that never train and are frozen per experiment for comparability.
+that never train and are frozen per experiment for comparability. A
+recipe may add eval datasets; it may never remove the standing
+yardstick (ruled, 2026-08-18).
 Reports are records; the mind tab gains a bench card: runs, the brick
 that varied, the deltas per measure.
 
@@ -505,10 +507,15 @@ a different scale.
    (resident → quantized → offload → on-demand → external), fast
    lane priority, on-demand the expected shape on tight cards.
    Nothing refuses for RAM; it degrades, visibly (S5/S8).
-7. The bench's standing eval set and budget etiquette (proposal:
-   held-out pairs + anchor sample + per-dataset holdouts, frozen per
-   experiment; on one card an experiment pauses candidate steps and
-   never serving; one-brick violations warn, never refuse) (S6).
+7. **RULED (owner, 2026-08-18) — bench etiquette as proposed.** The
+   standing yardstick is held-out salience pairs + the anchor sample
+   + per-dataset holdouts of what the recipe trained on, pinned as a
+   frozen snapshot when the run starts; a recipe may add eval
+   datasets, never remove the standing three. On one card an
+   experiment borrows the trainer's time-share — candidate steps
+   pause, serving never does, the borrow published; with placement
+   the bench takes spare GPUs instead. One-brick violations warn and
+   are recorded honestly, never refused (S6).
 8. External engine at the far end (proposal: seam now, in-process HF
    generate until a box actually needs vLLM; adapter hot-swap is the
    promotion path there) (S7).
