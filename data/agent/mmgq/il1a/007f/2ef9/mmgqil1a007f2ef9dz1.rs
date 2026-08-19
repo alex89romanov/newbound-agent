@@ -72,12 +72,9 @@ if !model_name.is_empty() {
             "MODEL='{}' names no registered model - agent-model-import it first, or unset MODEL=",
             model_name));
     }
-    if backend == "hf" {
-        return err(format!(
-            "MODEL='{}' is an hf-backend record - the backend lands in S3; serve a nanochat record or the MODEL_CHECKPOINT alias for now",
-            model_name));
-    }
 }
+// S3: the backend seam is live - hf records serve through HFScorer,
+// posture frozen until the S5 delta trainer.
 let _ = &backend;
 let port = prop("MODEL_SERVICE_PORT", "8077");
 let repo = prop("NANOCHAT_REPO", "https://github.com/karpathy/nanochat.git");
@@ -109,7 +106,7 @@ o.put_string("status", "ok");
 // could, and did).
 let nc = deps.join("nanochat");
 let mut nanochat_env = "not_needed".to_string();
-if checkpoint != "stub" {
+if checkpoint != "stub" && backend == "nanochat" {
     let sentinel = nc.join("env_ready");
     if sentinel.exists() && nc.join("venv").exists() {
         nanochat_env = "ready".to_string();
@@ -139,6 +136,45 @@ if checkpoint != "stub" {
 }
 o.put_string("nanochat_env", &nanochat_env);
 
+// stage 1.5 (S3): the hf serving environment - venv + torch +
+// transformers, only when an hf record is configured (ruled: heavy
+// deps stay out of the default env, each install its own
+// donefile-guarded stage). The sentinel is written by the script
+// itself on full success, so a half-failed pip retries from clean.
+let hf = deps.join("hf");
+let mut hf_env = "not_needed".to_string();
+if checkpoint != "stub" && backend == "hf" {
+    let sentinel = hf.join("env_ready");
+    if sentinel.exists() && hf.join("venv").exists() {
+        hf_env = "ready".to_string();
+    } else {
+        if hf.exists() { let _ = std::fs::remove_dir_all(&hf); }
+        let mut cmd = "set -e; mkdir -p ".to_string();
+        cmd += &hf.display().to_string();
+        cmd += &format!("; cd {}", hf.display());
+        cmd += "; python3 -m venv venv; source venv/bin/activate";
+        cmd += "; pip install --upgrade pip";
+        // some networks deny the pytorch CDN; PyPI's bundle imports
+        // fine on CPU boxes and is the honest fallback
+        cmd += "; if nvidia-smi -L >/dev/null 2>&1; then pip install torch; else pip install torch --index-url https://download.pytorch.org/whl/cpu || pip install torch; fi";
+        cmd += "; pip install transformers";
+        cmd += "; touch env_ready";
+        let mut x = DataArray::new();
+        x.push_string("bash");
+        x.push_string("-c");
+        x.push_string(&cmd);
+        let r = system_call(x);
+        println!("BOOTSTRAP HF ENV {}", r.to_string());
+        if sentinel.exists() {
+            hf_env = "installed".to_string();
+        } else {
+            hf_env = "install_failed".to_string();
+            o.put_string("status", "err");
+        }
+    }
+}
+o.put_string("hf_env", &hf_env);
+
 // stage 1.6: the model itself. If MODEL_CHECKPOINT has no loadable
 // checkpoint, the agent TRAINS one (owner, 2026-08-16: "isn't that the
 // whole point of the bootstrap?"). nanochat's own speedrun pipeline
@@ -157,7 +193,7 @@ o.put_string("nanochat_env", &nanochat_env);
 // chat_sft inherits device_batch_size from the pretrain meta, so one
 // setting sizes both stages.
 let mut training = "not_needed".to_string();
-if checkpoint != "stub" && nanochat_env != "install_failed" {
+if checkpoint != "stub" && backend == "nanochat" && nanochat_env != "install_failed" {
     let ckpath = std::path::Path::new(&checkpoint);
     let has_ckpt = ["base_checkpoints", "chatsft_checkpoints", "chatrl_checkpoints"]
         .iter().any(|d| ckpath.join(d).is_dir())
@@ -260,6 +296,11 @@ if was_stale || !probe() {
     // the clone, since the nanochat package is deliberately uninstalled.
     let (py, envprefix) = if checkpoint == "stub" {
         ("python3".to_string(), "".to_string())
+    } else if backend == "hf" {
+        // the hf venv's python; transformers is importable, no
+        // PYTHONPATH games needed
+        (hf.join("venv").join("bin").join("python").display().to_string(),
+         "".to_string())
     } else {
         (nc.join("venv").join("bin").join("python").display().to_string(),
          format!("PYTHONPATH='{}' ", nc.display()))
@@ -278,8 +319,8 @@ if was_stale || !probe() {
     let mut cmd = "cd ".to_string();
     cmd += &root.display().to_string();
     cmd += &format!(
-        "; {}nohup '{}' runtime/agent/model/service.py --data-dir runtime/agent/model --port {} --checkpoint '{}' --train {} --mix '{}' --lr {} --gate '{}' --train-interval {} --user-gate '{}' --lora '{}' >> runtime/agent/model/service.log 2>&1 &",
-        envprefix, py, port, checkpoint, train, mix, lr, gate, interval, user_gate, lora);
+        "; {}nohup '{}' runtime/agent/model/service.py --data-dir runtime/agent/model --port {} --checkpoint '{}' --backend {} --train {} --mix '{}' --lr {} --gate '{}' --train-interval {} --user-gate '{}' --lora '{}' >> runtime/agent/model/service.log 2>&1 &",
+        envprefix, py, port, checkpoint, backend, train, mix, lr, gate, interval, user_gate, lora);
     let mut x = DataArray::new();
     x.push_string("bash");
     x.push_string("-c");

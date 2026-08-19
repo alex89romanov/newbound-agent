@@ -205,12 +205,17 @@ if let Err(e) = std::fs::write(modeldir.join("registry.json"), reg.to_string()) 
 // deferred mint is recorded, never fatal - the door stays fast.
 let mut mint = String::from("not_requested");
 if anchor_t == "mint" {
-    if backend_t == "nanochat" {
+    {
+        // S3: both backends mint through the seam - the service's
+        // generate_text is the one door. The serving env must be able
+        // to import the record's backend; a mismatch records an
+        // honest error in /status.mint.
         let url = format!("http://127.0.0.1:{}/mint_anchor",
                           prop("MODEL_SERVICE_PORT", "8077"));
         let mut mb = DataObject::new();
         mb.put_string("path", &src.display().to_string());
         mb.put_string("name", &format!("{}-anchor", name_t));
+        mb.put_string("backend", &backend_t);
         mb.put_int("n", 200);
         mint = match ureq::AgentBuilder::new()
             .timeout(std::time::Duration::from_millis(3000))
@@ -235,8 +240,6 @@ if anchor_t == "mint" {
                 }
             }
         };
-    } else {
-        mint = "deferred: hf minting lands with the S3 backend".to_string();
     }
 }
 
