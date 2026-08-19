@@ -127,6 +127,7 @@ toggles the claim).
 | `file_change` | `{path, op: created\|modified\|removed}` | Checkout files outside the store (docs, manifests, build outputs). |
 | `peer_event` | `{peer, event, detail?}` | P2P layer observations: peer arrival/departure, library installs, sync activity. |
 | `text_input` | `{text, source, speaker?}` | Direct textual address (the donor repo's `hear`, chat surfaces). |
+| `system_state` | `{metric, value, band, prev_band, detail?}` | **[landed 2026-08-19, harvest H4]** The box sensing itself: disk, RAM, load-per-cpu, GPU headroom, service liveness. Emitted only on band CROSSINGS (the coalescing rule made structural); first sweep seeds silently. Reads the resource map (`agent-model-resources`) — one probe, two consumers: the posture solver takes it as data, this sensor emits its transitions as perceptions. Payloads are observations; "disk will fill by Friday" is a claim the executive may infer. |
 
 ### Plugin kinds
 
@@ -196,6 +197,38 @@ text at the boundary.
    every contract change is validated against the code sensor first,
    and a change that would degrade code perception to accommodate
    another modality is rejected — widen, never weaken.
+4. **Sensor quality — the rubric** (harvest H4's written deliverable;
+   hollis is measured against it, camera will be built against it):
+   - **Coalescing discipline.** One perception per state SHIFT, never
+     per frame or per sweep: a dishwasher starting is one event, a
+     dishwasher running is zero, a full disk staying full is zero. A
+     sensor that cannot say what changed since its last emission is
+     not done being written. Discrete events (a transient, an
+     utterance) coalesce by repetition window instead: the same label
+     from the same source within the window is one perception.
+   - **Salience-hint honesty.** The hint is the sensor's own prior and
+     nothing else. A sensor must not learn to inflate it: hints are
+     auditable against the judged salience of the same perceptions,
+     and a sensor whose hints diverge consistently loses the hint (the
+     tier ignores it) rather than the queue.
+   - **Payload = observation, never conclusion.** "RMS rose 12dB at
+     [x,y,z]" is a payload; "someone arrived" is the executive's
+     inference. The moment a sensor starts concluding, its conclusions
+     stop being auditable against anything — hollis losing its LLM is
+     the precedent, not an incident.
+   - **Self-reporting.** A sensor's own condition is part of the
+     environment: calibration drift, a muted microphone, a discovery
+     change, a stalled probe are perceptions like any other (emitted
+     under the same coalescing discipline), so the agent knows when
+     its senses degrade and can say so. Chartered for hollis
+     (calibration health, mic state); the system sensor's
+     service-liveness band is the first live instance.
+   - **Emit defaults are declared, not discovered** (owner call 6,
+     proposal): `ambience_shift`, `state_change`, and located
+     `transient`s on by default; `continuous` emits on source START
+     only; `micro_transient` and `cadence` off by default;
+     per-frame anything, never. Each event's gate is a runtime key
+     (`emit_<event>=on|off`) beside the sensor's master `emit` switch.
 
 ## 7. What this contract does not cover
 
