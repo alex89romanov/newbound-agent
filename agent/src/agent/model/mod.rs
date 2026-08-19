@@ -1,5 +1,7 @@
 // This file is auto-generated and managed by the flowlang build script.
 use flowlang::rustcmd::Transform;
+pub mod sft_promote;
+pub mod sft_run;
 pub mod experiments;
 pub mod experiment;
 pub mod recipe_remove;
@@ -71,4 +73,6 @@ pub fn cmdinit(cmds: &mut Vec<(String, Transform, String)>) {
     cmds.push(("wyhpqs1a01926eea0z1".to_string(), recipe_remove::execute, "".to_string()));
     cmds.push(("rzkmjv1a01927050dt1".to_string(), experiment::execute, "".to_string()));
     cmds.push(("jypzzo1a019271a79o1".to_string(), experiments::execute, "".to_string()));
+    cmds.push(("uoioiv1a01938479ci1".to_string(), sft_run::execute, "".to_string()));
+    cmds.push(("zzzosn1a019385f6fn1".to_string(), sft_promote::execute, "".to_string()));
 }

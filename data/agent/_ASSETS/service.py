@@ -969,6 +969,16 @@ def load_pointer_scorer(args, key):
         base = (HFScorer(args.checkpoint)
                 if getattr(args, "backend", "nanochat") == "hf"
                 else NanochatScorer(args.checkpoint))
+        if key.startswith("sft-"):
+            # S8: an SFT candidate rides on top of the CURRENT CPT
+            # state - base + every merged cpt delta + this candidate
+            import torch as _t
+            base = merge_ring_deltas(base, args.data_dir)
+            blob = _t.load(os.path.join(ring_dir, "delta.pt"),
+                           map_location="cpu", weights_only=False)
+            merge_adapter_blob(scorer_model(base), blob)
+            base.name = base.name + "+" + key
+            return base
         return merge_ring_deltas(base, args.data_dir, upto=key)
     if getattr(args, "backend", "nanochat") == "hf":
         raise RuntimeError(
@@ -2299,8 +2309,8 @@ def trainer_lora_loop(args, live, arith):
           f"targets={len(ab)} mix={mix} gate={gate_cfg}", flush=True)
     while True:
         time.sleep(max(float(args.train_interval), 0.05))
-        if EXPERIMENT["running"]:
-            continue   # the bench borrows the time-share (ruling 7)
+        if EXPERIMENT["running"] or SFT["running"]:
+            continue   # the bench/SFT borrows the time-share (ruling 7)
         tick += 1
         if tick % 30 == 1:
             refresh_ds_pools()
@@ -2722,6 +2732,196 @@ def run_experiment_thread(args, spec):
     print(f"[bench] {spec['name']}: {report['status']}", flush=True)
 
 
+# ── S8: SFT joins the loop ──────────────────────────────────────────
+# The gate design is docs/spectrum-s8.md, written first: the SFT gate
+# is the bench's instruments guarding the ENTRY to the ring; after the
+# ring, everything is the shipped soak-and-user-gate machinery. The
+# sft-* ring namespace is the safety: cpt-* deltas are by definition
+# already merged into serving (resume re-merges them); an accepted SFT
+# candidate is NOT, so resume never touches sft-* - only a deliberate
+# promote-by-key puts it on the fast lane for its soak.
+
+SFT = {"running": False, "current": None, "last": None}
+
+
+def run_sft_thread(args, spec):
+    import torch
+    import random as _r
+    cfg = parse_kv_mixed(getattr(args, "lora", ""), PERSONA_LORA_DEFAULTS)
+    name = spec["name"]
+    with LOCK:
+        SFT["running"] = True
+        SFT["current"] = {"name": name, "dataset": spec["dataset"],
+                          "started": int(time.time() * 1000)}
+        TRAINER["borrowed_by"] = f"sft:{name}"
+    report = {"name": name, "sft": True, "dataset": spec["dataset"],
+              "started": int(time.time() * 1000)}
+    t0 = time.time()
+    try:
+        train, hold = load_dataset_convs(args, spec["dataset"])
+        if train is None:
+            raise RuntimeError(
+                f"dataset '{spec['dataset']}' is not registered")
+        if len(train) < 8 or len(hold) < 2:
+            raise RuntimeError(
+                f"corpus too small ({len(train)} train / {len(hold)} "
+                "held-out; SFT needs 8/2)")
+        scorer, base_ref = load_base_scorer(args, spec["base"])
+        if scorer_model(scorer) is None:
+            raise RuntimeError("the external rung holds no local "
+                               "weights - SFT against a registered "
+                               "local model")
+        model, tokenizer = scorer_model(scorer), scorer.tokenizer
+        device = model_device(model)
+        seq_len = min(int(scorer.meta["model_config"]["sequence_len"]
+                          if scorer.meta else 2048), 2048)
+        for p in model.parameters():
+            p.requires_grad_(False)
+        # ── bare baselines, before any hook exists ──────────────────
+        base_subject = persona_eval(model, tokenizer, hold, device,
+                                    seq_len)
+        anchor_docs = load_anchor_docs(args)
+        std_docs = (anchor_docs[:24] if anchor_docs
+                    else load_standard_docs(args, limit=64)[:24])
+        base_std = plain_lm_eval(model, tokenizer, std_docs, device,
+                                 seq_len)
+
+        def agreement():
+            pairs = HELDOUT_PAIRS[-8:]
+            if len(pairs) < 4:
+                return None
+            total = 0.0
+            for pr in pairs:
+                completion = scorer.generate_text(
+                    [{"role": "user",
+                      "content": salience_prompt("?", pr["input"],
+                                                 0, 0)}],
+                    max_tokens=64, temperature=0.01, top_k=1)
+                sal, _w, _p = parse_salience(completion)
+                if sal is None:
+                    sal = 0.5
+                total += min(1.0, abs(sal - float(pr["target"])))
+            return round(1.0 - total / len(pairs), 4)
+
+        base_agree = agreement()
+        # ── the delta ───────────────────────────────────────────────
+        rank = int(spec.get("rank") or 16)
+        scale = 2.0
+        ab, hooks = {}, []
+        for path in lora_target_paths(model, cfg["targets"]):
+            try:
+                lin = model.get_submodule(path)
+            except AttributeError:
+                continue
+            A = torch.zeros(rank, lin.in_features, device=device,
+                            dtype=torch.float32).normal_(
+                                0, 0.02).requires_grad_(True)
+            Bm = torch.zeros(lin.out_features, rank, device=device,
+                             dtype=torch.float32).requires_grad_(True)
+            ab[path] = (A, Bm)
+
+            def mk_hook(A=A, Bm=Bm):
+                def hook(_m, inputs, output):
+                    x = inputs[0]
+                    return output + (x.float() @ A.t() @ Bm.t()
+                                     ).to(output.dtype) * scale
+                return hook
+            hooks.append(lin.register_forward_hook(mk_hook()))
+        if not ab:
+            raise RuntimeError("no LoRA targets matched the base")
+        opt = torch.optim.AdamW([t for pr2 in ab.values() for t in pr2],
+                                lr=float(cfg["lr"]))
+        steps = int(spec.get("steps") or 200)
+        model.train()
+        done = 0
+        for _s in range(steps):
+            conv = train[_r.randrange(len(train))]
+            try:
+                ids, mask = render_masked(tokenizer, conv,
+                                          min(int(seq_len), 1024))
+            except Exception:
+                continue
+            if len(ids) < 3 or sum(mask) == 0:
+                continue
+            loss = masked_lm_loss_t(model, tokenizer, ids, mask, device)
+            opt.zero_grad()
+            loss.backward()
+            opt.step()
+            done += 1
+            if done % 50 == 0:
+                with LOCK:
+                    SFT["current"] = dict(SFT["current"], steps=done)
+        model.eval()
+        # ── with the delta (hooks stay on for these) ────────────────
+        adapted_subject = persona_eval(model, tokenizer, hold, device,
+                                       seq_len)
+        adapted_std = plain_lm_eval(model, tokenizer, std_docs, device,
+                                    seq_len)
+        adapted_agree = agreement()
+        for h in hooks:
+            h.remove()
+        gain_ok = (adapted_subject is not None
+                   and base_subject is not None
+                   and adapted_subject
+                   <= base_subject * (1 - float(cfg["min_gain"])))
+        guard_ok = (adapted_std is None or base_std is None
+                    or adapted_std <= base_std * (1 + float(cfg["guard"])))
+        agree_ok = (adapted_agree is None or base_agree is None
+                    or adapted_agree >= base_agree - float(cfg["slack"]))
+        report.update({
+            "base": base_ref, "rank": rank, "steps_run": done,
+            "train_rows": len(train), "heldout_rows": len(hold),
+            "subject_base": base_subject,
+            "subject_adapted": adapted_subject,
+            "std_base": base_std, "std_adapted": adapted_std,
+            "agree_base": base_agree, "agree_adapted": adapted_agree,
+            "gain_ok": gain_ok, "guard_ok": guard_ok,
+            "agree_ok": agree_ok,
+            "seconds": int(time.time() - t0),
+        })
+        verdict = ("accept" if (gain_ok and guard_ok and agree_ok)
+                   else "reject")
+        report["status"] = verdict
+        if verdict == "accept":
+            ckdir = os.path.join(
+                args.data_dir, "checkpoints",
+                f"sft-{time.strftime('%Y%m%d%H%M%S')}-{name}")
+            os.makedirs(ckdir, exist_ok=True)
+            torch.save({"state": {p: {"A": A.detach().cpu(),
+                                      "B": B.detach().cpu()}
+                                  for p, (A, B) in ab.items()},
+                        "rank": rank, "alpha": scale * rank,
+                        "base_ref": base_ref, "sft": name},
+                       os.path.join(ckdir, "delta.pt"))
+            report["checkpoint"] = os.path.basename(ckdir)
+            prune_ring(args)
+        del scorer, model
+        try:
+            torch.cuda.empty_cache()
+        except Exception:
+            pass
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        report["status"] = "error"
+        report["error"] = str(e)[:500]
+    report["finished"] = int(time.time() * 1000)
+    try:
+        with open(os.path.join(args.data_dir, "experiments.jsonl"),
+                  "a") as f:
+            f.write(json.dumps(report) + "\n")
+    except Exception:
+        pass
+    append_metric(args.data_dir, {"kind": "sft", "name": name,
+                                  "status": report["status"]})
+    with LOCK:
+        SFT["running"] = False
+        SFT["current"] = None
+        SFT["last"] = report
+        TRAINER["borrowed_by"] = None
+    print(f"[sft] {name}: {report['status']}", flush=True)
+
+
 def trainer_real(args):
     """Continuous CPT on a candidate copy of the live model. Runs only
     once a NanochatScorer is live; steps forever at --train-interval."""
@@ -2880,8 +3080,8 @@ def trainer_real(args):
     tick = 0
     while True:
         time.sleep(max(float(args.train_interval), 0.05))
-        if EXPERIMENT["running"]:
-            continue   # the bench borrows the time-share (ruling 7)
+        if EXPERIMENT["running"] or SFT["running"]:
+            continue   # the bench/SFT borrows the time-share (ruling 7)
         # streams grow and datasets register mid-flight: refresh the
         # registered pools at start and every ~30 ticks (registry.json
         # itself is mtime-cached inside the loader)
@@ -3188,6 +3388,9 @@ class Handler(BaseHTTPRequestHandler):
                 "experiment": {"running": EXPERIMENT["running"],
                                "current": EXPERIMENT["current"],
                                "last": EXPERIMENT["last"]},
+                "sft": {"running": SFT["running"],
+                        "current": SFT["current"],
+                        "last": SFT["last"]},
                 "trainer": dict(TRAINER),
                 "user": dict(
                     USER,
@@ -3331,6 +3534,37 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(200, {"status": "ok", "started": True,
                                     "name": name,
                                     "arms": [a for a, _r3 in arms]})
+        if self.path == "/sft_run":
+            # S8: an SFT run - gate design in docs/spectrum-s8.md.
+            try:
+                req = json.loads(raw)
+            except Exception:
+                return self._json(400, {"status": "err",
+                                        "msg": "body must be JSON"})
+            if self.server.args.checkpoint == "stub":
+                return self._json(409, {"status": "err",
+                                        "msg": "stub mode has no weights "
+                                        "to SFT"})
+            with LOCK:
+                if SFT["running"] or EXPERIMENT["running"]:
+                    return self._json(409, {
+                        "status": "err",
+                        "msg": "the time-share is borrowed (an SFT run "
+                               "or experiment is active)"})
+            name = str(req.get("name") or "")
+            dataset = str(req.get("dataset") or "")
+            if not name or not dataset:
+                return self._json(400, {"status": "err",
+                                        "msg": "need name and dataset"})
+            spec = {"name": name, "dataset": dataset,
+                    "base": str(req.get("base") or "pointer"),
+                    "rank": int(req.get("rank") or 16),
+                    "steps": int(req.get("steps") or 200)}
+            threading.Thread(target=run_sft_thread,
+                             args=(self.server.args, spec),
+                             daemon=True).start()
+            return self._json(200, {"status": "ok", "started": True,
+                                    "name": name})
         if self.path == "/mint_anchor":
             # ruling 2: mint a self-sampled anchor for an import. Loads
             # its own scorer (never the serving slots); background
@@ -3378,6 +3612,38 @@ class Handler(BaseHTTPRequestHandler):
         if self.path == "/promote":
             # double-buffer: load into the slot NOT being served, then swap.
             args2 = self.server.args
+            # S8: promote-by-key - the deliberate act that puts an
+            # accepted SFT candidate (or any ring key) on the fast
+            # lane for its soak. Body optional; empty keeps the
+            # shipped newest-ring behavior.
+            try:
+                req0 = json.loads(raw) if raw else {}
+            except Exception:
+                req0 = {}
+            want_key = str(req0.get("checkpoint") or "")
+            if want_key:
+                ckdir0 = os.path.join(args2.data_dir, "checkpoints",
+                                      want_key)
+                if not os.path.isdir(ckdir0):
+                    return self._json(404, {"status": "err",
+                                            "msg": f"no ring entry "
+                                            f"'{want_key}'"})
+                try:
+                    scorer = load_pointer_scorer(args2, want_key)
+                except Exception as e:
+                    return self._json(500, {"status": "err",
+                                            "msg": f"load failed: {e}"})
+                with LOCK:
+                    inactive = "B" if STATE["live"] == "A" else "A"
+                    STATE["slots"][inactive] = scorer
+                    STATE["live"] = inactive
+                    STATE["promotions"] += 1
+                    live2 = STATE["live"]
+                set_soak(want_key)
+                return self._json(200, {
+                    "status": "ok", "live_slot": live2,
+                    "loaded": want_key,
+                    "pointer": f"{live2}:{scorer.name}"})
             if getattr(args2, "engine_url", ""):
                 return self._json(409, {
                     "status": "err",
