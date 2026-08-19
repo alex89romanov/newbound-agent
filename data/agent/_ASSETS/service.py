@@ -108,6 +108,157 @@ def append_metric(data_dir, row):
                         f.writelines(lines[-4000:])
     except Exception:
         pass
+
+
+RESOURCES_CACHE = {"at": 0.0, "val": None}
+
+
+def probe_resources(data_dir):
+    """The resource map (spectrum S1): GPUs + disk, cheap and honest.
+    torch when the venv has it, nvidia-smi when it doesn't, empty -
+    but present - on a box with neither. Cached briefly: /status is
+    polled and nvidia-smi is a subprocess. First customers: the S5
+    posture solver, ring byte-budget warnings, birth-run sizing."""
+    now = time.time()
+    if RESOURCES_CACHE["val"] is not None and now - RESOURCES_CACHE["at"] < 5:
+        return RESOURCES_CACHE["val"]
+    gpus = []
+    try:
+        import torch
+        if torch.cuda.is_available():
+            for i in range(torch.cuda.device_count()):
+                free, total = torch.cuda.mem_get_info(i)
+                gpus.append({"index": i,
+                             "name": torch.cuda.get_device_name(i),
+                             "total_mb": int(total / 1048576),
+                             "free_mb": int(free / 1048576)})
+    except Exception:
+        try:
+            import subprocess
+            out = subprocess.run(
+                ["nvidia-smi",
+                 "--query-gpu=index,name,memory.total,memory.free",
+                 "--format=csv,noheader,nounits"],
+                capture_output=True, text=True, timeout=5).stdout
+            for ln in out.strip().splitlines():
+                parts = [p.strip() for p in ln.split(",")]
+                if len(parts) >= 4:
+                    gpus.append({"index": int(parts[0]), "name": parts[1],
+                                 "total_mb": int(parts[2]),
+                                 "free_mb": int(parts[3])})
+        except Exception:
+            pass
+    disk_free_gb = None
+    try:
+        st = os.statvfs(data_dir)
+        disk_free_gb = round(st.f_bavail * st.f_frsize / 1073741824, 1)
+    except Exception:
+        pass
+    val = {"gpus": gpus, "disk_free_gb": disk_free_gb}
+    RESOURCES_CACHE["at"] = now
+    RESOURCES_CACHE["val"] = val
+    return val
+
+
+def registry_info(data_dir):
+    """The registry's window into /status: names only. The record of
+    truth lives in the runtime library; the service reads only the
+    rendered registry.json (it never reads the store), picked up by
+    mtime like persona.jsonl."""
+    path = os.path.join(data_dir, "registry.json")
+    if not os.path.exists(path):
+        return None
+    try:
+        with open(path) as f:
+            reg = json.load(f)
+        return {"models": [m.get("name", "?") for m in reg.get("models", [])],
+                "datasets": [d.get("name", "?")
+                             for d in reg.get("datasets", [])],
+                "rendered_at": reg.get("rendered_at")}
+    except Exception as e:
+        return {"error": f"registry.json unreadable: {e}"}
+
+
+MINT = {"running": False, "last": None}
+
+MINT_SEEDS = [
+    "Tell me about yourself.",
+    "What do you know a lot about?",
+    "Explain something interesting.",
+    "Describe a process you understand well.",
+    "What happened in the world recently?",
+    "Write a short story about a machine that learns.",
+    "Give me practical advice about computers.",
+    "What makes a good explanation?",
+    "Describe your ideal day.",
+    "How does the weather work?",
+    "What is the most important invention?",
+    "Continue this thought: The system was designed to",
+    "Summarize what you believe about language.",
+    "What would you teach a beginner first?",
+    "Describe a place you would like to visit.",
+    "Why do people tell stories?",
+]
+
+
+def mint_anchor_thread(args, path, out_name, n):
+    """Ruling 2: an import without its pretraining data gets a MINTED
+    anchor - a frozen sample of the model's own voice at the door,
+    measuring drift-from-its-imported-self forever after. Loads its
+    own scorer from `path` (the serving slots are never touched),
+    samples with variety, writes datasets/<out_name>/anchor.jsonl +
+    meta.json, and frees the weights. Progress rides /status.mint."""
+    res = {"model": path, "name": out_name, "requested": int(n), "rows": 0,
+           "started": int(time.time() * 1000), "status": "running"}
+    with LOCK:
+        MINT["running"] = True
+        MINT["last"] = dict(res)
+    scorer = None
+    try:
+        scorer = NanochatScorer(path)
+        outdir = os.path.join(args.data_dir, "datasets", out_name)
+        os.makedirs(outdir, exist_ok=True)
+        rows = 0
+        with open(os.path.join(outdir, "anchor.jsonl"), "w") as f:
+            for i in range(int(n)):
+                prompt = MINT_SEEDS[i % len(MINT_SEEDS)]
+                conversation = {"messages": [
+                    {"role": "user", "content": prompt},
+                    {"role": "assistant", "content": ""},
+                ]}
+                ids = scorer.tokenizer.render_for_completion(conversation)
+                results, _m = scorer.engine.generate_batch(
+                    ids, num_samples=1, max_tokens=256,
+                    temperature=0.8, top_k=50)
+                text = scorer.tokenizer.decode(results[0][len(ids):])
+                f.write(json.dumps({"text": text}) + "\n")
+                rows += 1
+                if rows % 25 == 0:
+                    with LOCK:
+                        MINT["last"] = dict(res, rows=rows)
+        meta = {"name": out_name, "kind": "anchor", "rows": rows,
+                "model_path": path, "frozen": True,
+                "at": int(time.time() * 1000)}
+        with open(os.path.join(outdir, "meta.json"), "w") as f:
+            json.dump(meta, f)
+        res.update(rows=rows, status="done",
+                   finished=int(time.time() * 1000))
+        print(f"[mint] anchor {out_name}: {rows} rows", flush=True)
+    except Exception as e:
+        res.update(status="error", error=str(e)[:500])
+        print(f"[mint] anchor {out_name} FAILED: {e}", flush=True)
+    finally:
+        del scorer
+        try:
+            import torch
+            torch.cuda.empty_cache()
+        except Exception:
+            pass
+    with LOCK:
+        MINT["running"] = False
+        MINT["last"] = res
+
+
 STATE = {
     "slots": {"A": None, "B": None},
     "live": "A",
@@ -1377,6 +1528,10 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         if self.path != "/status":
             return self._json(404, {"status": "err", "msg": "unknown path"})
+        # computed OUTSIDE the lock: probe_resources may shell out to
+        # nvidia-smi, and /salience scoring shares this lock
+        res_map = probe_resources(self.server.args.data_dir)
+        reg_info = registry_info(self.server.args.data_dir)
         with LOCK:
             live = STATE["live"]
             scorer = STATE["slots"][live]
@@ -1413,6 +1568,9 @@ class Handler(BaseHTTPRequestHandler):
                     if n.endswith(".jsonl")]),
                 "checkpoints": sorted(os.listdir(ck)) if os.path.isdir(ck) else [],
                 "uptime_s": int(time.time() - START),
+                "resources": res_map,
+                "registry": reg_info,
+                "mint": MINT["last"],
                 "trainer": dict(TRAINER),
                 "user": dict(
                     USER,
@@ -1468,6 +1626,38 @@ class Handler(BaseHTTPRequestHandler):
             with open(os.path.join(ingest, name), "w") as f:
                 f.write(raw)
             return self._json(200, {"status": "ok", "queued": name})
+        if self.path == "/mint_anchor":
+            # ruling 2: mint a self-sampled anchor for an import. Loads
+            # its own scorer (never the serving slots); background
+            # thread; progress rides /status.mint. Stub mode has no
+            # torch to load with - refuse honestly.
+            try:
+                req = json.loads(raw)
+            except Exception:
+                return self._json(400, {"status": "err",
+                                        "msg": "body must be JSON"})
+            if self.server.args.checkpoint == "stub":
+                return self._json(409, {"status": "err",
+                                        "msg": "stub mode cannot mint - no "
+                                        "model environment; configure a real "
+                                        "checkpoint first"})
+            path = str(req.get("path") or "")
+            out_name = str(req.get("name") or "")
+            n = int(req.get("n") or 200)
+            if not path or not os.path.isdir(path) or not out_name:
+                return self._json(400, {"status": "err",
+                                        "msg": "need path (existing dir) "
+                                        "and name"})
+            with LOCK:
+                if MINT["running"]:
+                    return self._json(409, {"status": "err",
+                                            "msg": "a mint is already "
+                                            "running", "mint": MINT["last"]})
+            threading.Thread(target=mint_anchor_thread,
+                             args=(self.server.args, path, out_name, n),
+                             daemon=True).start()
+            return self._json(200, {"status": "ok", "started": True,
+                                    "name": out_name, "n": n})
         if self.path == "/shutdown":
             # The GPU off-switch: answer, then exit cleanly. Everything
             # durable survives on disk (ring checkpoints, replay,

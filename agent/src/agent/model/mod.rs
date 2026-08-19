@@ -1,5 +1,9 @@
 // This file is auto-generated and managed by the flowlang build script.
 use flowlang::rustcmd::Transform;
+pub mod resources;
+pub mod model_remove;
+pub mod models;
+pub mod import;
 pub mod persona_write;
 pub mod persona_read;
 pub mod persona_rederive;
@@ -31,4 +35,8 @@ pub fn cmdinit(cmds: &mut Vec<(String, Transform, String)>) {
     cmds.push(("wwhrxv1a01124a788x1".to_string(), persona_rederive::execute, "".to_string()));
     cmds.push(("uwlztr1a0113e5c0fn1".to_string(), persona_read::execute, "".to_string()));
     cmds.push(("pyxiiz1a0113e7d1eu3".to_string(), persona_write::execute, "".to_string()));
+    cmds.push(("zszomo1a017741685j1".to_string(), import::execute, "".to_string()));
+    cmds.push(("yjmwrj1a0177498a8v1".to_string(), models::execute, "".to_string()));
+    cmds.push(("ggojst1a01774ad4dg1".to_string(), model_remove::execute, "".to_string()));
+    cmds.push(("qzikks1a01776d049o1".to_string(), resources::execute, "".to_string()));
 }
