@@ -1,5 +1,11 @@
 // This file is auto-generated and managed by the flowlang build script.
 use flowlang::rustcmd::Transform;
+pub mod experiments;
+pub mod experiment;
+pub mod recipe_remove;
+pub mod recipes;
+pub mod recipe_clone;
+pub mod recipe_author;
 pub mod adapter_delete;
 pub mod adapters;
 pub mod adapter_apply;
@@ -59,4 +65,10 @@ pub fn cmdinit(cmds: &mut Vec<(String, Transform, String)>) {
     cmds.push(("rzrtvh1a017b4aa9ez1".to_string(), adapter_apply::execute, "".to_string()));
     cmds.push(("zwhrqp1a017b4c175s1".to_string(), adapters::execute, "".to_string()));
     cmds.push(("rpszoz1a017b4d8cez1".to_string(), adapter_delete::execute, "".to_string()));
+    cmds.push(("goumpq1a01926744cg1".to_string(), recipe_author::execute, "".to_string()));
+    cmds.push(("jnhhkw1a01926c03eu1".to_string(), recipe_clone::execute, "".to_string()));
+    cmds.push(("nonruq1a01926d805k1".to_string(), recipes::execute, "".to_string()));
+    cmds.push(("wyhpqs1a01926eea0z1".to_string(), recipe_remove::execute, "".to_string()));
+    cmds.push(("rzkmjv1a01927050dt1".to_string(), experiment::execute, "".to_string()));
+    cmds.push(("jypzzo1a019271a79o1".to_string(), experiments::execute, "".to_string()));
 }
