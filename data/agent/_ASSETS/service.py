@@ -341,8 +341,9 @@ def mint_anchor_thread(args, path, out_name, n, backend="nanochat"):
         # are, generate_text is the one door (S3). The serving env must
         # be able to import the backend - a mismatch records an honest
         # error in /status.mint rather than half-minting.
-        scorer = (HFScorer(path) if backend == "hf"
-                  else NanochatScorer(path))
+        dev = train_device(args)   # S7: minting is a training-side load
+        scorer = (HFScorer(path, device=dev) if backend == "hf"
+                  else NanochatScorer(path, device=dev))
         outdir = os.path.join(args.data_dir, "datasets", out_name)
         os.makedirs(outdir, exist_ok=True)
         rows = 0
@@ -660,7 +661,7 @@ class NanochatScorer:
 
     name = "nanochat"
 
-    def __init__(self, checkpoint):
+    def __init__(self, checkpoint, device=None):
         self.checkpoint = checkpoint
         # The base dir must be in the env BEFORE nanochat's modules
         # resolve it (get_base_dir also owns the tokenizer location).
@@ -669,7 +670,8 @@ class NanochatScorer:
         from nanochat.checkpoint_manager import load_model
         from nanochat.engine import Engine
         self.torch = torch
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        device = device or torch.device(
+            "cuda" if torch.cuda.is_available() else "cpu")
         last_err = None
         for source in ("rl", "sft", "base"):
             try:
@@ -746,12 +748,12 @@ class HFScorer:
 
     name = "hf"
 
-    def __init__(self, checkpoint):
+    def __init__(self, checkpoint, device=None):
         self.checkpoint = checkpoint
         import torch
         from transformers import AutoModelForCausalLM, AutoTokenizer
         self.torch = torch
-        self.device = torch.device(
+        self.device = device or torch.device(
             "cuda" if torch.cuda.is_available() else "cpu")
         self.tokenizer = AutoTokenizer.from_pretrained(checkpoint)
         dtype = torch.bfloat16 if self.device.type == "cuda" else torch.float32
@@ -797,6 +799,57 @@ class HFScorer:
         return score_via(self, perception, context)
 
 
+class ExternalScorer:
+    """Ruling 8: the engine seam's far end - the residency ladder's
+    `external` rung. Serving crosses the wire to an OpenAI-compatible
+    chat-completions endpoint (vLLM-class); this class only
+    TRANSPORTS - score_via builds THE dialect and parses THE answer,
+    so unparseable-escalates applies to remote verdicts unchanged.
+    The weights live with the engine: posture is frozen here, nothing
+    derives or stacks locally, and promotion at this rung is adapter
+    hot-swap - wired when an engine that supports it is configured."""
+
+    name = "external"
+
+    def __init__(self, url, model_hint=""):
+        import urllib.request
+        self.url = url.rstrip("/")
+        self.checkpoint = f"engine:{self.url}"
+        self.meta = {"model_config": {"sequence_len": 4096}}
+        served = model_hint or ""
+        try:
+            with urllib.request.urlopen(self.url + "/v1/models",
+                                        timeout=5) as r:
+                d = json.loads(r.read().decode())
+                data = d.get("data") or []
+                if data:
+                    served = data[0].get("id", served)
+        except Exception:
+            pass
+        self.served_model = served or "default"
+        self.name = f"external:{self.served_model}"
+
+    def generate_text(self, messages, max_tokens=96, temperature=0.2,
+                      top_k=50):
+        import urllib.request
+        body = json.dumps({
+            "model": self.served_model,
+            "messages": list(messages),
+            "max_tokens": int(max_tokens),
+            "temperature": float(temperature),
+        }).encode()
+        req = urllib.request.Request(
+            self.url + "/v1/chat/completions", data=body,
+            headers={"Content-Type": "application/json"})
+        with urllib.request.urlopen(req, timeout=120) as r:
+            d = json.loads(r.read().decode())
+        return (((d.get("choices") or [{}])[0].get("message") or {})
+                .get("content") or "")
+
+    def score(self, perception, context):
+        return score_via(self, perception, context)
+
+
 def newest_ring(data_dir):
     """Newest gate-promoted checkpoint dir (cpt-*, must hold weights)."""
     import glob as _glob
@@ -805,9 +858,13 @@ def newest_ring(data_dir):
     return dirs[-1] if dirs else None
 
 
-def make_scorer(checkpoint, data_dir, backend="nanochat"):
+def make_scorer(checkpoint, data_dir, backend="nanochat", engine_url=""):
     if checkpoint == "stub":
         return StubScorer()
+    if engine_url:
+        # ruling 8: the external rung - the engine holds the weights
+        return ExternalScorer(engine_url,
+                              os.path.basename(os.path.normpath(checkpoint)))
     if backend == "hf":
         # gate-promoted CPT progress resumes across restarts on the
         # lora rung too: re-merge the delta ring (S5)
@@ -898,6 +955,10 @@ def load_pointer_scorer(args, key):
     if key == "stub" or args.checkpoint == "stub":
         return StubScorer(tag=f"user:{key}")
     if key.startswith("base:"):
+        if getattr(args, "engine_url", ""):
+            return ExternalScorer(args.engine_url,
+                                  os.path.basename(
+                                      os.path.normpath(args.checkpoint)))
         if getattr(args, "backend", "nanochat") == "hf":
             return HFScorer(args.checkpoint)
         return NanochatScorer(args.checkpoint)
@@ -1081,7 +1142,9 @@ def user_gate_loop(args):
             # first derivation fires on its own.
             lcfg = parse_kv_mixed(getattr(args, "lora", ""), PERSONA_LORA_DEFAULTS)
             if (str(lcfg.get("mode")) != "off" and user_scorer is not None
-                    and serving and not isinstance(user_scorer, StubScorer)
+                    and serving
+                    and not isinstance(user_scorer,
+                                       (StubScorer, ExternalScorer))
                     and not PERSONA["deriving"]):
                 _tr, _ho = load_persona_corpus(args.data_dir)
                 with LOCK:
@@ -1354,7 +1417,8 @@ def apply_persona(args, scorer):
     standing-skin-on-a-moving-base design - drift is what the probe
     watches. No-op in stub mode, with mode=off, or with no adapter."""
     cfg = parse_kv_mixed(getattr(args, "lora", ""), PERSONA_LORA_DEFAULTS)
-    if (str(cfg.get("mode")) == "off" or isinstance(scorer, StubScorer)
+    if (str(cfg.get("mode")) == "off"
+            or isinstance(scorer, (StubScorer, ExternalScorer))
             or not os.path.exists(adapter_path(args.data_dir))):
         return scorer
     try:
@@ -1612,9 +1676,11 @@ def load_base_scorer(args, base):
         reg = {}
     for m in reg.get("models", []):
         if m.get("name") == base:
+            dev = train_device(args)   # S7: fresh training loads place
             if m.get("backend") == "hf":
-                return HFScorer(m.get("path")), f"model:{base}"
-            return NanochatScorer(m.get("path")), f"model:{base}"
+                return HFScorer(m.get("path"), device=dev), f"model:{base}"
+            return (NanochatScorer(m.get("path"), device=dev),
+                    f"model:{base}")
     raise RuntimeError(f"'{base}' is neither 'pointer' nor a "
                        "registered model")
 
@@ -1661,6 +1727,10 @@ def derive_named_adapter(args, spec):
                     "msg": f"corpus too small ({len(train)} train / "
                            f"{len(hold)} held-out; need 4/1)"}
         scorer, base_ref = load_base_scorer(args, spec["base"])
+        if scorer_model(scorer) is None:
+            return {"status": "err",
+                    "msg": "the external rung holds no local weights - "
+                           "derive against a registered local model"}
         model, tokenizer = scorer_model(scorer), scorer.tokenizer
         device = model_device(model)
         seq_len = (scorer.meta["model_config"]["sequence_len"]
@@ -1782,8 +1852,10 @@ def apply_stack_gated(args, new_stack, reason):
         scorer = apply_persona(args, load_pointer_scorer(args, key))
     except Exception as e:
         return {"status": "err", "msg": f"base load failed: {e}"}
-    if isinstance(scorer, StubScorer):
-        return {"status": "err", "msg": "stub mode has no weights to stack"}
+    if isinstance(scorer, (StubScorer, ExternalScorer)):
+        return {"status": "err",
+                "msg": "no local weights to stack (stub, or the "
+                       "external rung - engine hot-swap when wired)"}
     model, tokenizer = scorer_model(scorer), scorer.tokenizer
     device = model_device(model)
     seq_len = (scorer.meta["model_config"]["sequence_len"]
@@ -1853,7 +1925,7 @@ def apply_persona_and_stack(args, scorer):
     stack was formed; base movement is re-audited by the watchdog's
     stack probe on its own cadence."""
     scorer = apply_persona(args, scorer)
-    if isinstance(scorer, StubScorer):
+    if isinstance(scorer, (StubScorer, ExternalScorer)):
         return scorer
     try:
         with open(stack_state_path(args.data_dir)) as f:
@@ -1922,6 +1994,11 @@ def solve_posture(args, live):
     that does not fit REFUSES training - loudly, with the arithmetic -
     rather than OOMing at step one. Unknown free memory is permissive
     and says so ('source': none)."""
+    if isinstance(live, ExternalScorer):
+        return "frozen", {"backend": "external",
+                          "why": "the engine holds the weights; "
+                                 "promotion at this rung is adapter "
+                                 "hot-swap (ruling 8)"}
     model = scorer_model(live)
     params = sum(p.numel() for p in model.parameters())
     try:
@@ -2390,6 +2467,55 @@ def trainer_lora_loop(args, live, arith):
                 print("[trainer] lora candidate reset", flush=True)
 
 
+# ── S7: placement ───────────────────────────────────────────────────
+# Serve and train become placeable roles over the resource map. The
+# degenerate placement - one device, time-shared - is today's shipped
+# behavior and the fallback everywhere the config asks for hardware
+# the box does not have. On this branch the placed train device
+# carries the training-side FRESH loads (bench arms, adapter
+# derivations, mints); the full-rung candidate and multi-node stay
+# time-shared/birth-path until the owner-box run proves the split.
+
+def parse_placement(args):
+    """MODEL_PLACEMENT= 'serve=0,train=1' - GPU indices per role.
+    Empty = time-share (today). Roles asking for absent GPUs fall
+    back to serve, honestly, and /status.placement says so."""
+    spec = parse_kv(getattr(args, "placement", "") or "", {})
+    res = probe_resources(args.data_dir)
+    n = len(res.get("gpus") or [])
+    out = {"spec": getattr(args, "placement", "") or "",
+           "gpus_visible": n, "serve": None, "train": None,
+           "mode": "time-share"}
+    if n == 0:
+        return out
+    serve = int(spec.get("serve", 0))
+    out["serve"] = serve if serve < n else 0
+    if "train" in spec:
+        t = int(spec["train"])
+        if t < n and t != out["serve"]:
+            out["train"] = t
+            out["mode"] = "split"
+        else:
+            out["train"] = out["serve"]
+            out["mode"] = ("time-share (train GPU absent or same "
+                           "as serve)")
+    else:
+        out["train"] = out["serve"]
+    return out
+
+
+def train_device(args):
+    """Where training-side fresh loads go: the placed train GPU when
+    split, else wherever serving lives."""
+    import torch
+    if not torch.cuda.is_available():
+        return torch.device("cpu")
+    pl = parse_placement(args)
+    if pl["train"] is not None:
+        return torch.device(f"cuda:{pl['train']}")
+    return torch.device("cuda")
+
+
 # ── S6: the bench ───────────────────────────────────────────────────
 # Recipes snap the bricks together (records in the runtime library,
 # resolved by the commands and passed here whole - the service stays
@@ -2410,6 +2536,9 @@ def run_experiment_arm(args, recipe, budget_steps, eval_sets, pairs):
     import torch
     import random as _r
     scorer, base_ref = load_base_scorer(args, recipe.get("base") or "pointer")
+    if scorer_model(scorer) is None:
+        raise RuntimeError("the external rung holds no local weights - "
+                           "bench against a registered local model")
     model, tokenizer = scorer_model(scorer), scorer.tokenizer
     device = model_device(model)
     seq_len = min(int(scorer.meta["model_config"]["sequence_len"]
@@ -3054,6 +3183,7 @@ class Handler(BaseHTTPRequestHandler):
                 "uptime_s": int(time.time() - START),
                 "resources": res_map,
                 "registry": reg_info,
+                "placement": parse_placement(self.server.args),
                 "mint": MINT["last"],
                 "experiment": {"running": EXPERIMENT["running"],
                                "current": EXPERIMENT["current"],
@@ -3248,6 +3378,13 @@ class Handler(BaseHTTPRequestHandler):
         if self.path == "/promote":
             # double-buffer: load into the slot NOT being served, then swap.
             args2 = self.server.args
+            if getattr(args2, "engine_url", ""):
+                return self._json(409, {
+                    "status": "err",
+                    "msg": "the external rung promotes by adapter "
+                           "hot-swap on the engine (ruling 8) - wired "
+                           "when a hot-swap-capable engine is "
+                           "configured"})
             if getattr(args2, "backend", "nanochat") == "hf":
                 return self._json(409, {
                     "status": "err",
@@ -3410,7 +3547,8 @@ def load_initial(args):
     while True:
         try:
             scorer = make_scorer(args.checkpoint, args.data_dir,
-                                 getattr(args, "backend", "nanochat"))
+                                 getattr(args, "backend", "nanochat"),
+                                 getattr(args, "engine_url", ""))
             with LOCK:
                 STATE["slots"]["A"] = scorer
                 STATE["loading"] = False
@@ -3452,6 +3590,14 @@ def main():
     ap.add_argument("--headroom", default="15",
                     help="S5, ruling 4: the solver's safety margin as "
                          "a percent of total memory")
+    ap.add_argument("--placement", default="",
+                    help="S7: GPU roles, e.g. serve=0,train=1; empty = "
+                         "time-share; absent hardware falls back "
+                         "honestly")
+    ap.add_argument("--engine-url", default="",
+                    help="S7, ruling 8: an OpenAI-compatible engine "
+                         "serving the resident (the external rung); "
+                         "empty = in-process")
     ap.add_argument("--train", default="on", choices=["on", "off"],
                     help="continuous CPT on a candidate of the live model")
     ap.add_argument("--mix", default="fresh=0.25,replay=0.25,standard=0.5",
