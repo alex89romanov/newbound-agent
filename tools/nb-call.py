@@ -10,10 +10,16 @@ tool surface, driven by hand.
 Usage:
   nb-call.py [-C <checkout>] <tool-name> ['<json-arguments>' | @file.json | @-]
   nb-call.py [-C <checkout>] --list [prefix]
+  nb-call.py [-C <checkout>] --schema <tool-name>
 
 Checkout resolution: -C argument, else the current directory, else a
 `newbound` directory beside this repo. Every declared param must be
 present in the arguments JSON — there are no optional parameters.
+
+`--list` prints one line per tool with a truncated desc; `--schema`
+prints one tool's full description and input schema, which is how you
+learn a command's parameter names without probing for them one
+missing-parameter error at a time.
 
 Arguments come inline, from a file (`@payload.json`), or from stdin
 (`@-`). The file forms keep the payload out of the shell's quoting,
@@ -62,7 +68,7 @@ if not args:
 
 # Read the payload first: a bad path or malformed JSON should fail before
 # a server process exists to leak.
-ARGUMENTS = {} if args[0] == "--list" else (
+ARGUMENTS = {} if args[0] in ("--list", "--schema") else (
     load_arguments(args[1]) if len(args) > 1 else {})
 
 ERRLOG = tempfile.NamedTemporaryFile(prefix="nb-call-", suffix=".log",
@@ -90,7 +96,20 @@ rpc("initialize", {"protocolVersion": "2024-11-05", "capabilities": {},
                    "clientInfo": {"name": "nb-call", "version": "0"}})
 
 status = 0
-if args[0] == "--list":
+if args[0] == "--schema":
+    if len(args) < 2:
+        sys.exit("usage: nb-call.py [-C <checkout>] --schema <tool-name>")
+    r = rpc("tools/list", {})
+    hit = [t for t in r["result"]["tools"] if t["name"] == args[1]]
+    if not hit:
+        print("no such tool: " + args[1])
+        status = 1
+    else:
+        t = hit[0]
+        print(t["name"])
+        print((t.get("description") or "").strip())
+        print(json.dumps(t.get("inputSchema") or {}, indent=1))
+elif args[0] == "--list":
     r = rpc("tools/list", {})
     prefix = args[1] if len(args) > 1 else ""
     for t in r["result"]["tools"]:
