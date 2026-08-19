@@ -175,5 +175,15 @@
     },
     "confidence": "high",
     "time": 1787101226212
+  },
+  {
+    "claim": "S3 landed (claude/spectrum-s3-backend): the backend seam is real. Every scorer carries generate_text(messages); score_via builds THE dialect once for all backends with unparseable-escalates unchanged; /chat, the user watchdog, and minting route through it. HFScorer serves an HF dir via transformers (chat template or honest concatenation; bf16 on cuda else fp32; posture frozen and published until S5). The backends' structural loss difference - nanochat pre-shifted (x,y) with -1 ignore vs HF aligned labels with -100 and INTERNAL shift - lives in two seam helpers (masked_lm_loss_t, plain_lm_loss_t); getting this wrong is an off-by-one that silently corrupts every loss. Persona hook-LoRA is backend-blind (one target vocabulary onto nanochat paths or HF q_proj/v_proj leaves; no PEFT, per the no-third-party doctrine). An hf resident soaks as base:hf:<name>, so the STANDARD user gate covers it with zero special cases. Bootstrap: hf records get a donefile-guarded env stage (CPU wheels when no GPU, PyPI fallback where the pytorch CDN is denied) and --backend rides the launch line.",
+    "detail": "CPU battery passed end-to-end on a fabricated 147k-param model: served the salience lane (random-model gibberish exercised unparseable-escalates: 0.5, parsed:false), soak->READY->manual promote->/chat with native system messages, mint 40 rows through the seam, anchor registration flipped anchor_status, persona derivation on HF targets accepted (heldout 6.22->5.65) and merged (+lora serving), R1 restored to stub byte-for-byte. Two fixes found in-battery: newer transformers return BatchEncoding from apply_chat_template (normalize at the seam - the failure is an empty AttributeError deep in generate), and the pytorch CDN can be proxy-denied while PyPI is allowed (the env script falls back). Direct agent-crate builds need --features=serde_support,python_runtime (the upsert path always uses them). Owner-box battery still owed: a real open-weight model end to end.",
+    "tags": "spectrum,s3,backend,hf",
+    "source": {
+      "doc": "docs/spectrum-s3.md; battery run in session 2026-08-19"
+    },
+    "confidence": "high",
+    "time": 1787103684021
   }
 ]

@@ -606,6 +606,10 @@ def render_masked(tokenizer, conv, max_tokens):
                                          add_generation_prompt=False)
     prompt = tokenizer.apply_chat_template(msgs[:-1], tokenize=True,
                                            add_generation_prompt=True)
+    if hasattr(full, "input_ids"):
+        full = full.input_ids       # BatchEncoding on newer transformers
+    if hasattr(prompt, "input_ids"):
+        prompt = prompt.input_ids
     ids = full[:max_tokens]
     cut = min(len(prompt), len(ids))
     mask = [0] * cut + [1] * (len(ids) - cut)
@@ -758,6 +762,9 @@ class HFScorer:
             ids = tok.apply_chat_template(list(messages),
                                           add_generation_prompt=True,
                                           return_tensors="pt")
+            if hasattr(ids, "input_ids"):
+                # newer transformers return a BatchEncoding here
+                ids = ids.input_ids
         except Exception:
             # no chat template shipped with the model: plain
             # concatenation is the honest fallback
